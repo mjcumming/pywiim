@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [2.1.23] - 2025-11-28
+
+### Changed
+- **Release script now uses check.sh for validation**
+  - Ensures all CI checks (format, lint, typecheck, tests) run before release
+  - Prevents releases with mypy errors or other CI failures
+  - Consistent validation between local and CI
+
 ## [2.1.22] - 2025-11-28
 
 ### Changed

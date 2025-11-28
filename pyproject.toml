@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pywiim"
-version = "2.1.22"
+version = "2.1.23"
 description = "Python library for WiiM/LinkPlay device communication"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -137,8 +137,12 @@ if ! $PYTHON -m ruff check pywiim tests; then
     exit 1
 fi
 
-step "Type checking with mypy..."
-if ! $PYTHON -m mypy pywiim; then
+step "Running all CI checks (format, lint, typecheck, tests)..."
+if [ ! -f "./check.sh" ]; then
+    error "check.sh not found! Cannot run CI checks."
+    exit 1
+fi
+if ! ./check.sh; then
     error "Type checking failed! Fix errors before releasing."
     exit 1
 fi
@@ -228,8 +232,8 @@ if ! $PYTHON -m ruff check pywiim tests > /dev/null 2>&1; then
     exit 1
 fi
 
-if ! $PYTHON -m mypy pywiim > /dev/null 2>&1; then
-    error "Final mypy check failed! Aborting release."
+if ! ./check.sh > /dev/null 2>&1; then
+    error "Final CI checks failed! Aborting release."
     exit 1
 fi
 
