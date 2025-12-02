@@ -30,6 +30,9 @@ from .constants import (
     API_ENDPOINT_STATUS,
     DEFAULT_PORT,
     DEFAULT_TIMEOUT,
+    PROBE_TIMEOUT_ASYNC,
+    PROBE_TIMEOUT_CONNECT,
+    PROBE_TIMEOUT_TOTAL,
 )
 from .parser import parse_player_status
 from .ssl import create_wiim_ssl_context
@@ -643,8 +646,7 @@ class BaseWiiMClient:
         # Build list of protocol/port combinations to try
         protocols_to_try = self._build_probe_list()
 
-        # Use short timeout for fast failure detection
-        probe_timeout = aiohttp.ClientTimeout(connect=0.5, total=min(2.0, timeout))
+        probe_timeout = aiohttp.ClientTimeout(connect=PROBE_TIMEOUT_CONNECT, total=min(PROBE_TIMEOUT_TOTAL, timeout))
 
         last_error: Exception | None = None
         tried: list[str] = []
@@ -666,7 +668,7 @@ class BaseWiiMClient:
 
             try:
                 await self._ensure_session()
-                async with asyncio.timeout(2.0):
+                async with asyncio.timeout(PROBE_TIMEOUT_ASYNC):
                     resp = await self._session_request(method, url, **test_kwargs)
                     async with resp:
                         resp.raise_for_status()

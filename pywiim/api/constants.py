@@ -302,6 +302,12 @@ VENDOR_LINKPLAY_GENERIC = "linkplay_generic"
 DEFAULT_PORT = 443  # HTTPS port
 DEFAULT_TIMEOUT = 5.0  # seconds
 
+# Protocol probe timeout settings
+# mTLS connections (Audio Pro MkII on port 4443) need longer timeout for certificate exchange
+PROBE_TIMEOUT_CONNECT = 1.0  # seconds - TCP connection timeout
+PROBE_TIMEOUT_TOTAL = 5.0  # seconds - total request timeout (allows time for mTLS handshake)
+PROBE_TIMEOUT_ASYNC = 5.0  # seconds - asyncio.timeout wrapper
+
 # Play mode constants
 PLAY_MODE_NORMAL = "normal"
 PLAY_MODE_REPEAT_ALL = "repeat_all"
@@ -497,6 +503,9 @@ __all__ = [
     "EQ_NUMERIC_MAP",
     "DEFAULT_PORT",
     "DEFAULT_TIMEOUT",
+    "PROBE_TIMEOUT_CONNECT",
+    "PROBE_TIMEOUT_TOTAL",
+    "PROBE_TIMEOUT_ASYNC",
     "API_ENDPOINT_STATUS",
     "API_ENDPOINT_PLAYER_STATUS",
     "API_ENDPOINT_METADATA",
