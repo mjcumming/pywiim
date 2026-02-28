@@ -35,8 +35,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
 
-_LOGGER = logging.getLogger(__name__)
-
+from ..exceptions import WiiMError
 from .constants import (
     API_ENDPOINT_EQ_OFF,
     API_ENDPOINT_PEQ_CHANGE_FX,
@@ -74,6 +73,8 @@ from .constants import (
     PEQ_Q_MAX,
     PEQ_Q_MIN,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 # Re-export mode constants for convenient access by callers
 __all__ = [
@@ -127,7 +128,7 @@ class PEQBand:
         ]
 
     @classmethod
-    def from_api_params(cls, letter: str, params: dict[str, float]) -> "PEQBand":
+    def from_api_params(cls, letter: str, params: dict[str, float]) -> PEQBand:
         """Construct a PEQBand from the flat ``param_name → value`` dict.
 
         Args:
@@ -188,6 +189,7 @@ class PEQPresetInfo:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _parse_eq_band_array(band_array: list[dict[str, Any]]) -> list[PEQBand]:
     """Parse a raw EQBand/EQBandL/EQBandR array into a list of PEQBand objects.
 
@@ -233,6 +235,7 @@ def _bands_to_api_list(bands: list[PEQBand]) -> list[dict[str, Any]]:
 # PEQAPI mixin
 # ---------------------------------------------------------------------------
 
+
 class PEQAPI:
     """Parametric Equalizer (PEQ) helpers – official WiiM LV2 PEQ API.
 
@@ -242,6 +245,12 @@ class PEQAPI:
     - Stereo and independent L/R channel modes
     - Saving, loading, deleting, and renaming custom presets
     """
+
+    def _require_peq(self) -> None:
+        """Raise WiiMError if the device does not support PEQ (supports_peq=False)."""
+        if hasattr(self, "_capabilities") and self._capabilities:
+            if not self._capabilities.get("supports_peq", False):
+                raise WiiMError("Device does not support the WiiM LV2 PEQ API (supports_peq=False)")
 
     # ------------------------------------------------------------------
     # Display (get)
@@ -265,10 +274,7 @@ class PEQAPI:
         Raises:
             WiiMError: If the request fails or the device does not support PEQ.
         """
-        if hasattr(self, "_capabilities") and self._capabilities:  # type: ignore[attr-defined]
-            if not self._capabilities.get("supports_peq", True):  # type: ignore[attr-defined]
-                from ..exceptions import WiiMError  # type: ignore[attr-defined]
-                raise WiiMError("Device does not support the WiiM LV2 PEQ API (supports_peq=False)")
+        self._require_peq()
         _LOGGER.debug("get_peq_bands source=%s", source_name)
         if source_name is not None:
             payload = {"source_name": source_name, "pluginURI": PEQ_PLUGIN_URI}
@@ -309,6 +315,7 @@ class PEQAPI:
             ValueError:  If *channel_mode* is invalid.
             WiiMError:   If the request fails.
         """
+        self._require_peq()
         _validate_channel_mode(channel_mode)
         payload: dict[str, Any] = {
             "pluginURI": PEQ_PLUGIN_URI,
@@ -339,6 +346,7 @@ class PEQAPI:
         Raises:
             WiiMError: If the request fails.
         """
+        self._require_peq()
         payload: dict[str, Any] = {
             "pluginURI": PEQ_PLUGIN_URI,
             "channelMode": PEQ_CHANNEL_MODE_LR,
@@ -380,6 +388,7 @@ class PEQAPI:
             ValueError: If *letter* is invalid or no parameter is specified.
             WiiMError:  If the request fails.
         """
+        self._require_peq()
         letter = letter.lower()
         if letter not in PEQ_BAND_LETTERS:
             raise ValueError(f"Invalid PEQ band letter: {letter!r}. Must be one of {PEQ_BAND_LETTERS}.")
@@ -435,6 +444,7 @@ class PEQAPI:
         Raises:
             WiiMError: If the request fails.
         """
+        self._require_peq()
         _LOGGER.debug("set_peq_enabled enabled=%s source=%s", enabled, source_name)
         if enabled:
             if source_name is not None:
@@ -477,6 +487,7 @@ class PEQAPI:
             ValueError: If *channel_mode* is invalid.
             WiiMError:  If the request fails.
         """
+        self._require_peq()
         _validate_channel_mode(channel_mode)
         payload: dict[str, Any] = {
             "source_name": source_name,
@@ -500,6 +511,7 @@ class PEQAPI:
         Raises:
             WiiMError: If the request fails.
         """
+        self._require_peq()
         endpoint = API_ENDPOINT_PEQ_GET_LIST + quote(PEQ_PLUGIN_URI, safe="")
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
         return {
@@ -517,6 +529,7 @@ class PEQAPI:
         Raises:
             WiiMError: If the request fails.
         """
+        self._require_peq()
         payload = {"pluginURI": PEQ_PLUGIN_URI}
         endpoint = API_ENDPOINT_PEQ_GET_NEW_LIST + _encode_json_param(payload)
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
@@ -556,6 +569,7 @@ class PEQAPI:
         Raises:
             WiiMError: If the request fails.
         """
+        self._require_peq()
         if source_name is not None:
             payload: dict[str, Any] = {
                 "source_name": source_name,
@@ -587,6 +601,7 @@ class PEQAPI:
         Raises:
             WiiMError: If the request fails.
         """
+        self._require_peq()
         if source_name is not None:
             payload: dict[str, Any] = {
                 "source_name": source_name,
@@ -609,6 +624,7 @@ class PEQAPI:
         Raises:
             WiiMError: If the request fails.
         """
+        self._require_peq()
         payload = {"pluginURI": PEQ_PLUGIN_URI, "Name": name}
         endpoint = API_ENDPOINT_PEQ_DELETE + _encode_json_param(payload)
         await self._request(endpoint)  # type: ignore[attr-defined]
@@ -626,6 +642,7 @@ class PEQAPI:
             ValueError: If *name* and *new_name* are the same.
             WiiMError:  If the request fails.
         """
+        self._require_peq()
         if name == new_name:
             raise ValueError(f"name and new_name must differ (both are {name!r}).")
         payload = {"pluginURI": PEQ_PLUGIN_URI, "Name": name, "newName": new_name}
@@ -636,6 +653,7 @@ class PEQAPI:
 # ---------------------------------------------------------------------------
 # Private parsing / validation helpers
 # ---------------------------------------------------------------------------
+
 
 def _parse_peq_settings(raw: dict[str, Any]) -> PEQSettings:
     """Convert a raw API response dict into a :class:`PEQSettings` object."""
@@ -684,9 +702,7 @@ def _validate_mode(mode: int) -> None:
 
 def _validate_frequency(frequency: float) -> None:
     if not (PEQ_FREQ_MIN <= frequency <= PEQ_FREQ_MAX):
-        raise ValueError(
-            f"Frequency {frequency} Hz out of range [{PEQ_FREQ_MIN}, {PEQ_FREQ_MAX}]."
-        )
+        raise ValueError(f"Frequency {frequency} Hz out of range [{PEQ_FREQ_MIN}, {PEQ_FREQ_MAX}].")
 
 
 def _validate_q(q: float) -> None:

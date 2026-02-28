@@ -787,6 +787,8 @@ async def _async_update_data(self):
   
 - **`eq_preset`**: Current EQ preset name, or "Off" if EQ is disabled. Normalized to Title Case to match the format from `eq_presets`. When EQ is off (disabled/bypassed), this returns "Off" instead of the last-used preset, ensuring accurate UI representation. This ensures consistency - if `eq_presets` returns `["Off", "Flat", "Acoustic", ...]`, then `eq_preset` will return `"Off"` or `"Flat"` etc., making comparisons straightforward.
 
+- **Parametric EQ (PEQ)** – On WiiM devices, the full LV2 PEQ API is available via `player.client` when `player.client.capabilities.get("supports_peq")` is True. This provides 10-band parametric EQ per source, stereo/L-R modes, and custom preset save/load. See [API_REFERENCE.md – Parametric EQ (PEQ)](API_REFERENCE.md#parametric-eq-peq--wiim-only). (Contribution: [jeromeof](https://github.com/jeromeof), [PR #12](https://github.com/mjcumming/pywiim/pull/12).)
+
 ## Advanced Patterns
 
 ### Track Change Detection for Metadata

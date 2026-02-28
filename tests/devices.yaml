@@ -13,6 +13,11 @@
 #   - wiim_pro, wiim_pro_plus, wiim_ultra, wiim_mini, wiim_amp
 #   - arylic (Arylic/LinkPlay devices)
 #   - unknown (auto-detect capabilities)
+#
+# Capabilities (for documentation; runtime probe sets supports_*):
+#   - eq: simple EQ (presets, 10-band)
+#   - peq: parametric EQ (WiiM LV2 PEQ; WiiM only, not Arylic/Audio Pro)
+#   - presets, multi_output, grouping
 
 # =============================================================================
 # Test Devices
@@ -23,14 +28,14 @@ devices:
   - ip: 192.168.1.115
     name: "Outdoor"
     model: wiim_pro
-    capabilities: [eq, presets, multi_output, grouping]
+    capabilities: [eq, peq, presets, multi_output, grouping]
     notes: "Primary test device"
 
   # Secondary device for group testing
   - ip: 192.168.1.116
     name: "WiiM 1.116"
     model: wiim_pro
-    capabilities: [eq, presets, multi_output]
+    capabilities: [eq, peq, presets, multi_output]
     notes: "Secondary device for group testing"
 
   # Third device
@@ -40,7 +45,7 @@ devices:
     capabilities: []
     notes: "Auto-detect capabilities"
 
-  # Arylic devices (different subnet)
+  # Arylic devices (different subnet) - no PEQ (WiiM LV2 only)
   - ip: 192.168.6.95
     name: "Dock"
     model: arylic
@@ -56,7 +61,7 @@ devices:
   - ip: 192.168.6.221
     name: "Cabin"
     model: wiim_pro
-    capabilities: [eq, presets, multi_output, grouping]
+    capabilities: [eq, peq, presets, multi_output, grouping]
     notes: "WiiM Pro on .6 network"
 
 # =============================================================================

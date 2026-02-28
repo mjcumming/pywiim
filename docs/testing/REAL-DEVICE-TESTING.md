@@ -47,7 +47,7 @@ The **unified test runner** (`scripts/run_tests.py`) is the primary tool for com
 | 1 | Smoke | 8 | None - always works |
 | 2 | Playback | 5 | Media playing on device |
 | 3 | Controls | 5 | Album/playlist (NOT radio/station) |
-| 4 | Features | 5 | Device-specific (EQ, outputs) |
+| 4 | Features | 5 | Device-specific (EQ, PEQ, outputs) |
 | 5 | Groups | 9 | Multiple devices (--master, --slave) |
 | 6 | Advanced | TBD | Manual setup (BT, etc.) |
 
@@ -93,7 +93,7 @@ Group tests verify:
 
 ### Device Configuration
 
-Configure devices in `scripts/test_devices.yaml`:
+Configure devices in `scripts/test_devices.yaml` (or `tests/devices.yaml` for pytest integration tests):
 
 ```yaml
 devices:
@@ -102,11 +102,14 @@ devices:
     model: wiim_pro
     capabilities:
       - eq
+      - peq    # Parametric EQ (WiiM only; probed at runtime)
       - presets
     notes: "Primary test device"
 
 default_device: 192.168.1.115
 ```
+
+**PEQ integration tests:** Run Parametric EQ tests against a WiiM device with `pytest tests/integration/test_peq.py -v -m integration` (requires `WIIM_TEST_DEVICE` or default from config). See [PR #12](https://github.com/mjcumming/pywiim/pull/12) for the PEQ API contribution.
 
 ### Options
 

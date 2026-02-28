@@ -18,7 +18,7 @@ Python library for WiiM and LinkPlay device control with command-line tools for 
 - **Sources** - Intelligent model-specific source management (Bluetooth, Line In, Optical In, Coaxial, USB, HDMI ARC, Phono) and streaming services. Authoritative hardware filtering and UI-ready formatting.
 - **Source Catalog** - Structured source metadata via `player.source_catalog` (source type, selectability, and per-source capability flags) for integrations like Music Assistant.
 - **Multiroom Audio** - Create/join/leave groups, synchronized volume and playback
-- **EQ & Presets** - 10-band EQ with presets, 20 preset stations
+- **EQ & Presets** - 10-band EQ with presets, 20 preset stations; **Parametric EQ (PEQ)** on WiiM (10-band per-source, stereo/L-R, presets; see [PR #12]
 - **Timers & Alarms** - Sleep timers and alarm clocks (WiiM devices)
 - **State Synchronization** - UPnP events with HTTP polling fallback
 - **Device Discovery** - SSDP/UPnP discovery with network scanning fallback
@@ -27,7 +27,7 @@ Python library for WiiM and LinkPlay device control with command-line tools for 
 **Device Compatibility:**
 - **All LinkPlay devices**: Core playback, volume, sources, multiroom, presets
 - **Device-dependent features**: EQ support (varies by device)
-- **WiiM devices only**: Alarm clocks, sleep timers, and audio output mode selection
+- **WiiM devices only**: Alarm clocks, sleep timers, audio output mode selection, and **Parametric EQ (PEQ)** (LV2 PEQ API)
 
 The library automatically detects device capabilities and adapts functionality accordingly.
 
@@ -533,6 +533,9 @@ This library was made possible by the work of many developers who have reverse-e
 ### Official Documentation
 - [Arylic LinkPlay API Documentation](https://developer.arylic.com/httpapi/) - Official LinkPlay protocol documentation
 - [WiiM HTTP API PDF](https://www.wiimhome.com/pdf/HTTP%20API%20for%20WiiM%20Products.pdf) - Official WiiM API documentation
+
+### Contributors and Notable Contributions
+- **[jeromeof](https://github.com/jeromeof)** – Full Parametric EQ (PEQ) API ([PR #12](https://github.com/mjcumming/pywiim/pull/12)): WiiM LV2 PEQ support (10-band per-source, stereo/L-R channel modes, preset save/load/delete/rename). Implemented with capability probing (`supports_peq`) and integration tests against real devices.
 
 ### Additional Resources
 - Various GitHub repositories and community contributions that helped document the LinkPlay protocol and WiiM-specific enhancements

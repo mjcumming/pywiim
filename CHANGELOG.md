@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.88] - 2026-02-28
+
+### Added
+- **Full PEQ (Parametric EQ) API** (PR [#12](https://github.com/mjcumming/pywiim/pull/12)) - New `PEQAPI` mixin and client support for the official WiiM LV2 PEQ system: 10-band per-source parametric EQ, stereo and L/R channel modes, preset save/load/delete/rename. Data models: `PEQBand`, `PEQSettings`, `PEQPresetInfo`. Capability `supports_peq` is probed at connect time; PEQ is only available on WiiM devices. Integration tests in `tests/integration/test_peq.py`; docs and integration guide updated. Thanks to [jeromeof](https://github.com/jeromeof) for the contribution.
+
 ## [2.1.87] - 2026-02-26
 
 ### Fixed

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import quote
 
 from .api.constants import (
     API_ENDPOINT_EQ_GET,
@@ -120,6 +121,7 @@ class WiiMCapabilities:
         capabilities.setdefault("supports_audio_output", True)
         capabilities.setdefault("supports_presets", True)
         capabilities.setdefault("supports_eq", True)
+        capabilities.setdefault("supports_peq", False)
 
         # Probe for getStatusEx support
         try:
@@ -295,7 +297,6 @@ class WiiMCapabilities:
         # LinkPlay devices.  We use the preset-list endpoint as a lightweight read probe.
         peq_supported = False
         try:
-            from urllib.parse import quote
             await client._request(API_ENDPOINT_PEQ_GET_LIST + quote(PEQ_PLUGIN_URI, safe=""))
             peq_supported = True
             _LOGGER.debug("Device %s supports WiiM LV2 PEQ (EQv2GetList probe succeeded)", client.host)

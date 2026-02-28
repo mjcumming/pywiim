@@ -15,6 +15,7 @@ These capabilities are detected via endpoint probing during device initializatio
 | Property | Description | Default |
 |----------|-------------|---------|
 | `player.supports_eq` | EQ control (presets, bands) | Varies |
+| `player.client.capabilities.get("supports_peq")` | Parametric EQ (PEQ) – 10-band per-source, WiiM only | WiiM: True, others: False |
 | `player.supports_presets` | Playback presets/favorites | Varies |
 | `player.presets_full_data` | Preset names/URLs available (WiiM) vs count only (LinkPlay) | WiiM: True, LinkPlay: False |
 | `player.supports_audio_output` | Audio output mode control | Varies |

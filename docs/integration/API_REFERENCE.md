@@ -254,6 +254,38 @@ player.eq_preset  # str | None
 
 Current EQ preset name from cached status.
 
+#### Parametric EQ (PEQ) – WiiM only
+
+The **Parametric EQ (PEQ)** API provides full control of the WiiM LV2 PEQ system: 10-band parametric EQ per source, stereo or independent L/R channel modes, and custom preset save/load/delete/rename. It is **only available on WiiM devices**; capability `supports_peq` is probed at connect time. (Contribution: [jeromeof](https://github.com/jeromeof) – [PR #12](https://github.com/mjcumming/pywiim/pull/12).)
+
+**Capability check:**
+
+```python
+if player.client.capabilities.get("supports_peq", False):
+    settings = await player.client.get_peq_bands()
+    # ...
+```
+
+**Client methods (use when `supports_peq` is True):**
+
+```python
+# Read
+settings = await player.client.get_peq_bands()                    # Current or default source
+settings = await player.client.get_peq_bands(source_name="wifi")  # Specific source
+# settings: PEQSettings (enabled, channel_mode, bands, bands_l, bands_r, name)
+
+presets = await player.client.get_peq_preset_list()              # {"custom": [...], "preset": [...]}
+detailed = await player.client.get_peq_preset_list_detailed()    # List[PEQPresetInfo]
+
+# Write (see pywiim.api.peq for PEQBand, validation, and full API)
+await player.client.set_peq_bands(bands, source_name="wifi")
+await player.client.set_peq_enabled(True, source_name="wifi")
+await player.client.save_peq("My Preset", source_name="wifi")
+await player.client.load_peq("My Preset", source_name="wifi")
+```
+
+**Data models** (from `pywiim.api.peq`): `PEQBand`, `PEQSettings`, `PEQPresetInfo`. Constants: `PEQ_MODE_OFF`, `PEQ_MODE_LOW_SHELF`, `PEQ_MODE_PEAK`, `PEQ_MODE_HIGH_SHELF`, `PEQ_CHANNEL_MODE_STEREO`, `PEQ_CHANNEL_MODE_LR`.
+
 #### Playback Presets (Radio Stations / Saved Favorites)
 
 ```python
@@ -683,6 +715,7 @@ Device capabilities are detected via endpoint probing during initialization and 
 ```python
 player.supports_firmware_install  # bool - True if firmware installation via API is supported (WiiM only)
 player.supports_eq                # bool - True if EQ control is supported
+player.client.capabilities.get("supports_peq")  # bool - True if Parametric EQ (PEQ) is supported (WiiM only)
 player.supports_presets           # bool - True if presets are supported
 player.presets_full_data          # bool - True if preset names/URLs available (WiiM), False if count only (LinkPlay)
 player.supports_audio_output      # bool - True if audio output mode control is supported
@@ -745,6 +778,16 @@ await player.set_eq_preset(preset: str)
 await player.get_eq()  # Returns dict[str, Any]
 await player.get_eq_presets()  # Returns list[str]
 await player.get_eq_status()  # Returns bool
+
+# Parametric EQ (PEQ) – WiiM only; check supports_peq first (see "Parametric EQ (PEQ)" section above)
+await player.client.get_peq_bands(source_name=None)
+await player.client.set_peq_bands(bands, channel_mode="Stereo", source_name=None)
+await player.client.set_peq_enabled(enabled, source_name=None)
+await player.client.get_peq_preset_list()
+await player.client.save_peq(name, source_name=None)
+await player.client.load_peq(name, source_name=None)
+await player.client.delete_peq(name)
+await player.client.rename_peq(name, new_name)
 
 # Audio output control
 # Confirmed modes: 1=SPDIF (Optical), 2=AUX (Line Out), 3=COAX, 4=BT/Headphone, 7=HDMI (Amp Ultra), 8=USB

@@ -167,6 +167,7 @@ def mock_capabilities():
         "supports_metadata": True,
         "supports_presets": True,
         "supports_eq": True,
+        "supports_peq": True,
         "response_timeout": 2.0,
         "retry_count": 2,
         "protocol_priority": ["https", "http"],

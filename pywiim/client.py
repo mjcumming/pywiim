@@ -20,11 +20,11 @@ from .api.bluetooth import BluetoothAPI
 from .api.device import DeviceAPI
 from .api.diagnostics import DiagnosticsAPI
 from .api.eq import EQAPI
-from .api.peq import PEQAPI
 from .api.firmware import FirmwareAPI
 from .api.group import GroupAPI
 from .api.lms import LMSAPI
 from .api.misc import MiscAPI
+from .api.peq import PEQAPI
 from .api.playback import PlaybackAPI
 from .api.preset import PresetAPI
 from .api.subwoofer import SubwooferAPI
