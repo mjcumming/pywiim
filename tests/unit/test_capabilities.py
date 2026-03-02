@@ -380,6 +380,42 @@ class TestWiiMCapabilitiesClass:
         assert any("getAudioOutputStatus" in str(call) for call in calls)
 
     @pytest.mark.asyncio
+    async def test_detect_capabilities_trigger_out_supported(self, mock_client):
+        """Test 12V trigger capability is set when getTriggeroutStatus succeeds."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Ultra", firmware="5.2.704452")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getTriggeroutStatus" in endpoint:
+                return {"status": 0}
+            return {"status": "ok"}
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["supports_trigger_out"] is True
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_trigger_out_not_supported(self, mock_client):
+        """Test 12V trigger capability is False when getTriggeroutStatus fails."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Mini", firmware="4.8.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getTriggeroutStatus" in endpoint:
+                raise WiiMError("unknown command")
+            return {"status": "ok"}
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["supports_trigger_out"] is False
+
+    @pytest.mark.asyncio
     async def test_detect_capabilities_eq_read_only(self, mock_client):
         """Test EQ capability detection uses read-only probing - if we can read EQ, we assume we can set it."""
         device_info = DeviceInfo(uuid="test-uuid", model="ARYLIC_H50", firmware="4.6.529755")

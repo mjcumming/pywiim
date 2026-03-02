@@ -16,7 +16,12 @@ from __future__ import annotations
 from typing import Any
 
 from ..exceptions import WiiMError
-from .constants import API_ENDPOINT_SET_BUTTONS, API_ENDPOINT_SET_LED
+from .constants import (
+    API_ENDPOINT_SET_BUTTONS,
+    API_ENDPOINT_SET_LED,
+    API_ENDPOINT_TRIGGER_OUT_SET,
+    API_ENDPOINT_TRIGGER_OUT_STATUS,
+)
 
 
 class MiscAPI:
@@ -61,6 +66,53 @@ class MiscAPI:
             WiiMRequestError: If the request fails
         """
         await self.set_buttons_enabled(False)
+
+    # ------------------------------------------------------------------
+    # 12V trigger control (WiiM Ultra / Pro / Pro Plus)
+    # ------------------------------------------------------------------
+
+    async def get_trigger_out_status(self) -> bool | None:
+        """Get 12V trigger output status.
+
+        Returns:
+            True if trigger is on, False if off, or None if not supported.
+            Devices without 12V trigger hardware return None or raise.
+        """
+        try:
+            result = await self._request(API_ENDPOINT_TRIGGER_OUT_STATUS)  # type: ignore[attr-defined]
+            if isinstance(result, dict) and "status" in result:
+                return int(result["status"]) == 1
+            return None
+        except WiiMError:
+            return None
+
+    async def set_trigger_out(self, on: bool) -> None:
+        """Set 12V trigger output on or off.
+
+        Args:
+            on: True to turn trigger on, False to turn off.
+
+        Raises:
+            WiiMError: If the request fails (e.g. device does not support 12V trigger).
+        """
+        value = 1 if on else 0
+        await self._request(f"{API_ENDPOINT_TRIGGER_OUT_SET}{value}")  # type: ignore[attr-defined]
+
+    async def set_trigger_out_on(self) -> None:
+        """Turn 12V trigger output on.
+
+        Raises:
+            WiiMError: If the request fails.
+        """
+        await self.set_trigger_out(True)
+
+    async def set_trigger_out_off(self) -> None:
+        """Turn 12V trigger output off.
+
+        Raises:
+            WiiMError: If the request fails.
+        """
+        await self.set_trigger_out(False)
 
     # ------------------------------------------------------------------
     # Alternative LED control (if needed)

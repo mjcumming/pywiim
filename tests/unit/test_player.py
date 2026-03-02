@@ -4954,6 +4954,68 @@ class TestPlayerReboot:
         mock_client.reboot.assert_called_once()
 
 
+class TestPlayerTriggerOut:
+    """Test Player 12V trigger methods (WiiM Ultra / Pro / Pro Plus)."""
+
+    @pytest.mark.asyncio
+    async def test_get_trigger_out_status(self, mock_client):
+        """Test get_trigger_out_status delegates to client and updates cache."""
+        from pywiim.player import Player
+
+        mock_client.get_trigger_out_status = AsyncMock(return_value=True)
+        type(mock_client).capabilities = PropertyMock(return_value={})
+
+        player = Player(mock_client)
+        result = await player.get_trigger_out_status()
+
+        assert result is True
+        assert player.trigger_out_on is True
+        mock_client.get_trigger_out_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_set_trigger_out_updates_cache_and_callback(self, mock_client):
+        """Test set_trigger_out updates cache and invokes state callback."""
+        from pywiim.player import Player
+
+        mock_client.set_trigger_out = AsyncMock()
+        type(mock_client).capabilities = PropertyMock(return_value={})
+        callback_called = []
+
+        player = Player(mock_client, on_state_changed=lambda: callback_called.append(True))
+        await player.set_trigger_out(True)
+
+        assert player._trigger_out_on is True
+        assert len(callback_called) == 1
+        mock_client.set_trigger_out.assert_called_once_with(True)
+
+    @pytest.mark.asyncio
+    async def test_supports_trigger_out(self, mock_client):
+        """Test supports_trigger_out reads from capabilities."""
+        from pywiim.player import Player
+
+        type(mock_client).capabilities = PropertyMock(return_value={"supports_trigger_out": True})
+        player = Player(mock_client)
+        assert player.supports_trigger_out is True
+
+        type(mock_client).capabilities = PropertyMock(return_value={"supports_trigger_out": False})
+        player2 = Player(mock_client)
+        assert player2.supports_trigger_out is False
+
+    @pytest.mark.asyncio
+    async def test_set_trigger_out_on_off(self, mock_client):
+        """Test set_trigger_out_on and set_trigger_out_off convenience methods."""
+        from pywiim.player import Player
+
+        mock_client.set_trigger_out = AsyncMock()
+        type(mock_client).capabilities = PropertyMock(return_value={})
+        player = Player(mock_client)
+
+        await player.set_trigger_out_on()
+        mock_client.set_trigger_out.assert_called_with(True)
+        await player.set_trigger_out_off()
+        mock_client.set_trigger_out.assert_called_with(False)
+
+
 class TestPlayerBluetoothOutputs:
     """Test Bluetooth output device handling."""
 

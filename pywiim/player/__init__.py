@@ -478,6 +478,38 @@ class Player(PlayerBase):
         if self._on_state_changed:
             self._on_state_changed()
 
+    # === 12V Trigger (WiiM Ultra / Pro / Pro Plus) ===
+
+    async def get_trigger_out_status(self) -> bool | None:
+        """Get 12V trigger output status.
+
+        Returns:
+            True if trigger is on, False if off, or None if not supported.
+        """
+        status = await self.client.get_trigger_out_status()
+        if status is not None:
+            self._trigger_out_on = status
+        return status
+
+    async def set_trigger_out(self, on: bool) -> None:
+        """Set 12V trigger output on or off.
+
+        Args:
+            on: True to turn trigger on, False to turn off.
+        """
+        await self.client.set_trigger_out(on)
+        self._trigger_out_on = on
+        if self._on_state_changed:
+            self._on_state_changed()
+
+    async def set_trigger_out_on(self) -> None:
+        """Turn 12V trigger output on."""
+        await self.set_trigger_out(True)
+
+    async def set_trigger_out_off(self) -> None:
+        """Turn 12V trigger output off."""
+        await self.set_trigger_out(False)
+
     async def reboot(self) -> None:
         """Reboot the device."""
         await self._diagnostics.reboot()
@@ -1111,6 +1143,20 @@ class Player(PlayerBase):
         return bool(self.client.capabilities.get("supports_subwoofer", False))
 
     @property
+    def supports_trigger_out(self) -> bool:
+        """Whether 12V trigger output is supported (WiiM Ultra / Pro / Pro Plus)."""
+        if not self.client:
+            return False
+        return bool(self.client.capabilities.get("supports_trigger_out", False))
+
+    @property
+    def trigger_out_on(self) -> bool | None:
+        """Cached 12V trigger state (True=on, False=off, None=unknown).
+
+        Updated when get_trigger_out_status() or set_trigger_out() is called.
+        """
+        return self._trigger_out_on
+
     def upnp_health_status(self) -> dict[str, Any] | None:
         """UPnP event health statistics.
 

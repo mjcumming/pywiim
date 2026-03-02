@@ -65,6 +65,7 @@ class PlayerMonitor:
         self.last_preset_count: int | None = None
         self.last_preset_check = 0.0
         self.last_audio_output_check = 0.0  # Track when to fetch audio output status
+        self.last_trigger_out_check = 0.0  # Track when to fetch 12V trigger status
 
     def _format_source_name(self, source: str) -> str:
         """Format source name for display, handling acronyms correctly.
@@ -524,6 +525,20 @@ class PlayerMonitor:
                             pass  # Don't fail if audio output fetch fails
                     self.last_audio_output_check = now
 
+                # 12V trigger status (same interval as audio output when supported)
+                if self.strategy and self.strategy.should_fetch_audio_output(
+                    self.last_trigger_out_check,
+                    False,
+                    self.player.client.capabilities.get("supports_trigger_out", False),
+                    now,
+                ):
+                    if self.player.client.capabilities.get("supports_trigger_out", False):
+                        try:
+                            await self.player.get_trigger_out_status()
+                        except Exception:
+                            pass
+                    self.last_trigger_out_check = now
+
                 # Check for role changes (player.role is updated by refresh() via _synchronize_group_state())
                 role_changed = current_role != old_role
 
@@ -963,6 +978,21 @@ class PlayerMonitor:
 
         if audio_settings:
             print("🔊 " + "  |  ".join(audio_settings))
+            print()
+
+        # ===== HARDWARE (12V TRIGGER / SUBWOOFER) =====
+        hardware_parts = []
+        if self.player.supports_trigger_out:
+            trigger_on = self.player.trigger_out_on
+            trigger_str = "ON" if trigger_on else "OFF" if trigger_on is False else "—"
+            hardware_parts.append(f"12V Trigger: {trigger_str}")
+        if self.player.supports_subwoofer and self.player.subwoofer_status:
+            sub = self.player.subwoofer_status
+            enabled = sub.get("status", 0) == 1
+            cross = sub.get("cross", 0)
+            hardware_parts.append(f"Subwoofer: {'On' if enabled else 'Off'}, {cross}Hz")
+        if hardware_parts:
+            print("🔌 " + "  |  ".join(hardware_parts))
             print()
 
         # ===== PLAYBACK SETTINGS =====

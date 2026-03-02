@@ -140,3 +140,83 @@ class TestMiscAPI:
 
         assert results["touch_buttons"] is True
         assert results["alternative_led"] is True
+
+    # --- 12V trigger (WiiM Ultra / Pro / Pro Plus) ---
+
+    @pytest.mark.asyncio
+    async def test_get_trigger_out_status_on(self, mock_client):
+        """Test get 12V trigger status returns True when on."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                if "getTriggeroutStatus" in endpoint:
+                    return {"status": 1}
+                return {"status": "ok"}
+
+        client = TestClient()
+        result = await client.get_trigger_out_status()
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_get_trigger_out_status_off(self, mock_client):
+        """Test get 12V trigger status returns False when off."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                if "getTriggeroutStatus" in endpoint:
+                    return {"status": 0}
+                return {"status": "ok"}
+
+        client = TestClient()
+        result = await client.get_trigger_out_status()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_get_trigger_out_status_not_supported(self, mock_client):
+        """Test get 12V trigger status returns None when device does not support it."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                if "getTriggeroutStatus" in endpoint:
+                    raise WiiMError("unknown command")
+                return {"status": "ok"}
+
+        client = TestClient()
+        result = await client.get_trigger_out_status()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_set_trigger_out(self, mock_client):
+        """Test set 12V trigger on and off sends correct command."""
+        from pywiim.api.constants import API_ENDPOINT_TRIGGER_OUT_SET
+        from pywiim.api.misc import MiscAPI
+
+        requests = []
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                return {"status": "OK"}
+
+        client = TestClient()
+        await client.set_trigger_out(True)
+        await client.set_trigger_out(False)
+        assert requests == [f"{API_ENDPOINT_TRIGGER_OUT_SET}1", f"{API_ENDPOINT_TRIGGER_OUT_SET}0"]
+
+    @pytest.mark.asyncio
+    async def test_set_trigger_out_on_off(self, mock_client):
+        """Test set_trigger_out_on and set_trigger_out_off convenience methods."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def set_trigger_out(self, on):
+                self._last_trigger = on
+
+        client = TestClient()
+        await client.set_trigger_out_on()
+        assert client._last_trigger is True
+        await client.set_trigger_out_off()
+        assert client._last_trigger is False

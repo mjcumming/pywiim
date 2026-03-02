@@ -118,6 +118,7 @@ class PlayerBase:
         # Cached subwoofer status (updated via refresh() every 60 seconds)
         # Only available on WiiM Ultra with firmware 5.2+
         self._subwoofer_status: dict[str, Any] | None = None
+        self._trigger_out_on: bool | None = None  # 12V trigger state (None = unknown)
         self._last_subwoofer_check: float = 0
 
         # UPnP health tracking (only if UPnP client is provided)

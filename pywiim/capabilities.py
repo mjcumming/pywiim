@@ -34,6 +34,7 @@ from .api.constants import (
     API_ENDPOINT_EQ_LIST,
     API_ENDPOINT_EQ_STATUS,
     API_ENDPOINT_PEQ_GET_LIST,
+    API_ENDPOINT_TRIGGER_OUT_STATUS,
     PEQ_PLUGIN_URI,
 )
 from .exceptions import WiiMError
@@ -122,6 +123,7 @@ class WiiMCapabilities:
         capabilities.setdefault("supports_presets", True)
         capabilities.setdefault("supports_eq", True)
         capabilities.setdefault("supports_peq", False)
+        capabilities.setdefault("supports_trigger_out", False)
 
         # Probe for getStatusEx support
         try:
@@ -304,6 +306,20 @@ class WiiMCapabilities:
             _LOGGER.debug("Device %s does not support WiiM LV2 PEQ (EQv2GetList probe failed)", client.host)
 
         capabilities["supports_peq"] = peq_supported
+
+        # Probe for 12V trigger support (WiiM Ultra / Pro / Pro Plus)
+        # getTriggeroutStatus returns {"status":0|1}; only some WiiM models have the hardware
+        try:
+            result = await client._request(API_ENDPOINT_TRIGGER_OUT_STATUS)
+            if isinstance(result, dict) and "status" in result:
+                capabilities["supports_trigger_out"] = True
+                _LOGGER.debug(
+                    "Device %s supports 12V trigger (getTriggeroutStatus), result: %s",
+                    client.host,
+                    result,
+                )
+        except WiiMError:
+            _LOGGER.debug("Device %s does not support 12V trigger (getTriggeroutStatus)", client.host)
 
         # Get device profile for profile-specific settings (like reboot command)
         # Profile provides device-specific command variations

@@ -711,6 +711,38 @@ Parser now uses vendor field and ignores mode=0, keeping source="dlna" correct.
 - ❌ Show audio output controls on unsupported devices
 - ❌ Fail hard when device returns "unknown command"
 
+## 12V Trigger API (WiiM Ultra / Pro / Pro Plus)
+
+### Device Support
+
+The 12V trigger output allows controlling external amplifiers (e.g. turn on/off with playback). It is supported only on WiiM models that have the physical 12V trigger jack:
+
+| Model        | Support |
+|-------------|---------|
+| **WiiM Ultra** | ✅ |
+| **WiiM Pro**   | ✅ |
+| **WiiM Pro Plus** | ✅ |
+| **WiiM Mini** | ❌ (no hardware) |
+| **Arylic / Audio Pro** | ❌ |
+
+Support is detected at runtime via `getTriggeroutStatus`; `capabilities["supports_trigger_out"]` is set accordingly.
+
+### HTTP Endpoints
+
+- **Get status**: `getTriggeroutStatus` → `{"status":0}` (off) or `{"status":1}` (on)
+- **Set status**: `setTriggeroutStatus:0` or `setTriggeroutStatus:1` → `{"status":"OK"}`
+
+### Library API
+
+- **Client**: `get_trigger_out_status()` → `bool | None`; `set_trigger_out(on: bool)`; `set_trigger_out_on()`; `set_trigger_out_off()`
+- **Player**: Same methods; `supports_trigger_out` property; `trigger_out_on` cached state (updated after get/set)
+
+### Best Practices
+
+- ✅ Check `player.supports_trigger_out` before exposing trigger switch in UI
+- ✅ Use `get_trigger_out_status()` to read state; returns `None` if unsupported
+- ❌ Don't assume trigger is available on all WiiM devices (Mini has no jack)
+
 ## API Documentation Sources
 
 **Official Documentation**:

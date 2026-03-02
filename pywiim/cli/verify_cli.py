@@ -1059,6 +1059,56 @@ class FeatureTester:
                 self.results["failed"].append(f"subwoofer: Error - {str(e)}")
                 print(f"   ✗ Error: {e}")
 
+    async def test_trigger_out(self) -> None:
+        """Test 12V trigger output (WiiM Ultra / Pro / Pro Plus)."""
+        print("\n⚡ Testing 12V Trigger...")
+
+        try:
+            if not self.client.capabilities.get("supports_trigger_out", False):
+                self.results["skipped"].append("trigger_out: Not supported")
+                print("   ⊘ 12V trigger not supported (WiiM Ultra/Pro/Pro Plus only)")
+                return
+
+            status = await self.client.get_trigger_out_status()
+            if status is None:
+                self.results["not_supported"].append("trigger_out: get_trigger_out_status")
+                print("   ⊘ 12V trigger not supported (no response)")
+                return
+
+            self.results["passed"].append("trigger_out: get_trigger_out_status")
+            print(f"   ✓ get_trigger_out_status: {'ON' if status else 'OFF'}")
+
+            original_on = status
+            try:
+                await self.client.set_trigger_out(not original_on)
+                await asyncio.sleep(0.3)
+                check = await self.client.get_trigger_out_status()
+                if check is not None and check == (not original_on):
+                    self.results["passed"].append("trigger_out: set_trigger_out")
+                    print(f"   ✓ set_trigger_out({not original_on})")
+                else:
+                    self.results["warnings"].append("trigger_out: set_trigger_out - value not verified")
+                    print("   ⚠️  set_trigger_out - readback not verified")
+                await self.client.set_trigger_out(original_on)
+                await asyncio.sleep(0.2)
+                print(f"   ✓ Restored trigger to {'ON' if original_on else 'OFF'}")
+            except Exception as e:
+                self.results["warnings"].append(f"trigger_out: set_trigger_out - {e}")
+                print(f"   ⚠️  set_trigger_out: {e}")
+                try:
+                    await self.client.set_trigger_out(original_on)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            error_str = str(e).lower()
+            if "not supported" in error_str or "unknown command" in error_str:
+                self.results["not_supported"].append("trigger_out: 12V trigger")
+                print("   ⊘ 12V trigger not supported")
+            else:
+                self.results["failed"].append(f"trigger_out: Error - {str(e)}")
+                print(f"   ✗ Error: {e}")
+
     async def run_all_tests(self) -> dict[str, Any]:
         """Run all feature tests."""
         print("=" * 60)
@@ -1100,6 +1150,7 @@ class FeatureTester:
         await self.test_audio_settings()
         await self.test_lms_controls()
         await self.test_subwoofer_controls()
+        await self.test_trigger_out()
 
         # Restore original state
         await self.restore_state()

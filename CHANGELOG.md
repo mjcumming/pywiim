@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.89] - 2026-03-02
+
+### Added
+- **12V trigger support** (Issue [#13](https://github.com/mjcumming/pywiim/issues/13)) - API and player support for 12V trigger output on WiiM Ultra / Pro / Pro Plus: `get_trigger_out_status()`, `set_trigger_out(on)`, `set_trigger_out_on()`, `set_trigger_out_off()`, `player.supports_trigger_out`, `player.trigger_out_on`. Capability probed via `getTriggeroutStatus`. Documented in API_DESIGN_PATTERNS, HA_INTEGRATION, HA_CAPABILITIES.
+- **CLI: 12V trigger and diagnostics** - Verify CLI: `test_trigger_out()` in feature test suite. Diagnostics: 12V Trigger and PEQ (Advanced EQ) feature tests and report sections; `getTriggeroutStatus` in endpoint list; subwoofer, PEQ, and trigger_out in `collect_diagnostic_data` output.
+- **Monitor CLI: 12V trigger and subwoofer** - Live status shows "12V Trigger: ON/OFF" and "Subwoofer: On/Off, XXHz" when supported; trigger status fetched on same interval as audio output.
+
 ## [2.1.88] - 2026-02-28
 
 ### Added

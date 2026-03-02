@@ -2136,6 +2136,54 @@ class WiiMSubwooferLevel(NumberEntity):
 - **No manual fetching needed**: Just access the properties - state is always current
 - **Optimistic updates**: Methods update cached state immediately after API success
 
+## 12V Trigger (WiiM Ultra / Pro / Pro Plus)
+
+WiiM Ultra, Pro, and Pro Plus have a 12V trigger output that can control external amplifiers (e.g. turn on when playing). The library exposes read/set and a capability flag.
+
+### Available Properties and Methods
+
+```python
+# Check if 12V trigger is supported
+player.supports_trigger_out  # bool
+
+# Cached state (updated when get_trigger_out_status or set_trigger_out is called)
+player.trigger_out_on  # bool | None - True=on, False=off, None=unknown
+
+# Read current state from device (updates trigger_out_on)
+status = await player.get_trigger_out_status()  # bool | None
+
+# Set trigger on/off
+await player.set_trigger_out(True)
+await player.set_trigger_out_on()
+await player.set_trigger_out_off()
+```
+
+### Home Assistant Switch Example
+
+```python
+class WiiMTriggerSwitch(SwitchEntity):
+    """Switch for 12V trigger output (amplifier control)."""
+    
+    @property
+    def is_on(self) -> bool:
+        return bool(self.coordinator.data.get("player").trigger_out_on)
+    
+    @property
+    def available(self) -> bool:
+        return self.coordinator.data.get("player").supports_trigger_out
+    
+    async def async_turn_on(self, **kwargs) -> None:
+        await self.coordinator.data.get("player").set_trigger_out_on()
+    
+    async def async_turn_off(self, **kwargs) -> None:
+        await self.coordinator.data.get("player").set_trigger_out_off()
+```
+
+### Notes
+
+- **Capability**: Support is probed at device init via `getTriggeroutStatus`; only models with the physical jack report support.
+- **State**: Call `get_trigger_out_status()` when needed (e.g. on entity update) to refresh `trigger_out_on`; the library does not poll trigger state automatically.
+
 ## Group Join/Unjoin Operations
 
 ### Library Handles Everything Automatically

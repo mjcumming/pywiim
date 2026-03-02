@@ -24,6 +24,7 @@ These capabilities are detected via endpoint probing during device initializatio
 | `player.supports_sleep_timer` | Sleep timer feature | WiiM only |
 | `player.supports_led_control` | LED control | Varies |
 | `player.supports_subwoofer` | Subwoofer configuration | WiiM only (not Arylic) |
+| `player.supports_trigger_out` | 12V trigger output (amplifier control) | WiiM Ultra / Pro / Pro Plus |
 
 ### UPnP Capabilities
 

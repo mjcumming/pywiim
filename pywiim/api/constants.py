@@ -417,6 +417,12 @@ API_ENDPOINT_GET_SHUTDOWN = "/httpapi.asp?command=getShutdown"
 API_ENDPOINT_SUBWOOFER_STATUS = "/httpapi.asp?command=getSubLPF"
 API_ENDPOINT_SUBWOOFER_SET = "/httpapi.asp?command=setSubLPF:"
 
+# 12V trigger control endpoints (WiiM Ultra / Pro / Pro Plus)
+# getTriggeroutStatus → {"status":0|1}, setTriggeroutStatus:0|1 → {"status":"OK"}
+# See: https://github.com/mjcumming/pywiim/issues/13
+API_ENDPOINT_TRIGGER_OUT_STATUS = "/httpapi.asp?command=getTriggeroutStatus"
+API_ENDPOINT_TRIGGER_OUT_SET = "/httpapi.asp?command=setTriggeroutStatus:"
+
 # PEQ (Parametric Equalizer) endpoints - official WiiM LV2 PEQ API
 # pluginURI: http://moddevices.com/plugins/caps/EqNp
 API_ENDPOINT_PEQ_GET_BAND = "/httpapi.asp?command=EQGetLV2BandEx:"

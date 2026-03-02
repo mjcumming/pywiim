@@ -178,6 +178,7 @@ class DeviceDiagnostics:
             ("getEQ", lambda: self.client.get_eq()),
             ("getMultiroomStatus", lambda: self.client.get_multiroom_status()),
             ("getAudioOutputStatus", lambda: self.client.get_audio_output_status()),
+            ("getTriggeroutStatus", lambda: self.client.get_trigger_out_status()),
             ("getFirmwareInfo", lambda: self.client.get_firmware_info()),
         ]
 
@@ -220,6 +221,8 @@ class DeviceDiagnostics:
             ("Source Selection", self._test_sources),
             ("Audio Output Modes", self._test_audio_output),
             ("Subwoofer", self._test_subwoofer),
+            ("12V Trigger", self._test_trigger_out),
+            ("PEQ (Advanced EQ)", self._test_peq),
         ]
 
         self.report["features"] = {}
@@ -333,6 +336,29 @@ class DeviceDiagnostics:
                     print(f"      Delay: {result.get('delay_ms', 'Unknown')} ms")
                     print(f"      Bass to Mains: {result.get('bass_to_mains', 'Unknown')}")
                     print(f"      Filter Bypassed: {result.get('filter_bypassed', 'Unknown')}")
+
+                # Special handling for 12V Trigger
+                if name == "12V Trigger" and result.get("supported"):
+                    state = result.get("state")
+                    state_str = "ON" if state else "OFF" if state is False else "Unknown"
+                    print(f"      State: {state_str}")
+
+                # Special handling for PEQ (Advanced EQ)
+                if name == "PEQ (Advanced EQ)" and result.get("supported"):
+                    custom = result.get("custom_presets", [])
+                    preset = result.get("preset_names", [])
+                    print(f"      Custom presets: {len(custom)}")
+                    if custom:
+                        for p in custom[:15]:
+                            print(f"         - {p}")
+                        if len(custom) > 15:
+                            print(f"         ... and {len(custom) - 15} more")
+                    print(f"      Built-in presets: {len(preset)}")
+                    if preset:
+                        for p in preset[:10]:
+                            print(f"         - {p}")
+                        if len(preset) > 10:
+                            print(f"         ... and {len(preset) - 10} more")
             except Exception as err:
                 self.report["features"][name] = {
                     "supported": False,
@@ -590,6 +616,37 @@ class DeviceDiagnostics:
                 return {"supported": False, "reason": "WiiM devices only (Arylic/LinkPlay not supported)"}
             return {"supported": False, "error": str(err)}
 
+    async def _test_trigger_out(self) -> dict[str, Any]:
+        """Test 12V trigger output (WiiM Ultra / Pro / Pro Plus)."""
+        try:
+            status = await self.client.get_trigger_out_status()
+            if status is None:
+                return {"supported": False, "reason": "No response or not supported"}
+            return {
+                "supported": True,
+                "state": status,
+            }
+        except WiiMError:
+            return {"supported": False, "reason": "WiiM Ultra/Pro/Pro Plus only"}
+        except Exception as err:
+            return {"supported": False, "error": str(err)}
+
+    async def _test_peq(self) -> dict[str, Any]:
+        """Test PEQ (Parametric / Advanced EQ) - WiiM LV2 PEQ API."""
+        try:
+            if not self.client.capabilities.get("supports_peq", False):
+                return {"supported": False, "reason": "PEQ not supported (WiiM only)"}
+            preset_list = await self.client.get_peq_preset_list()
+            return {
+                "supported": True,
+                "custom_presets": list(preset_list.get("custom", [])),
+                "preset_names": list(preset_list.get("preset", [])),
+            }
+        except WiiMError:
+            return {"supported": False, "reason": "PEQ not available"}
+        except Exception as err:
+            return {"supported": False, "error": str(err)}
+
     def _generate_summary(self) -> dict[str, Any]:
         """Generate diagnostic summary."""
         device = self.report.get("device", {})
@@ -739,6 +796,33 @@ class DeviceDiagnostics:
                 self.report["subwoofer"] = {"supported": False}
         except Exception:
             self.report["subwoofer"] = {"supported": False}
+
+        # Add 12V trigger status (WiiM Ultra / Pro / Pro Plus)
+        try:
+            if self.client.capabilities.get("supports_trigger_out", False):
+                trigger_state = await self.client.get_trigger_out_status()
+                self.report["trigger_out"] = {
+                    "supported": True,
+                    "state": "on" if trigger_state else "off" if trigger_state is False else "unknown",
+                }
+            else:
+                self.report["trigger_out"] = {"supported": False}
+        except Exception:
+            self.report["trigger_out"] = {"supported": False}
+
+        # Add PEQ (Advanced EQ) preset list if supported
+        try:
+            if self.client.capabilities.get("supports_peq", False):
+                preset_list = await self.client.get_peq_preset_list()
+                self.report["peq"] = {
+                    "supported": True,
+                    "custom_presets": preset_list.get("custom", []),
+                    "preset_names": preset_list.get("preset", []),
+                }
+            else:
+                self.report["peq"] = {"supported": False}
+        except Exception:
+            self.report["peq"] = {"supported": False}
 
         # Generate summary
         self.report["summary"] = self._generate_summary()
