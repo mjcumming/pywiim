@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.90] - 2026-03-02
+
+### Added
+- **Optional track index for `play_preset()`** (GitHub [mjcumming/wiim#191](https://github.com/mjcumming/wiim/issues/191)) - `play_preset(preset, index=None)` now accepts an optional 1-based `index` to start playback at a specific track in the preset's playlist (e.g. `index=1` to start from the beginning). When omitted, behavior is unchanged (device resumes from last position). Sends `MCUKeyShortClick:preset:index` when index is provided. Documented in API_REFERENCE, HA_INTEGRATION, SOURCE_ENUMERATION.
+
 ## [2.1.89] - 2026-03-02
 
 ### Added

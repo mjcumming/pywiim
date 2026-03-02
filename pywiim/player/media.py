@@ -425,14 +425,16 @@ class MediaControl:
         elif enqueue == "next":
             await self.insert_next(url)
 
-    async def play_preset(self, preset: int) -> None:
-        """Play a preset by number.
+    async def play_preset(self, preset: int, index: int | None = None) -> None:
+        """Play a preset by number, optionally starting at a track index.
 
         Args:
             preset: Preset number (1-based).
+            index: Optional 1-based track index to start from (e.g. 1 = from beginning).
+                When None, device resumes from last position.
         """
         # Call API (raises on failure)
-        await self.player.client.play_preset(preset)
+        await self.player.client.play_preset(preset, index=index)
 
         # Call callback to notify state change
         if self.player._on_state_changed:

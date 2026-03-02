@@ -1741,7 +1741,22 @@ class TestPlayerSourceConflicts:
         player = Player(mock_client)
         await player.play_preset(1)
 
-        mock_client.play_preset.assert_called_once_with(1)
+        mock_client.play_preset.assert_called_once_with(1, index=None)
+
+    @pytest.mark.asyncio
+    async def test_play_preset_with_index(self, mock_client):
+        """Test play preset with index passes through to client."""
+        from pywiim.models import DeviceInfo, PlayerStatus
+        from pywiim.player import Player
+
+        mock_client.play_preset = AsyncMock()
+        mock_client.get_player_status_model = AsyncMock(return_value=PlayerStatus(play_state="play"))
+        mock_client.get_device_info_model = AsyncMock(return_value=DeviceInfo(uuid="test"))
+
+        player = Player(mock_client)
+        await player.play_preset(6, index=2)
+
+        mock_client.play_preset.assert_called_once_with(6, index=2)
 
     @pytest.mark.asyncio
     async def test_set_source(self, mock_client):

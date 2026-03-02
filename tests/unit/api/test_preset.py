@@ -251,3 +251,45 @@ class TestPresetAPIPlayPreset:
         await mock_client.play_preset(6)
 
         mock_client._request.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_play_preset_with_index(self, mock_client):
+        """Test playing preset with track index sends MCUKeyShortClick:preset:index."""
+        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._capabilities = {"supports_presets": True}
+        mock_client.get_max_preset_slots = AsyncMock(return_value=20)
+
+        await mock_client.play_preset(6, index=2)
+
+        mock_client._request.assert_called_once()
+        call_args = mock_client._request.call_args[0]
+        assert "/httpapi.asp?command=MCUKeyShortClick:6:2" in call_args[0]
+
+    @pytest.mark.asyncio
+    async def test_play_preset_with_index_one(self, mock_client):
+        """Test playing preset with index=1 (start from beginning)."""
+        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._capabilities = {"supports_presets": True}
+        mock_client.get_max_preset_slots = AsyncMock(return_value=6)
+
+        await mock_client.play_preset(1, index=1)
+
+        mock_client._request.assert_called_once()
+        call_args = mock_client._request.call_args[0]
+        assert "MCUKeyShortClick:1:1" in call_args[0]
+
+    @pytest.mark.asyncio
+    async def test_play_preset_index_invalid_zero(self, mock_client):
+        """Test playing preset with index 0 raises ValueError."""
+        mock_client._capabilities = {"supports_presets": True}
+
+        with pytest.raises(ValueError, match="Index must be 1 or higher"):
+            await mock_client.play_preset(1, index=0)
+
+    @pytest.mark.asyncio
+    async def test_play_preset_index_invalid_negative(self, mock_client):
+        """Test playing preset with negative index raises ValueError."""
+        mock_client._capabilities = {"supports_presets": True}
+
+        with pytest.raises(ValueError, match="Index must be 1 or higher"):
+            await mock_client.play_preset(1, index=-1)

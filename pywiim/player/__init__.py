@@ -328,9 +328,15 @@ class Player(PlayerBase):
         """
         await self._media_ctrl.clear_queue()
 
-    async def play_preset(self, preset: int) -> None:
-        """Play a preset by number."""
-        await self._media_ctrl.play_preset(preset)
+    async def play_preset(self, preset: int, index: int | None = None) -> None:
+        """Play a preset by number, optionally starting at a track index.
+
+        Args:
+            preset: Preset number (1-based).
+            index: Optional 1-based track index to start from (e.g. 1 = from beginning).
+                When None, device resumes from last position.
+        """
+        await self._media_ctrl.play_preset(preset, index=index)
 
     async def clear_playlist(self) -> None:
         """Clear the current playlist."""

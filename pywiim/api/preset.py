@@ -131,18 +131,26 @@ class PresetAPI:
             _LOGGER.debug("Cannot determine preset slots from API, assuming default %d", DEFAULT_PRESET_SLOTS)
             return DEFAULT_PRESET_SLOTS
 
-    async def play_preset(self, preset: int) -> None:
+    async def play_preset(self, preset: int, index: int | None = None) -> None:
         """Initiate playback of preset slot *preset* (1-based).
+
+        Optionally start at a specific track index within the preset's playlist.
+        When index is omitted, the device resumes from the last playback position.
 
         Args:
             preset: Preset number (1-based, must be within device's supported range).
+            index: Optional 1-based track index to start from (e.g. 1 = from beginning).
+                When None, sends MCUKeyShortClick:preset (resume). When set, sends
+                MCUKeyShortClick:preset:index. Not all devices support the index parameter.
 
         Raises:
-            ValueError: If preset number is outside valid range for this device.
+            ValueError: If preset number or index is outside valid range.
             WiiMError: If the request fails or presets are not supported.
         """
         if preset < 1:
             raise ValueError("Preset number must be 1 or higher")
+        if index is not None and index < 1:
+            raise ValueError("Index must be 1 or higher when provided")
 
         # Check if device supports presets
         capabilities = getattr(self, "_capabilities", {})
@@ -156,5 +164,10 @@ class PresetAPI:
         if preset > max_slots:
             raise ValueError(f"Preset number {preset} exceeds maximum supported slots ({max_slots}) for this device")
 
-        _LOGGER.debug("Playing preset %d (max slots: %d)", preset, max_slots)
-        await self._request(f"{API_ENDPOINT_PRESET}{preset}")  # type: ignore[attr-defined]
+        if index is not None:
+            cmd = f"{API_ENDPOINT_PRESET}{preset}:{index}"
+            _LOGGER.debug("Playing preset %d at index %d (max slots: %d)", preset, index, max_slots)
+        else:
+            cmd = f"{API_ENDPOINT_PRESET}{preset}"
+            _LOGGER.debug("Playing preset %d (max slots: %d)", preset, max_slots)
+        await self._request(cmd)  # type: ignore[attr-defined]

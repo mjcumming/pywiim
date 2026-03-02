@@ -1821,7 +1821,7 @@ def source_list(self) -> list[str] | None:
 
 ### Playing a Preset
 
-Use `play_preset()` to play a preset by number:
+Use `play_preset()` to play a preset by number. An optional **index** (1-based track index) lets you start from a specific track in the preset's playlist; when omitted, the device resumes from the last playback position.
 
 ```python
 async def async_select_source(self, source: str) -> None:
@@ -1835,7 +1835,7 @@ async def async_select_source(self, source: str) -> None:
         for preset in player.presets:
             preset_name = preset.get("name", f"Preset {preset.get('number')}")
             if preset_name == source:
-                # Play preset by number
+                # Play preset by number (resume from last position)
                 await player.play_preset(preset["number"])
                 # State updates automatically via callback
                 return
@@ -1844,6 +1844,15 @@ async def async_select_source(self, source: str) -> None:
     await player.set_source(source)
     # State updates automatically via callback
 ```
+
+**Start preset from beginning:** On devices that support it, pass `index=1` to always start from the first track instead of resuming:
+
+```python
+# Start preset 6 from the beginning of its playlist (e.g. for automations)
+await player.play_preset(6, index=1)
+```
+
+Not all devices support the index parameter; if unsupported, the device may ignore it or return an error. Omit `index` for normal resume behavior.
 
 ### Preset Data Structure
 
@@ -1867,7 +1876,7 @@ presets = player.presets
 **LinkPlay devices (`presets_full_data = False`):**
 - `player.presets` returns `None` or empty list (names not available)
 - Use `await player.client.get_max_preset_slots()` to get count (e.g., 6, 20)
-- Can still play presets by number: `await player.play_preset(1)` through `await player.play_preset(max_slots)`
+- Can still play presets by number: `await player.play_preset(1)` through `await player.play_preset(max_slots)`. Optional `index` (1-based track) to start at a specific track: `await player.play_preset(3, index=1)` (start from beginning).
 
 ### Automatic Fetching
 

@@ -340,7 +340,8 @@ if player.supports_presets and not player.presets_full_data:
     
     # Can still play presets by number (1 to max_slots)
     # But can't show preset names in UI
-    await player.play_preset(1)  # Play preset 1
+    await player.play_preset(1)  # Play preset 1 (resume from last position)
+    await player.play_preset(1, index=1)  # Play preset 1 from beginning (if device supports index)
 ```
 
 **Note:** Presets are automatically fetched by `player.refresh()`:
@@ -770,7 +771,7 @@ await player.set_shuffle(enabled: bool)  # Preserves repeat state
 # Media playback
 await player.play_url(url: str, enqueue: str = "replace")  # Play URL directly
 await player.play_playlist(playlist_url: str)  # Play M3U playlist
-await player.play_preset(preset: int)  # Play preset by number (1-20)
+await player.play_preset(preset: int, index: int | None = None)  # Play preset; optional 1-based track index (e.g. index=1 = from start)
 result = await player.play_notification(url: str)  # Returns NotificationPlaybackResult
 
 # EQ control

@@ -43,7 +43,7 @@ These are **selectable** - you can switch to them using `switchmode:`, but they 
 
 **Note on Presets**: Presets (saved stations/playlists) are **NOT** input sources. They should be handled via media browser functionality:
 - Use `get_presets()` to retrieve the list of presets (returns list of dicts with number, name, url, picurl)
-- Use `play_preset(preset_number)` to play a preset
+- Use `play_preset(preset_number, index=None)` to play a preset (optional 1-based `index` to start at a specific track, e.g. `index=1` from beginning)
 - Presets should be exposed in Home Assistant's media browser, not as selectable input sources
 
 ## Key Distinction
