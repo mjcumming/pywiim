@@ -1729,6 +1729,32 @@ class TestPlayerSourceConflicts:
         mock_client.play_notification.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_play_notification_force_interrupt_uses_play_url(self, mock_client):
+        """Test play_notification(force_interrupt=True) always uses play_url."""
+        from pywiim.models import DeviceInfo, PlayerStatus
+        from pywiim.player import NotificationPlaybackResult, Player
+
+        mock_client.play_notification = AsyncMock()
+        mock_client.play_url = AsyncMock()
+        mock_client.get_player_status_model = AsyncMock(return_value=PlayerStatus(play_state="play", source="wifi"))
+        mock_client.get_device_info_model = AsyncMock(return_value=DeviceInfo(uuid="test"))
+
+        player = Player(mock_client)
+        player._status_model = PlayerStatus(play_state="play", source="wifi")
+
+        result = await player.play_notification("http://example.com/tts.mp3", force_interrupt=True)
+
+        assert result == NotificationPlaybackResult(
+            method_used="play_url",
+            source_before="wifi",
+            likely_interrupted=True,
+            reason="force_interrupt",
+        )
+        mock_client.play_url.assert_called_once_with("http://example.com/tts.mp3")
+        mock_client.play_notification.assert_not_called()
+        assert player._last_played_url == "http://example.com/tts.mp3"
+
+    @pytest.mark.asyncio
     async def test_play_preset(self, mock_client):
         """Test play preset command."""
         from pywiim.models import DeviceInfo, PlayerStatus

@@ -147,7 +147,15 @@ class TestNotificationPromptSupport:
 
     def test_non_native_notification_sources_not_supported(self):
         """Known non-native and unknown sources return False."""
-        for source in ("spotify", "airplay", "bluetooth", "line_in", "dlna", "unknown_service"):
+        for source in (
+            "spotify",
+            "airplay",
+            "bluetooth",
+            "line_in",
+            "dlna",
+            "linkplay_radio",  # WiiM Home built-in radio; use play_url for TTS
+            "unknown_service",
+        ):
             assert source_supports_native_notification_prompt(source) is False
 
     def test_none_or_empty_not_supported(self):

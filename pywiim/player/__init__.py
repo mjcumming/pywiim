@@ -204,7 +204,7 @@ class Player(PlayerBase):
         """Play a playlist (M3U) URL."""
         await self._media_ctrl.play_playlist(playlist_url)
 
-    async def play_notification(self, url: str) -> NotificationPlaybackResult:
+    async def play_notification(self, url: str, *, force_interrupt: bool = False) -> NotificationPlaybackResult:
         """Play a notification sound from URL.
 
         Uses native playPromptUrl on supported sources and automatically
@@ -213,11 +213,13 @@ class Player(PlayerBase):
 
         Args:
             url: URL to notification audio file.
+            force_interrupt: If True, always use play_url so the notification
+                is guaranteed audible (e.g. for TTS when prompt path fails).
 
         Returns:
             NotificationPlaybackResult with method_used and interruption hint.
         """
-        return await self._media_ctrl.play_notification(url)
+        return await self._media_ctrl.play_notification(url, force_interrupt=force_interrupt)
 
     async def add_to_queue(self, url: str, metadata: str = "") -> None:
         """Add URL to end of queue (requires UPnP client)."""

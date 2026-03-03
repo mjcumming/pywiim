@@ -985,13 +985,17 @@ asyncio.run(monitor_playback())
 ### Notification Playback
 
 The `play_notification()` method is source-aware:
-- Uses firmware-native `playPromptUrl` when current source supports prompt ducking.
+- Uses firmware-native `playPromptUrl` when current source is in the native set (e.g. wifi, tunein, USB). Prompt behavior (duck, play, resume) is **firmware-dependent** and may not work on all devices/sources.
 - Falls back to `play_url` when source is unsupported or unknown, so audio is still heard.
+- Optional `force_interrupt=True` always uses `play_url` so the notification is guaranteed audible (e.g. for TTS when the prompt path is unreliable).
 
 ```python
 result = await player.play_notification("https://example.com/doorbell.mp3")
 print(result.method_used)         # "prompt" or "play_url"
 print(result.likely_interrupted)  # True when fallback path was used
+
+# Force interrupt playback so TTS is always heard (e.g. linkplay_radio, Spotify)
+result = await player.play_notification(tts_url, force_interrupt=True)
 ```
 
 #### Return Value
@@ -1000,7 +1004,7 @@ print(result.likely_interrupted)  # True when fallback path was used
 - `method_used`: `"prompt"` or `"play_url"`
 - `source_before`: Source observed before playback decision (lowercase) or `None`
 - `likely_interrupted`: `True` when fallback playback was used
-- `reason`: Optional fallback reason (for example `unsupported_source`)
+- `reason`: Optional reason (e.g. `unsupported_source`, `force_interrupt`)
 
 #### Behavior Notes
 
@@ -1011,12 +1015,12 @@ print(result.likely_interrupted)  # True when fallback path was used
 #### Source Handling Policy
 
 - Native prompt path (`method_used="prompt"`): `wifi`, `network`, `http`, `usb`, `udisk`, `tunein`, `iheartradio`, `radio`, `internetradio`, `webradio`, `custompushurl`, `preset`, `playlist`
-- Fallback path (`method_used="play_url"`): external/pass-through sources such as `spotify`, `airplay`, `dlna`, `bluetooth`, `line_in`, `optical`, and unknown/unmapped sources
-- Real-device validation: Spotify and AirPlay on modern firmware may return `OK` for `playPromptUrl` while producing no audible prompt; fallback path addresses this by forcing audible playback
+- Fallback path (`method_used="play_url"`): external/pass-through sources such as `spotify`, `airplay`, `dlna`, `bluetooth`, `line_in`, `optical`, `linkplay_radio` (WiiM Home built-in radio), and unknown/unmapped sources
+- Real-device validation: Spotify, AirPlay, and some radio sources (e.g. `linkplay_radio`) on modern firmware may return `OK` for `playPromptUrl` while producing no audible prompt; fallback path addresses this by forcing audible playback. Use `force_interrupt=True` for TTS when the prompt path is unreliable.
 
 #### Limitations
 
-- Native prompt behavior remains firmware-dependent.
+- Native prompt behavior (duck, play, resume) is firmware- and source-dependent; do not overclaim in release notes.
 - Fallback playback is interruptive by design on unsupported sources.
 - Requires firmware 4.6.415145+ for prompt command support.
 - Device API uses HTTPS on many newer devices; command URLs are still passed as encoded media URLs.

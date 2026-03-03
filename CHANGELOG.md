@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.92] - 2026-03-03
+
+### Added
+- **`play_notification(url, force_interrupt=True)`** - Optional `force_interrupt` parameter always uses `play_url` so the notification is guaranteed audible (e.g. for TTS when the prompt path returns OK but produces no sound). Integration can use this to match LinkPlay-style behavior (interrupt playback, TTS heard, no resume).
+- **`linkplay_radio` in source capabilities** - WiiM Home built-in radio (e.g. BBC) is now a known source with fallback path for notifications; `play_notification()` uses `play_url` for this source so TTS is heard when the prompt path is unreliable.
+- **TTS troubleshooting and integration work list** - `HA_INTEGRATION.md`: "TTS announcements not working?" steps (resolve URL, use player not client, force_interrupt, device-reachable URL) and a checklist of integration tasks (resolve media_content_id, use player.play_notification, optional force_interrupt, release notes, YAML example, TTS proxy docs).
+
+### Changed
+- **Notification docs: firmware-dependent behavior** - README, HA_INTEGRATION, and API_REFERENCE no longer overclaim duck/resume for `playPromptUrl`. Document that prompt behavior is firmware- and source-dependent; fallback and `force_interrupt` ensure audible TTS when the prompt path is unreliable. Integration work list instructs not to claim "auto-resumes" in release notes.
+
 ## [2.1.91] - 2026-03-02
 
 ### Added

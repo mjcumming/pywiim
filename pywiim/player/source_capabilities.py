@@ -89,12 +89,14 @@ SOURCE_CAPABILITIES: dict[str, SourceCapability] = {
     "multiroom": SourceCapability.TRACK_CONTROL,
     # =========================================================================
     # LIVE RADIO - No track control (continuous stream, no "next" concept)
+    # linkplay_radio: WiiM Home built-in radio (BBC, etc.); use play_url for TTS
     # =========================================================================
     "tunein": SourceCapability.NONE,
     "iheartradio": SourceCapability.NONE,
     "radio": SourceCapability.NONE,
     "internetradio": SourceCapability.NONE,
     "webradio": SourceCapability.NONE,
+    "linkplay_radio": SourceCapability.NONE,
     # =========================================================================
     # PHYSICAL INPUTS - No control (passthrough audio, no tracks)
     # =========================================================================

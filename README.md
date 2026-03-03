@@ -451,23 +451,20 @@ See [API Reference](docs/integration/API_REFERENCE.md) for complete Player API d
 
 `play_notification()` uses a source-aware strategy so notifications are audible across more real-world scenarios:
 
-- Native prompt path (`playPromptUrl`) on device-controlled sources where firmware duck/resume is expected.
-- Fallback path (`play_url`) on unsupported or unknown sources to ensure audio is heard.
-- Returned result object reports what happened:
-  - `method_used`: `"prompt"` or `"play_url"`
-  - `source_before`: source observed before decision
-  - `likely_interrupted`: `True` for fallback path
-  - `reason`: optional fallback reason
+- **Prompt path** (`playPromptUrl`) on device-controlled sources when the library considers them "native" (e.g. wifi, tunein, USB). When firmware supports it, the device can duck, play the prompt, and resume.
+- **Fallback path** (`play_url`) on unsupported or unknown sources so the notification is always heard (interrupts current playback).
+- **`force_interrupt=True`** — use for TTS when the prompt path is unreliable: always uses `play_url` so the notification is guaranteed audible.
+- Returned result object reports what happened: `method_used`, `source_before`, `likely_interrupted`, `reason`.
 
-### Why this is needed
+### Why fallback exists
 
-Some firmware/source combinations return `OK` for `playPromptUrl` but produce no audible prompt. In those cases, pywiim chooses fallback playback to prioritize audible notifications.
+Prompt behavior (duck, play, resume) is **firmware- and source-dependent**. Some devices/sources return OK for `playPromptUrl` but do not play the prompt or do not resume. In those cases the library falls back to `play_url` so the notification is heard.
 
 ### Practical limitations
 
 - Fallback playback is interruptive by design and may stop/replace the previous source session.
 - Unknown/unmapped sources default to fallback for reliability.
-- Native prompt behavior remains firmware-dependent even on documented-compatible sources.
+- Do not overclaim duck/resume in integration release notes — behavior varies by device and firmware.
 
 ## Documentation
 

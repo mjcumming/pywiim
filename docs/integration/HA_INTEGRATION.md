@@ -1220,12 +1220,12 @@ The `play_notification(url)` method uses the device's built-in `playPromptUrl` c
 
 #### How It Works (device firmware)
 
-The device firmware handles everything automatically:
-1. **Lowers current playback volume** (if something is playing)
-2. **Plays the notification audio**
-3. **Restores original volume** after completion
+When the **prompt path** is used (`playPromptUrl`), the device firmware is expected to:
+1. Lower current playback volume (if something is playing)
+2. Play the notification audio
+3. Restore original volume and resume after completion
 
-No timing logic, state saving, or manual restoration is needed.
+**Behavior is firmware- and source-dependent.** On some devices or sources, the prompt path may not play the notification or may not resume; the library falls back to `play_url` when appropriate, or the integration can call `play_notification(url, force_interrupt=True)` for TTS to guarantee audible playback.
 
 #### Home Assistant Service Calls
 
@@ -1250,13 +1250,30 @@ data:
 
 #### Limitations
 
-- **Only works in NETWORK or USB playback mode** - If the device is playing from Line In, Optical, or Bluetooth input, notifications may not play
-- **Requires firmware 4.6.415145+** - Older firmware may not support this command
-- **Spotify Connect** - When the device is used as a Spotify Connect target, the firmware may not support interrupting playback for announcements; this is a device limitation
+- **Prompt path behavior is firmware-dependent** — duck, play, and resume may not work on all devices or sources; the library falls back to `play_url` when needed, or use `force_interrupt=True` for TTS.
+- **Only works in NETWORK or USB playback mode** (for prompt path) — Line In, Optical, Bluetooth may not support prompt; fallback still plays the URL.
+- **Requires firmware 4.6.415145+** for prompt command support.
+- **Spotify Connect and some radio sources** — firmware may not play or resume with `playPromptUrl`; use `play_notification(url, force_interrupt=True)` for reliable TTS.
 
 #### For integration authors: TTS / announcement URL must be fetchable by the device
 
 If the integration resolves a TTS or media_source ID to a URL and calls `play_notification(url)` but no audio is heard, the device may be **unable to fetch that URL** (e.g. 401 from an authenticated TTS proxy). That is an **integration and HA configuration** concern, not library behaviour: the library only sends the URL to the device. The integration should ensure the URL is reachable by the device without auth (e.g. HA trusted_networks / TTS proxy configuration). See [Home Assistant HTTP documentation](https://www.home-assistant.io/docs/configuration/http/) for auth and network options.
+
+#### TTS announcements not working? (troubleshooting)
+
+If TTS or announcements play in the browser but not on the device, check the following:
+
+1. **Resolve media_source to a real URL**  
+   Do not pass `media_source://tts?message=...` to the device. The device cannot fetch that. Resolve it (e.g. `media_source.async_resolve_media()` and `async_process_play_media_url()`) to a URL the device can HTTP GET, then call `player.play_notification(url)`.
+
+2. **Use the player method, not the client**  
+   Call `player.play_notification(url)` so the library’s source-aware logic runs. If the integration calls `client.play_notification(url)` (raw `playPromptUrl`) directly, the library’s fallback is skipped: on sources like `linkplay_radio` or Spotify, `playPromptUrl` may return OK but produce no audible prompt; the player method falls back to `play_url` so the notification is heard.
+
+3. **Force interrupt for guaranteed TTS**  
+   If the device ducks but no speech is heard (or nothing happens with Spotify Connect), use `player.play_notification(url, force_interrupt=True)`. That always uses `play_url`, interrupting current playback so the TTS is guaranteed audible. Use for TTS when the native prompt path is unreliable.
+
+4. **URL must be reachable by the device**  
+   The WiiM fetches the URL itself. If the TTS proxy or HA requires auth, the device gets 401 and no audio. Configure HA so the URL is fetchable from the device’s IP (e.g. trusted_networks, or TTS proxy without auth for the LAN).
 
 #### Library contract
 
@@ -1275,11 +1292,20 @@ The integration, not the library, is responsible for:
 3. **Ensuring the URL is reachable by the device**  
    If the resolved URL is an HA TTS proxy or similar and requires auth, the device will get 401. The integration cannot fix that in code; the user must configure HA (e.g. trusted_networks, TTS proxy access) so the URL is fetchable by the device without cookies.
 
+#### Integration work list (TTS / announcements)
+
+- [ ] **Resolve `media_content_id` before calling the library** — In `async_play_media`, when `announce: true`, resolve `media_content_id` (e.g. `media_source://tts?...`) via `media_source.async_resolve_media()` and `async_process_play_media_url()` to a URL the device can GET. Never pass the raw media_source ID to `play_notification()`.
+- [ ] **Use `player.play_notification(url)` for announce** — Call `coordinator.player.play_notification(resolved_url)`, not `client.play_notification()`, so the library’s source-aware fallback runs (and linkplay_radio / Spotify get audible TTS via `play_url` when the prompt path fails).
+- [ ] **Optional: `force_interrupt=True` for TTS** — For TTS (or when `announce: true` with TTS content), consider calling `player.play_notification(resolved_url, force_interrupt=True)` so TTS is always heard even when the prompt path does not play or resume. Optionally expose a user option (e.g. “Prefer reliable TTS (interrupt playback)”).
+- [ ] **Release notes** — Do not claim “auto-resumes” or “no interruption” for announcements; state that prompt behavior is firmware-dependent and that fallback / `force_interrupt` ensure audible TTS when the prompt path is unreliable.
+- [ ] **Working TTS YAML example** — Provide a minimal, copy-paste example (e.g. `media_player.play_media` with `announce: true` and TTS, or `tts.speak` with the WiiM as target) and a note that playback may be interrupted and not resume.
+- [ ] **Document TTS proxy / device access** — In integration docs, note that the TTS proxy URL must be reachable by the device (e.g. trusted_networks, or no auth for LAN) so the device does not get 401 when fetching the URL.
+
 #### Benefits (when the integration passes a fetchable URL)
 
-- **Simple**: Just call `play_notification(url)` - no state management needed
-- **Reliable**: Device firmware handles volume lowering and restoration
-- **Non-disruptive**: Doesn't interrupt streaming services (Spotify, etc.)
+- **Simple**: Call `play_notification(url)` (or `play_notification(url, force_interrupt=True)` for TTS when prompt path is unreliable); no state management needed.
+- **Audible**: Fallback and `force_interrupt` ensure the notification is heard when the prompt path does not work.
+- **Transparent**: Result reports `method_used` and `likely_interrupted` so the integration can log or adapt.
 
 ### Error Handling
 

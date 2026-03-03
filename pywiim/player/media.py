@@ -327,7 +327,7 @@ class MediaControl:
         if self.player._on_state_changed:
             self.player._on_state_changed()
 
-    async def play_notification(self, url: str) -> NotificationPlaybackResult:
+    async def play_notification(self, url: str, *, force_interrupt: bool = False) -> NotificationPlaybackResult:
         """Play a notification sound from URL.
 
         For sources with native prompt support, this uses playPromptUrl so the
@@ -338,6 +338,11 @@ class MediaControl:
 
         Args:
             url: URL to notification audio file.
+            force_interrupt: If True, always use play_url (interrupt playback)
+                so the notification is guaranteed audible. Use for TTS when
+                playPromptUrl returns OK but produces no sound (e.g. some
+                firmware/source combinations or when the device cannot fetch
+                the URL).
 
         Returns:
             NotificationPlaybackResult describing which playback path was used.
@@ -346,7 +351,16 @@ class MediaControl:
         if self.player._status_model and self.player._status_model.source:
             source_before = self.player._status_model.source.lower()
 
-        if source_supports_native_notification_prompt(source_before):
+        if force_interrupt:
+            await self.player.client.play_url(url)
+            self.player._last_played_url = url
+            result = NotificationPlaybackResult(
+                method_used="play_url",
+                source_before=source_before,
+                likely_interrupted=True,
+                reason="force_interrupt",
+            )
+        elif source_supports_native_notification_prompt(source_before):
             await self.player.client.play_notification(url)
             result = NotificationPlaybackResult(
                 method_used="prompt",
