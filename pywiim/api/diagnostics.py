@@ -1,4 +1,4 @@
-"""Diagnostics / maintenance helpers (reboot, time sync, raw commands)."""
+"""Diagnostics / maintenance helpers (reboot, time sync, raw commands, getDebugInfo)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import logging
 import time
 from typing import Any, cast
 from urllib.parse import quote
+
+from .constants import API_ENDPOINT_DEBUG_INFO
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -86,6 +88,24 @@ class DiagnosticsAPI:
         if ts is None:
             ts = int(time.time())
         await self._request(f"/httpapi.asp?command=timeSync:{ts}")  # type: ignore[attr-defined]
+
+    async def get_debug_info(self) -> dict[str, Any]:
+        """Return raw device debug information (getDebugInfo).
+
+        Retrieves low-level debug state (slave status, play flags, crash
+        indicators, UPnP action counts, etc.). Documented in the WiiM HTTP API;
+        output may be incomplete or vary by device/firmware. Primarily for
+        diagnostics and troubleshooting.
+
+        Returns:
+            Raw response dict (e.g. system_ready, slave_status, slave_latency,
+            play_status, crash flags, upnp_action_*, wifi_abort_date, etc.).
+
+        Raises:
+            WiiMError: If the request fails.
+        """
+        result = await self._request(API_ENDPOINT_DEBUG_INFO)  # type: ignore[attr-defined]
+        return cast(dict[str, Any], result)
 
     async def send_command(self, command: str) -> dict[str, Any]:
         """Send arbitrary LinkPlay HTTP command (expert use only).

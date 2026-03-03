@@ -344,6 +344,7 @@ API_ENDPOINT_SOURCE = "/httpapi.asp?command=setPlayerCmd:switchmode:"
 # Device info endpoints
 API_ENDPOINT_DEVICE_INFO = "/httpapi.asp?command=getDeviceInfo"
 API_ENDPOINT_FIRMWARE = "/httpapi.asp?command=getFirmwareVersion"
+API_ENDPOINT_DEBUG_INFO = "/httpapi.asp?command=getDebugInfo"
 
 # Multiroom endpoints
 API_ENDPOINT_GROUP_SLAVES = "/httpapi.asp?command=multiroom:getSlaveList"
@@ -616,6 +617,7 @@ __all__ = [
     "API_ENDPOINT_SEEK",
     "API_ENDPOINT_DEVICE_INFO",
     "API_ENDPOINT_FIRMWARE",
+    "API_ENDPOINT_DEBUG_INFO",
     "API_ENDPOINT_GROUP_SLAVES",
     "API_ENDPOINT_GROUP_EXIT",
     "API_ENDPOINT_EQ_GET",

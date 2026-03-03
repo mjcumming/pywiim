@@ -200,6 +200,16 @@ class FeatureTester:
             self.results["failed"].append(f"device_info: get_firmware_info - {str(e)}")
             print(f"   ✗ get_firmware_info: {e}")
 
+        try:
+            debug_info = await self.client.get_debug_info()
+            self.results["passed"].append("device_info: get_debug_info")
+            print("   ✓ get_debug_info")
+            if self.verbose and debug_info:
+                self._print_data("Debug info (sample)", dict(list(debug_info.items())[:8]))
+        except Exception as e:
+            self.results["failed"].append(f"device_info: get_debug_info - {str(e)}")
+            print(f"   ✗ get_debug_info: {e}")
+
     async def test_status_endpoints(self) -> None:
         """Test status query endpoints."""
         print("\n📊 Testing Status Endpoints...")

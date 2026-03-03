@@ -149,3 +149,34 @@ class TestDiagnosticsAPI:
 
         with pytest.raises(WiiMError, match="Request failed"):
             await mock_client.send_command("invalidCommand")
+
+    @pytest.mark.asyncio
+    async def test_get_debug_info_success(self, mock_client):
+        """Test get_debug_info returns raw debug info dict."""
+        mock_client._request = AsyncMock(
+            return_value={
+                "system_ready": "1",
+                "slave_status": "0",
+                "play_status": "0",
+                "slave_num": "0",
+            }
+        )
+
+        result = await mock_client.get_debug_info()
+
+        assert result == {
+            "system_ready": "1",
+            "slave_status": "0",
+            "play_status": "0",
+            "slave_num": "0",
+        }
+        mock_client._request.assert_called_once()
+        assert "/httpapi.asp?command=getDebugInfo" in mock_client._request.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_get_debug_info_error(self, mock_client):
+        """Test get_debug_info raises on request failure."""
+        mock_client._request = AsyncMock(side_effect=WiiMError("Not supported"))
+
+        with pytest.raises(WiiMError, match="Not supported"):
+            await mock_client.get_debug_info()

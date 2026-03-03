@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.91] - 2026-03-02
+
+### Added
+- **getDebugInfo API** - New `get_debug_info()` on the client (DiagnosticsAPI) calling the documented `getDebugInfo` endpoint. Returns raw device debug info (e.g. system_ready, slave_status, slave_latency, play_status, crash flags, upnp_action_*, wifi_abort_date) for diagnostics and troubleshooting. Diagnostics CLI: report includes `debug_info` and tests the endpoint; verify CLI: device info tests include `get_debug_info`. Optional endpoint; unsupported devices are reported as warnings in diagnostics.
+
 ## [2.1.90] - 2026-03-02
 
 ### Added

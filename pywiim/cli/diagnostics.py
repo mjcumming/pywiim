@@ -41,6 +41,7 @@ class DeviceDiagnostics:
             "capabilities": {},
             "endpoints": {},
             "status": {},
+            "debug_info": {},
             "errors": [],
             "warnings": [],
         }
@@ -58,6 +59,7 @@ class DeviceDiagnostics:
         await self._gather_device_info()
         await self._gather_capabilities()
         await self._gather_status()
+        await self._gather_debug_info()
         await self._test_endpoints()
         await self._test_features()
 
@@ -166,6 +168,21 @@ class DeviceDiagnostics:
             self.report["errors"].append(error_msg)
             print(f"   ✗ {error_msg}")
 
+    async def _gather_debug_info(self) -> None:
+        """Gather device debug info (getDebugInfo) for troubleshooting."""
+        print("\n🔧 Gathering debug info...")
+        try:
+            debug_info = await self.client.get_debug_info()
+            self.report["debug_info"] = debug_info
+            if debug_info:
+                print(f"   ✓ getDebugInfo: {len(debug_info)} fields")
+            else:
+                print("   ✓ getDebugInfo: (empty)")
+        except Exception as err:
+            error_msg = f"Failed to get debug info: {err}"
+            self.report["warnings"].append(error_msg)
+            print(f"   ⚠ getDebugInfo: {err} (optional endpoint)")
+
     async def _test_endpoints(self) -> None:
         """Test various API endpoints."""
         print("\n🧪 Testing API endpoints...")
@@ -174,6 +191,7 @@ class DeviceDiagnostics:
             ("getStatusEx", lambda: self.client.get_status()),
             ("getDeviceInfo", lambda: self.client.get_device_info()),
             ("getPlayerStatus", lambda: self.client.get_player_status()),
+            ("getDebugInfo", lambda: self.client.get_debug_info()),
             ("getPresets", lambda: self.client.get_presets()),
             ("getEQ", lambda: self.client.get_eq()),
             ("getMultiroomStatus", lambda: self.client.get_multiroom_status()),
@@ -717,6 +735,7 @@ class DeviceDiagnostics:
         await self._gather_device_info()
         await self._gather_capabilities()
         await self._gather_status()
+        await self._gather_debug_info()
 
         # Optional detailed testing
         if include_endpoint_tests:
