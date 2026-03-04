@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.exceptions import WiiMError
 from pywiim.models import DeviceGroupInfo, DeviceInfo
 
@@ -41,7 +42,7 @@ class TestGroupAPIStatus:
         mock_status = {"multiroom": {}}
         mock_client.get_status = AsyncMock(return_value=mock_status)
         # Mock getSlaveList fallback for solo device
-        mock_client._request = AsyncMock(return_value={"slaves": 0, "slave_list": []})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"slaves": 0, "slave_list": []}, raw=None))
         type(mock_client).host = "192.168.1.100"
 
         result = await mock_client.get_multiroom_status()
@@ -144,7 +145,7 @@ class TestGroupAPIOperations:
         """Test deleting a group."""
         mock_client._group_master = "192.168.1.100"
         mock_client._group_slaves = ["192.168.1.101"]
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.delete_group()
 
@@ -164,7 +165,7 @@ class TestGroupAPIOperations:
     async def test_join_slave(self, mock_client):
         """Test joining as slave with router-based mode (default)."""
         master_ip = "192.168.1.101"
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         type(mock_client).host = "192.168.1.100"
 
         await mock_client.join_slave(master_ip)
@@ -182,7 +183,7 @@ class TestGroupAPIOperations:
         import binascii
 
         master_ip = "192.168.1.101"
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         type(mock_client).host = "192.168.1.100"
 
         from pywiim.models import DeviceInfo
@@ -212,7 +213,7 @@ class TestGroupAPIOperations:
     async def test_join_slave_wifi_direct_mode_missing_ssid(self, mock_client):
         """Test WiFi Direct mode fallback when SSID is missing."""
         master_ip = "192.168.1.101"
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         type(mock_client).host = "192.168.1.100"
 
         from pywiim.models import DeviceInfo
@@ -242,7 +243,7 @@ class TestGroupAPIOperations:
         """Test leaving a group."""
         mock_client._group_master = "192.168.1.101"
         mock_client._group_slaves = []
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.leave_group()
 
@@ -263,7 +264,7 @@ class TestGroupAPISlaveManagement:
                 {"ip": "192.168.1.102"},
             ]
         }
-        mock_client._request = AsyncMock(return_value=mock_response)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_response, raw=None))
 
         result = await mock_client.get_slaves()
 
@@ -273,7 +274,7 @@ class TestGroupAPISlaveManagement:
     async def test_get_slaves_empty(self, mock_client):
         """Test getting slave list when empty."""
         mock_response = {"slaves": []}
-        mock_client._request = AsyncMock(return_value=mock_response)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_response, raw=None))
 
         result = await mock_client.get_slaves()
 
@@ -283,7 +284,7 @@ class TestGroupAPISlaveManagement:
     async def test_get_slaves_string_list(self, mock_client):
         """Test getting slave list with string IPs."""
         mock_response = {"slaves": ["192.168.1.101", "192.168.1.102"]}
-        mock_client._request = AsyncMock(return_value=mock_response)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_response, raw=None))
 
         result = await mock_client.get_slaves()
 
@@ -293,7 +294,7 @@ class TestGroupAPISlaveManagement:
     async def test_get_slaves_no_slaves_key(self, mock_client):
         """Test getting slave list when key missing."""
         mock_response = {}
-        mock_client._request = AsyncMock(return_value=mock_response)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_response, raw=None))
 
         result = await mock_client.get_slaves()
 
@@ -309,7 +310,7 @@ class TestGroupAPISlaveManagement:
                 {"ip": "10.10.10.93", "uuid": "uuid:DEF456", "name": "Slave2"},
             ],
         }
-        mock_client._request = AsyncMock(return_value=mock_response)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_response, raw=None))
 
         result = await mock_client.get_slaves_info()
 
@@ -322,7 +323,7 @@ class TestGroupAPISlaveManagement:
         """Test kicking a slave."""
         mock_client._group_master = "192.168.1.100"
         type(mock_client).host = "192.168.1.100"
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.kick_slave("192.168.1.101")
 
@@ -344,7 +345,7 @@ class TestGroupAPISlaveManagement:
         """Test muting a slave."""
         mock_client._group_master = "192.168.1.100"
         type(mock_client).host = "192.168.1.100"
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.mute_slave("192.168.1.101", True)
 
@@ -357,7 +358,7 @@ class TestGroupAPISlaveManagement:
         """Test unmuting a slave."""
         mock_client._group_master = "192.168.1.100"
         type(mock_client).host = "192.168.1.100"
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.mute_slave("192.168.1.101", False)
 

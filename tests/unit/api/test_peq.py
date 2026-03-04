@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.api.constants import (
     PEQ_CHANNEL_MODE_LR,
     PEQ_CHANNEL_MODE_STEREO,
@@ -210,7 +211,7 @@ class TestGetPeqBands:
             "channelMode": PEQ_CHANNEL_MODE_STEREO,
             "EQBand": [],
         }
-        mock_client._request = AsyncMock(return_value=raw)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=raw, raw=None))
         result = await mock_client.get_peq_bands()
         assert isinstance(result, PEQSettings)
         call_args = mock_client._request.call_args[0][0]
@@ -224,7 +225,7 @@ class TestGetPeqBands:
             "channelMode": PEQ_CHANNEL_MODE_STEREO,
             "EQBand": [],
         }
-        mock_client._request = AsyncMock(return_value=raw)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=raw, raw=None))
         result = await mock_client.get_peq_bands(source_name="wifi")
         assert isinstance(result, PEQSettings)
         call_args = mock_client._request.call_args[0][0]
@@ -247,7 +248,7 @@ class TestSetPeqBands:
     @pytest.mark.asyncio
     async def test_set_peq_bands_stereo_no_source(self, mock_client):
         """set_peq_bands in stereo mode calls EQSetLV2Band endpoint."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         bands = [PEQBand(letter=letter) for letter in "abcdefghij"]
         await mock_client.set_peq_bands(bands)
         call_args = mock_client._request.call_args[0][0]
@@ -256,7 +257,7 @@ class TestSetPeqBands:
     @pytest.mark.asyncio
     async def test_set_peq_bands_with_source(self, mock_client):
         """set_peq_bands with source calls EQSetLV2SourceBand endpoint."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         bands = [PEQBand(letter=letter) for letter in "abcdefghij"]
         await mock_client.set_peq_bands(bands, source_name="bluetooth")
         call_args = mock_client._request.call_args[0][0]
@@ -277,7 +278,7 @@ class TestSetPeqEnabled:
     @pytest.mark.asyncio
     async def test_enable_no_source(self, mock_client):
         """Enabling PEQ without source calls EQChangeFX."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         await mock_client.set_peq_enabled(True)
         call_args = mock_client._request.call_args[0][0]
         assert "EQChangeFX" in call_args
@@ -285,7 +286,7 @@ class TestSetPeqEnabled:
     @pytest.mark.asyncio
     async def test_enable_with_source(self, mock_client):
         """Enabling PEQ with source calls EQChangeSourceFX."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         await mock_client.set_peq_enabled(True, source_name="wifi")
         call_args = mock_client._request.call_args[0][0]
         assert "EQChangeSourceFX" in call_args
@@ -294,7 +295,7 @@ class TestSetPeqEnabled:
     @pytest.mark.asyncio
     async def test_disable_with_source(self, mock_client):
         """Disabling PEQ with source calls EQSourceOff."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         await mock_client.set_peq_enabled(False, source_name="line-in")
         call_args = mock_client._request.call_args[0][0]
         assert "EQSourceOff" in call_args
@@ -303,7 +304,7 @@ class TestSetPeqEnabled:
     @pytest.mark.asyncio
     async def test_disable_no_source_uses_eqoff(self, mock_client):
         """Disabling PEQ without source falls back to legacy EQOff."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         await mock_client.set_peq_enabled(False)
         call_args = mock_client._request.call_args[0][0]
         assert "EQOff" in call_args

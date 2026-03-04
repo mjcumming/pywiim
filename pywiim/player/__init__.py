@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
 
+from ..api.subwoofer import SubwooferStatus
 from ..client import WiiMClient
 from ..models import DeviceInfo, PlayerStatus
 from .audio import AudioConfiguration
@@ -412,17 +413,17 @@ class Player(PlayerBase):
 
     # === Subwoofer Control (WiiM Ultra with firmware 5.2+) ===
 
-    async def get_subwoofer_status(self) -> dict[str, Any] | None:
+    async def get_subwoofer_status(self) -> SubwooferStatus | None:
         """Get current subwoofer configuration.
 
         Returns:
-            Dict with subwoofer settings, or None if not supported.
-            Keys: enabled, plugged, crossover, phase, level, sub_delay, etc.
+            SubwooferStatus with current settings, or None if not supported.
         """
-        status = await self.client.get_subwoofer_status_raw()
-        if status:
-            self._subwoofer_status = status
-        return status
+        raw = await self.client.get_subwoofer_status_raw()
+        if raw:
+            self._subwoofer_status = raw
+            return SubwooferStatus.from_dict(raw)
+        return None
 
     async def set_subwoofer_enabled(self, enabled: bool) -> None:
         """Enable or disable subwoofer output.

@@ -214,6 +214,7 @@ def mock_client(mock_aiohttp_session, mock_capabilities):
 
     This fixture creates a client with mocked HTTP session and capabilities.
     """
+    from pywiim.api.base import ApiResponse
     from pywiim.client import WiiMClient
 
     client = WiiMClient(
@@ -223,8 +224,8 @@ def mock_client(mock_aiohttp_session, mock_capabilities):
         capabilities=mock_capabilities,
     )
 
-    # Mock the _request method to avoid actual HTTP calls
-    client._request = AsyncMock(return_value={"status": "ok"})
+    # Mock the _request method to avoid actual HTTP calls (returns ApiResponse)
+    client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok"}, raw=None))
 
     return client
 

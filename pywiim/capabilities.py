@@ -141,8 +141,8 @@ class WiiMCapabilities:
 
         # Try getPlayerStatusEx first
         try:
-            raw = await client._request("/httpapi.asp?command=getPlayerStatusEx")
-            if isinstance(raw, dict) and _is_valid_player_status(raw):
+            r = await client._request("/httpapi.asp?command=getPlayerStatusEx")
+            if isinstance(r.parsed, dict) and _is_valid_player_status(r.parsed):
                 capabilities["supports_player_status_ex"] = True
                 status_endpoint = "/httpapi.asp?command=getPlayerStatusEx"
                 _LOGGER.debug("Device %s supports getPlayerStatusEx", client.host)
@@ -153,8 +153,8 @@ class WiiMCapabilities:
         # If getPlayerStatusEx failed, try getPlayerStatus
         if not status_endpoint:
             try:
-                raw = await client._request("/httpapi.asp?command=getPlayerStatus")
-                if isinstance(raw, dict) and _is_valid_player_status(raw):
+                r = await client._request("/httpapi.asp?command=getPlayerStatus")
+                if isinstance(r.parsed, dict) and _is_valid_player_status(r.parsed):
                     status_endpoint = "/httpapi.asp?command=getPlayerStatus"
                     _LOGGER.debug("Device %s supports getPlayerStatus (using as fallback)", client.host)
             except WiiMError:
@@ -201,7 +201,7 @@ class WiiMCapabilities:
             _LOGGER.debug(
                 "Device %s supports audio output control (getNewAudioOutputHardwareMode), result: %s",
                 client.host,
-                result,
+                result.parsed or result.raw,
             )
         except (WiiMError, Exception):
             try:
@@ -211,7 +211,7 @@ class WiiMCapabilities:
                     "Device %s supports audio output control via fallback endpoint "
                     "(getAudioOutputStatus), result: %s",
                     client.host,
-                    legacy_result,
+                    legacy_result.parsed or legacy_result.raw,
                 )
             except (WiiMError, Exception) as e:
                 # Keep WiiM default support on probe failure to avoid transient false negatives
@@ -311,12 +311,12 @@ class WiiMCapabilities:
         # getTriggeroutStatus returns {"status":0|1}; only some WiiM models have the hardware
         try:
             result = await client._request(API_ENDPOINT_TRIGGER_OUT_STATUS)
-            if isinstance(result, dict) and "status" in result:
+            if isinstance(result.parsed, dict) and "status" in result.parsed:
                 capabilities["supports_trigger_out"] = True
                 _LOGGER.debug(
                     "Device %s supports 12V trigger (getTriggeroutStatus), result: %s",
                     client.host,
-                    result,
+                    result.parsed,
                 )
         except WiiMError:
             _LOGGER.debug("Device %s does not support 12V trigger (getTriggeroutStatus)", client.host)

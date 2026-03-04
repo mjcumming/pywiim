@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.exceptions import WiiMError
 
 
@@ -18,7 +19,7 @@ class TestBluetoothAPIDiscovery:
     @pytest.mark.asyncio
     async def test_start_bluetooth_discovery(self, mock_client):
         """Test starting Bluetooth discovery."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.start_bluetooth_discovery(duration=5)
 
@@ -49,7 +50,7 @@ class TestBluetoothAPIDiscovery:
                 {"name": "Device 2", "ad": "11:22:33:44:55:66", "rssi": -60},
             ],
         }
-        mock_client._request = AsyncMock(return_value=mock_result)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_result, raw=None))
 
         result = await mock_client.get_bluetooth_discovery_result()
 
@@ -63,7 +64,7 @@ class TestBluetoothAPIDiscovery:
     @pytest.mark.asyncio
     async def test_get_bluetooth_discovery_result_string_response(self, mock_client):
         """Test getting discovery results when API returns error string."""
-        mock_client._request = AsyncMock(return_value="error")
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="error"))
 
         result = await mock_client.get_bluetooth_discovery_result()
 
@@ -81,7 +82,7 @@ class TestBluetoothAPIDiscovery:
                 {"name": "Device 1", "ad": ""},  # Missing MAC
             ],
         }
-        mock_client._request = AsyncMock(return_value=mock_result)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_result, raw=None))
 
         result = await mock_client.get_bluetooth_discovery_result()
 
@@ -95,7 +96,7 @@ class TestBluetoothAPIDiscovery:
             "scan_status": 4,
             "bt_device": [{"name": "Device 1", "mac": "AA:BB:CC:DD:EE:FF"}],
         }
-        mock_client._request = AsyncMock(return_value=mock_result)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_result, raw=None))
 
         result = await mock_client.get_bluetooth_discovery_result()
 
@@ -246,7 +247,7 @@ class TestBluetoothAPIConnection:
     @pytest.mark.asyncio
     async def test_connect_bluetooth_device(self, mock_client):
         """Test connecting to Bluetooth device."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.connect_bluetooth_device("AA:BB:CC:DD:EE:FF")
 
@@ -257,7 +258,7 @@ class TestBluetoothAPIConnection:
     @pytest.mark.asyncio
     async def test_connect_bluetooth_device_with_dash_separator(self, mock_client):
         """Test connecting with dash-separated MAC address."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.connect_bluetooth_device("AA-BB-CC-DD-EE-FF")
 
@@ -273,7 +274,7 @@ class TestBluetoothAPIConnection:
     @pytest.mark.asyncio
     async def test_disconnect_bluetooth_device(self, mock_client):
         """Test disconnecting Bluetooth device."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.disconnect_bluetooth_device()
 
@@ -283,7 +284,7 @@ class TestBluetoothAPIConnection:
     async def test_get_bluetooth_pair_status(self, mock_client):
         """Test getting Bluetooth pair status."""
         mock_status = {"paired": True, "connected": True, "device": "AA:BB:CC:DD:EE:FF"}
-        mock_client._request = AsyncMock(return_value=mock_status)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_status, raw=None))
 
         result = await mock_client.get_bluetooth_pair_status()
 
@@ -301,7 +302,7 @@ class TestBluetoothAPIConnection:
     @pytest.mark.asyncio
     async def test_get_bluetooth_pair_status_non_dict(self, mock_client):
         """Test getting pair status when response is not a dict."""
-        mock_client._request = AsyncMock(return_value="error")
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="error"))
 
         result = await mock_client.get_bluetooth_pair_status()
 
@@ -314,7 +315,7 @@ class TestBluetoothAPIConnection:
             {"name": "Device 1", "ad": "AA:BB:CC:DD:EE:FF", "ct": 1},
             {"name": "Device 2", "ad": "11:22:33:44:55:66", "ct": 0},
         ]
-        mock_client._request = AsyncMock(return_value=mock_history)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_history, raw=None))
 
         result = await mock_client.get_bluetooth_history()
 
@@ -324,7 +325,7 @@ class TestBluetoothAPIConnection:
     async def test_get_bluetooth_history_dict_with_list(self, mock_client):
         """Test getting Bluetooth history from dict with list field."""
         mock_history = {"list": [{"name": "Device 1", "ad": "AA:BB:CC:DD:EE:FF"}]}
-        mock_client._request = AsyncMock(return_value=mock_history)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_history, raw=None))
 
         result = await mock_client.get_bluetooth_history()
 
@@ -334,7 +335,7 @@ class TestBluetoothAPIConnection:
     async def test_get_bluetooth_history_dict_with_bt_device(self, mock_client):
         """Test getting Bluetooth history from dict with bt_device field."""
         mock_history = {"bt_device": [{"name": "Device 1", "mac": "AA:BB:CC:DD:EE:FF"}]}
-        mock_client._request = AsyncMock(return_value=mock_history)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_history, raw=None))
 
         result = await mock_client.get_bluetooth_history()
 
@@ -352,7 +353,7 @@ class TestBluetoothAPIConnection:
     @pytest.mark.asyncio
     async def test_clear_bluetooth_discovery_result(self, mock_client):
         """Test clearing Bluetooth discovery results."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.clear_bluetooth_discovery_result()
 

@@ -23,7 +23,7 @@ import json
 import logging
 import ssl
 import time
-from typing import Any, cast
+from typing import Any, NamedTuple
 from urllib.parse import quote
 
 import aiohttp
@@ -51,6 +51,17 @@ from .ssl import create_wiim_ssl_context
 _LOGGER = logging.getLogger(__name__)
 
 HEADERS: dict[str, str] = {"Connection": "close"}
+
+
+class ApiResponse(NamedTuple):
+    """Unified response from base API requests.
+
+    All requests return this shape. Callers use .parsed for JSON data or .raw
+    for non-JSON body text. Base does not raise for non-JSON; only for transport failures.
+    """
+
+    parsed: dict[str, Any] | list[Any] | None  # JSON object or array when body was valid JSON
+    raw: str | None  # Response body as text when not JSON (or when exposing body)
 
 
 class BaseWiiMClient:
@@ -380,7 +391,7 @@ class BaseWiiMClient:
         endpoint: str,
         method: str = "GET",
         **kwargs: Any,
-    ) -> Any:
+    ) -> ApiResponse:
         """Perform an HTTP(S) request with smart protocol fallback and firmware-specific handling.
 
         Protocol fallback strategy:
@@ -428,7 +439,7 @@ class BaseWiiMClient:
 
                 return result
 
-            except (aiohttp.ClientError, json.JSONDecodeError, WiiMConnectionError) as err:
+            except (aiohttp.ClientError, WiiMConnectionError) as err:
                 # Track error metrics
                 if self._metrics_enabled and start_time:
                     elapsed = time.time() - start_time
@@ -509,7 +520,7 @@ class BaseWiiMClient:
         endpoint: str,
         method: str = "GET",
         **kwargs: Any,
-    ) -> Any:
+    ) -> ApiResponse:
         """Perform HTTP(S) request with permanent endpoint caching.
 
         Protocol discovery strategy:
@@ -553,51 +564,20 @@ class BaseWiiMClient:
                         resp.raise_for_status()
                         text = await resp.text()
 
-                        # Handle empty responses
+                        # Single response shape: parse JSON in one place; never raise for non-JSON
                         if not text or text.strip() == "":
-                            endpoint_lower = endpoint.lower()
-                            if (
-                                "reboot" in endpoint_lower
-                                or "eqload" in endpoint_lower
-                                or "eqoff" in endpoint_lower
-                                or "setloopmode" in endpoint_lower
-                                or "switchmode" in endpoint_lower
-                                or "setalarmclock" in endpoint_lower
-                                or "timesync" in endpoint_lower
-                            ):
-                                _LOGGER.debug("Command sent successfully (empty response expected): %s", endpoint)
-                                return {"raw": "OK"}
                             _LOGGER.debug("Empty response from device for %s", endpoint)
-                            return {"raw": ""}
+                            return ApiResponse(parsed=None, raw="")
 
                         if text.strip() == "OK":
-                            return {"raw": "OK"}
+                            return ApiResponse(parsed=None, raw="OK")
 
-                        # Parse JSON response
                         try:
                             data = json.loads(text)
-                            return data
-                        except json.JSONDecodeError as json_err:
-                            endpoint_lower = endpoint.lower()
-                            # EQOff: Some devices (e.g. Arylic UP2STREAM) return "unknown command"
-                            # instead of JSON. Treat as success - device doesn't support disabling EQ.
-                            # See: https://github.com/mjcumming/wiim/issues/116
-                            if (
-                                "reboot" in endpoint_lower
-                                or "eqload" in endpoint_lower
-                                or "eqoff" in endpoint_lower
-                                or "setloopmode" in endpoint_lower
-                                or "switchmode" in endpoint_lower
-                                or "setalarmclock" in endpoint_lower
-                                or "timesync" in endpoint_lower
-                            ):
-                                _LOGGER.debug("Command sent successfully (non-JSON response): %s", endpoint)
-                                return {"raw": "OK"}
-                            raise WiiMResponseError(
-                                f"Invalid JSON response from {self._endpoint}{endpoint}: {json_err}",
-                                endpoint=f"{self._endpoint}{endpoint}",
-                                last_error=json_err,
-                            ) from json_err
+                            return ApiResponse(parsed=data, raw=None)
+                        except json.JSONDecodeError:
+                            # Non-JSON body (e.g. "unknown command") - return raw; callers handle
+                            return ApiResponse(parsed=None, raw=text)
 
             except RuntimeError as err:
                 if self._is_loop_closed_error(err):
@@ -868,24 +848,26 @@ class BaseWiiMClient:
 
     def _validate_legacy_response(
         self,
-        response: dict[str, Any] | str,
+        response: ApiResponse,
         endpoint: str,
-    ) -> dict[str, Any]:
+    ) -> ApiResponse:
         """Handle malformed responses from older firmware.
 
         Args:
-            response: Raw API response (dict or string)
+            response: API response wrapper (parsed/raw)
             endpoint: API endpoint that was called
 
         Returns:
-            Validated response with safe defaults if needed
+            ApiResponse with validated parsed dict for legacy devices
         """
-        return validate_audio_pro_response(
-            response,
+        input_val: dict[str, Any] | str = response.parsed if isinstance(response.parsed, dict) else (response.raw or "")
+        validated = validate_audio_pro_response(
+            input_val,
             endpoint,
             self.host,
             self._capabilities,
         )
+        return ApiResponse(parsed=validated, raw=response.raw)
 
     # ------------------------------------------------------------------
     # Public API Methods -----------------------------------------------
@@ -945,20 +927,19 @@ class BaseWiiMClient:
 
     async def get_status(self) -> dict[str, Any]:
         """Return normalised output of *getStatusEx* (device-level info)."""
-        raw = await self._request(API_ENDPOINT_STATUS)
+        r = await self._request(API_ENDPOINT_STATUS)
         vendor = self._capabilities.get("vendor")
-        parsed, self._last_track = parse_player_status(raw, self._last_track, vendor)
+        data = r.parsed if isinstance(r.parsed, dict) else {}
+        parsed, self._last_track = parse_player_status(data, self._last_track, vendor)
         return parsed
 
     async def get_device_info(self) -> dict[str, Any]:
         """Lightweight wrapper around *getStatusEx* (raw JSON)."""
         try:
-            result = await self._request(API_ENDPOINT_STATUS)
-            # Ensure result is a dict (getStatusEx always returns a dict)
-            if isinstance(result, dict):
-                return cast(dict[str, Any], result)
-            # If not a dict (shouldn't happen for getStatusEx), wrap it
-            return {"raw": result}
+            r = await self._request(API_ENDPOINT_STATUS)
+            if isinstance(r.parsed, dict):
+                return r.parsed
+            return {"raw": r.raw}
         except WiiMError as err:
             _LOGGER.debug("get_device_info failed: %s", err)
             return {}
@@ -990,7 +971,7 @@ class BaseWiiMClient:
                 _LOGGER.debug("Using getStatusEx fallback endpoint")
 
             try:
-                raw = await self._request(endpoint)
+                r = await self._request(endpoint)
                 # Raw HTTP response available for debugging if needed, but not logged
                 # to avoid spam on every poll cycle
             except WiiMRequestError as primary_err:
@@ -1003,12 +984,13 @@ class BaseWiiMClient:
                         endpoint,
                         fallback_endpoint,
                     )
-                    raw = await self._request(fallback_endpoint)
+                    r = await self._request(fallback_endpoint)
                     # Fallback succeeded - raw response available for debugging if needed
                 else:
                     raise primary_err
 
-            parsed, self._last_track = parse_player_status(raw, self._last_track, self._capabilities.get("vendor"))
+            data = r.parsed if isinstance(r.parsed, dict) else {}
+            parsed, self._last_track = parse_player_status(data, self._last_track, self._capabilities.get("vendor"))
 
             # If artwork is missing or invalid and device supports getMetaInfo, try to fetch it
             entity_picture = parsed.get("entity_picture")

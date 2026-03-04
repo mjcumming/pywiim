@@ -11,12 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
-from pywiim.api.base import BaseWiiMClient
-from pywiim.exceptions import (
-    WiiMConnectionError,
-    WiiMRequestError,
-    WiiMResponseError,
-)
+from pywiim.api.base import ApiResponse, BaseWiiMClient
+from pywiim.exceptions import WiiMConnectionError, WiiMRequestError
 from pywiim.models import DeviceInfo, PlayerStatus
 
 
@@ -314,7 +310,8 @@ class TestBaseWiiMClientRequest:
 
             result = await client._request("/api/status")
 
-            assert result == {"status": "ok"}
+            assert result.parsed == {"status": "ok"}
+            assert result.raw is None
             mock_aiohttp_session.request.assert_called_once()
 
     @pytest.mark.asyncio
@@ -349,7 +346,7 @@ class TestBaseWiiMClientRequest:
             with patch("asyncio.sleep", new_callable=AsyncMock):  # Skip actual sleep
                 result = await client._request("/api/status")
 
-                assert result == {"status": "ok"}
+                assert result.parsed == {"status": "ok"}
                 # Should have retried, so called at least twice
                 assert mock_aiohttp_session.request.call_count >= 2
 
@@ -414,10 +411,12 @@ class TestBaseWiiMClientRequest:
 
         with patch.object(client, "_get_ssl_context", new_callable=AsyncMock) as mock_ssl:
             mock_ssl.return_value = None
-            with patch.object(client, "_validate_legacy_response", return_value={"status": "ok"}) as mock_validate:
+            with patch.object(
+                client, "_validate_legacy_response", return_value=ApiResponse(parsed={"status": "ok"}, raw=None)
+            ) as mock_validate:
                 result = await client._request("/api/status")
 
-                assert result == {"status": "ok"}
+                assert result.parsed == {"status": "ok"}
                 mock_validate.assert_called_once()
 
     @pytest.mark.asyncio
@@ -549,7 +548,8 @@ class TestBaseWiiMClientRequest:
 
             result = await client._request("/api/status")
 
-            assert result == {"raw": ""}
+            assert result.parsed is None
+            assert result.raw == ""
 
     @pytest.mark.asyncio
     async def test_request_ok_response(self, mock_aiohttp_session):
@@ -572,7 +572,8 @@ class TestBaseWiiMClientRequest:
 
             result = await client._request("/api/command")
 
-            assert result == {"raw": "OK"}
+            assert result.parsed is None
+            assert result.raw == "OK"
 
     @pytest.mark.asyncio
     async def test_request_switchmode_empty_response(self, mock_aiohttp_session):
@@ -596,8 +597,9 @@ class TestBaseWiiMClientRequest:
             # Test switchmode:bluetooth with empty response
             result = await client._request("/httpapi.asp?command=switchmode:bluetooth")
 
-            # Empty response from switchmode should return success
-            assert result == {"raw": "OK"}
+            # Empty response: base returns raw=""
+            assert result.parsed is None
+            assert result.raw == ""
 
     @pytest.mark.asyncio
     async def test_request_switchmode_non_json_response(self, mock_aiohttp_session):
@@ -621,8 +623,9 @@ class TestBaseWiiMClientRequest:
             # Test switchmode:wifi with non-JSON response
             result = await client._request("/httpapi.asp?command=switchmode:wifi")
 
-            # Non-JSON response from switchmode should return success
-            assert result == {"raw": "OK"}
+            # Non-JSON response from switchmode should return success (base returns raw, no raise)
+            assert result.parsed is None
+            assert result.raw == "Command executed"
 
     @pytest.mark.asyncio
     async def test_request_setalarmclock_non_json_response(self, mock_aiohttp_session):
@@ -647,7 +650,8 @@ class TestBaseWiiMClientRequest:
             result = await client._request("/httpapi.asp?command=setAlarmClock:0:2:1:070000")
 
             # Non-JSON response from setAlarmClock should return success
-            assert result == {"raw": "OK"}
+            assert result.parsed is None
+            assert result.raw == "OK"
 
     @pytest.mark.asyncio
     async def test_request_setalarmclock_empty_response(self, mock_aiohttp_session):
@@ -671,8 +675,9 @@ class TestBaseWiiMClientRequest:
             # Test setAlarmClock with empty response
             result = await client._request("/httpapi.asp?command=setAlarmClock:1:1:1:080000:20250120")
 
-            # Empty response from setAlarmClock should return success
-            assert result == {"raw": "OK"}
+            # Empty response: base returns raw=""
+            assert result.parsed is None
+            assert result.raw == ""
 
     @pytest.mark.asyncio
     async def test_request_timesync_non_json_response(self, mock_aiohttp_session):
@@ -695,7 +700,8 @@ class TestBaseWiiMClientRequest:
 
             result = await client._request("/httpapi.asp?command=timeSync:1737072000")
 
-            assert result == {"raw": "OK"}
+            assert result.parsed is None
+            assert result.raw == "Command accepted"
 
     @pytest.mark.asyncio
     async def test_request_eqoff_unknown_command_graceful(self, mock_aiohttp_session):
@@ -723,8 +729,9 @@ class TestBaseWiiMClientRequest:
 
             result = await client._request("/httpapi.asp?command=EQOff")
 
-            # Should not raise - treat as success (device doesn't support EQOff)
-            assert result == {"raw": "OK"}
+            # Should not raise - base returns raw body for non-JSON
+            assert result.parsed is None
+            assert result.raw == "unknown command"
 
     @pytest.mark.asyncio
     async def test_request_timesync_empty_response(self, mock_aiohttp_session):
@@ -747,11 +754,13 @@ class TestBaseWiiMClientRequest:
 
             result = await client._request("/httpapi.asp?command=timeSync:1737072000")
 
-            assert result == {"raw": "OK"}
+            # Empty body: base returns raw=""
+            assert result.parsed is None
+            assert result.raw == ""
 
     @pytest.mark.asyncio
     async def test_request_invalid_json(self, mock_aiohttp_session):
-        """Test request with invalid JSON response."""
+        """Test request with invalid JSON response: base returns raw, does not raise."""
         mock_response = MagicMock()
         mock_response.status = 200
         mock_response.text = AsyncMock(return_value="not json")
@@ -768,13 +777,9 @@ class TestBaseWiiMClientRequest:
         with patch.object(client, "_get_ssl_context", new_callable=AsyncMock) as mock_ssl:
             mock_ssl.return_value = None
 
-            # Invalid JSON raises WiiMResponseError (not retryable, so not wrapped)
-            with pytest.raises(WiiMResponseError) as exc_info:
-                await client._request("/api/status")
-
-            # Error message should mention JSON or invalid response
-            error_str = str(exc_info.value).lower()
-            assert "json" in error_str or "invalid" in error_str or "response" in error_str
+            result = await client._request("/api/status")
+            assert result.parsed is None
+            assert result.raw == "not json"
 
 
 class TestBaseWiiMClientProtocolFallback:
@@ -801,7 +806,7 @@ class TestBaseWiiMClientProtocolFallback:
 
             result = await client._request_with_protocol_fallback("/api/status")
 
-            assert result == {"status": "ok"}
+            assert result.parsed == {"status": "ok"}
             # Should use cached endpoint, not probe
             mock_aiohttp_session.request.assert_called_once()
 
@@ -826,7 +831,7 @@ class TestBaseWiiMClientProtocolFallback:
 
             result = await client._request_with_protocol_fallback("/api/status")
 
-            assert result == {"status": "ok"}
+            assert result.parsed == {"status": "ok"}
             # Check that IPv6 was handled correctly in URL
             call_args = mock_aiohttp_session.request.call_args
             assert "[2001:db8::1]" in str(call_args)
@@ -933,7 +938,7 @@ class TestBaseWiiMClientProtocolFallback:
                 result = await client._request_with_protocol_fallback("/api/status")
 
                 # Should have probed and then made request
-                assert result == {"status": "ok"}
+                assert result.parsed == {"status": "ok"}
                 assert client._endpoint == "https://192.168.1.100:443"
 
     @pytest.mark.asyncio
@@ -1082,9 +1087,9 @@ class TestBaseWiiMClientLegacyResponse:
         client = BaseWiiMClient(host="192.168.1.100", capabilities={"is_legacy_device": True})
 
         with patch("pywiim.api.base.validate_audio_pro_response", return_value={"status": "ok"}) as mock_validate:
-            result = client._validate_legacy_response({"raw": "response"}, "/api/status")
+            result = client._validate_legacy_response(ApiResponse(parsed=None, raw="response"), "/api/status")
 
-            assert result == {"status": "ok"}
+            assert result.parsed == {"status": "ok"}
             mock_validate.assert_called_once()
 
 
@@ -1215,7 +1220,9 @@ class TestBaseWiiMClientPublicAPI:
         """Test get_status method."""
         from pywiim.api.constants import API_ENDPOINT_STATUS
 
-        mock_client._request = AsyncMock(return_value={"DeviceName": "Test", "volume": 50})
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(parsed={"DeviceName": "Test", "volume": 50}, raw=None)
+        )
         mock_client._capabilities = {"vendor": "wiim"}
         mock_client._last_track = None
 
@@ -1227,7 +1234,9 @@ class TestBaseWiiMClientPublicAPI:
     @pytest.mark.asyncio
     async def test_get_device_info_success(self, mock_client):
         """Test get_device_info with successful response."""
-        mock_client._request = AsyncMock(return_value={"DeviceName": "Test", "uuid": "123"})
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(parsed={"DeviceName": "Test", "uuid": "123"}, raw=None)
+        )
 
         result = await mock_client.get_device_info()
 
@@ -1235,17 +1244,13 @@ class TestBaseWiiMClientPublicAPI:
 
     @pytest.mark.asyncio
     async def test_get_device_info_non_dict_response(self, mock_client):
-        """Test get_device_info with non-dict response."""
+        """Test get_device_info when response has no parsed dict (raw only)."""
         with patch.object(mock_client, "_request", new_callable=AsyncMock) as mock_request:
-            mock_request.return_value = "raw response"
+            mock_request.return_value = ApiResponse(parsed=None, raw="raw response")
 
-            # DeviceAPI.get_device_info casts to dict, so non-dict will be returned as-is
-            # (cast doesn't actually convert, it's just a type hint)
             result = await mock_client.get_device_info()
 
-            # The cast will return the string, but the type checker thinks it's a dict
-            # In practice, this shouldn't happen with real API responses
-            assert result == "raw response"
+            assert result == {"raw": "raw response"}
 
     @pytest.mark.asyncio
     async def test_get_device_info_error_returns_empty(self, mock_client):
@@ -1274,7 +1279,7 @@ class TestBaseWiiMClientPublicAPI:
                 "pywiim.api.base.parse_player_status",
                 return_value=({"status": "ok", "entity_picture": "test.jpg"}, None),
             ) as mock_parse:
-                mock_request.return_value = {"status": "ok"}
+                mock_request.return_value = ApiResponse(parsed={"status": "ok"}, raw=None)
 
                 result = await mock_client.get_player_status()
 
@@ -1299,7 +1304,7 @@ class TestBaseWiiMClientPublicAPI:
                 "pywiim.api.base.parse_player_status",
                 return_value=({"status": "ok", "entity_picture": "test.jpg"}, None),
             ) as mock_parse:
-                mock_request.return_value = {"status": "ok"}
+                mock_request.return_value = ApiResponse(parsed={"status": "ok"}, raw=None)
 
                 result = await mock_client.get_player_status()
 
@@ -1319,7 +1324,7 @@ class TestBaseWiiMClientPublicAPI:
         with patch.object(mock_client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.side_effect = [
                 WiiMRequestError("getPlayerStatusEx failed"),
-                {"status": "ok"},
+                ApiResponse(parsed={"status": "ok"}, raw=None),
             ]
 
             result = await mock_client.get_player_status()

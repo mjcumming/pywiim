@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.api.device import _get_led_command_format
 from pywiim.exceptions import WiiMError
 from pywiim.models import DeviceInfo
@@ -25,7 +26,7 @@ class TestDeviceAPI:
             "project": "WiiM Pro",
             "firmware": "5.0.1",
         }
-        mock_client._request = AsyncMock(return_value=expected_data)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=expected_data, raw=None))
 
         result = await mock_client.get_device_info()
 
@@ -41,7 +42,7 @@ class TestDeviceAPI:
             "firmware": "5.0.1",
             "MAC": "AA:BB:CC:DD:EE:FF",
         }
-        mock_client._request = AsyncMock(return_value=raw_data)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=raw_data, raw=None))
 
         result = await mock_client.get_device_info_model()
 
@@ -54,7 +55,7 @@ class TestDeviceAPI:
     @pytest.mark.asyncio
     async def test_get_firmware_version(self, mock_client):
         """Test getting firmware version."""
-        mock_client._request = AsyncMock(return_value={"firmware": "5.0.1"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"firmware": "5.0.1"}, raw=None))
 
         result = await mock_client.get_firmware_version()
 
@@ -63,7 +64,7 @@ class TestDeviceAPI:
     @pytest.mark.asyncio
     async def test_get_firmware_version_empty(self, mock_client):
         """Test getting firmware version when not available."""
-        mock_client._request = AsyncMock(return_value={})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={}, raw=None))
 
         result = await mock_client.get_firmware_version()
 
@@ -72,7 +73,7 @@ class TestDeviceAPI:
     @pytest.mark.asyncio
     async def test_get_firmware_version_non_dict(self, mock_client):
         """Test getting firmware version with non-dict response."""
-        mock_client._request = AsyncMock(return_value="invalid")
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="invalid"))
 
         result = await mock_client.get_firmware_version()
 
@@ -81,7 +82,7 @@ class TestDeviceAPI:
     @pytest.mark.asyncio
     async def test_get_mac_address(self, mock_client):
         """Test getting MAC address."""
-        mock_client._request = AsyncMock(return_value={"mac": "AA:BB:CC:DD:EE:FF"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"mac": "AA:BB:CC:DD:EE:FF"}, raw=None))
 
         result = await mock_client.get_mac_address()
 
@@ -90,7 +91,7 @@ class TestDeviceAPI:
     @pytest.mark.asyncio
     async def test_get_mac_address_empty(self, mock_client):
         """Test getting MAC address when not available."""
-        mock_client._request = AsyncMock(return_value={})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={}, raw=None))
 
         result = await mock_client.get_mac_address()
 
@@ -99,7 +100,7 @@ class TestDeviceAPI:
     @pytest.mark.asyncio
     async def test_get_mac_address_non_dict(self, mock_client):
         """Test getting MAC address with non-dict response."""
-        mock_client._request = AsyncMock(return_value="invalid")
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="invalid"))
 
         result = await mock_client.get_mac_address()
 
@@ -114,7 +115,7 @@ class TestDeviceAPILED:
         """Test enabling LED on standard device."""
         device_info = DeviceInfo(model="WiiM Pro", name="Test")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_led(True)
 
@@ -126,7 +127,7 @@ class TestDeviceAPILED:
         """Test disabling LED on standard device."""
         device_info = DeviceInfo(model="WiiM Pro", name="Test")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_led(False)
 
@@ -138,7 +139,7 @@ class TestDeviceAPILED:
         """Test enabling LED on Arylic device."""
         device_info = DeviceInfo(model="Arylic Up2Stream", name="Test")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_led(True)
 
@@ -151,7 +152,7 @@ class TestDeviceAPILED:
         device_info = DeviceInfo(model="Arylic Up2Stream", name="Test")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
         # First call fails, second succeeds
-        mock_client._request = AsyncMock(side_effect=[WiiMError("Not supported"), {"raw": "OK"}])
+        mock_client._request = AsyncMock(side_effect=[WiiMError("Not supported"), ApiResponse(parsed=None, raw="OK")])
 
         await mock_client.set_led(True)
 
@@ -173,7 +174,7 @@ class TestDeviceAPILED:
         """Test setting LED brightness with valid value."""
         device_info = DeviceInfo(model="WiiM Pro", name="Test")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_led_brightness(50)
 
@@ -185,7 +186,7 @@ class TestDeviceAPILED:
         """Test setting LED brightness to minimum (0)."""
         device_info = DeviceInfo(model="WiiM Pro", name="Test")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_led_brightness(0)
 
@@ -197,7 +198,7 @@ class TestDeviceAPILED:
         """Test setting LED brightness to maximum (100)."""
         device_info = DeviceInfo(model="WiiM Pro", name="Test")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_led_brightness(100)
 
@@ -221,7 +222,7 @@ class TestDeviceAPILED:
         """Test setting LED brightness on Arylic device."""
         device_info = DeviceInfo(model="Arylic Up2Stream", name="Test")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_led_brightness(75)
 

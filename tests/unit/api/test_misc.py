@@ -2,6 +2,7 @@
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.exceptions import WiiMError
 
 
@@ -15,7 +16,7 @@ class TestMiscAPI:
 
         class TestClient(MiscAPI):
             async def _request(self, endpoint):
-                return {"status": "ok"}
+                return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         client = TestClient()
         await client.set_buttons_enabled(True)
@@ -52,7 +53,7 @@ class TestMiscAPI:
 
         class TestClient(MiscAPI):
             async def _request(self, endpoint):
-                return {"status": "ok"}
+                return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         client = TestClient()
         await client.set_led_switch(True)
@@ -151,8 +152,8 @@ class TestMiscAPI:
         class TestClient(MiscAPI):
             async def _request(self, endpoint):
                 if "getTriggeroutStatus" in endpoint:
-                    return {"status": 1}
-                return {"status": "ok"}
+                    return ApiResponse(parsed={"status": 1}, raw=None)
+                return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         client = TestClient()
         result = await client.get_trigger_out_status()
@@ -166,8 +167,8 @@ class TestMiscAPI:
         class TestClient(MiscAPI):
             async def _request(self, endpoint):
                 if "getTriggeroutStatus" in endpoint:
-                    return {"status": 0}
-                return {"status": "ok"}
+                    return ApiResponse(parsed={"status": 0}, raw=None)
+                return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         client = TestClient()
         result = await client.get_trigger_out_status()
@@ -182,7 +183,7 @@ class TestMiscAPI:
             async def _request(self, endpoint):
                 if "getTriggeroutStatus" in endpoint:
                     raise WiiMError("unknown command")
-                return {"status": "ok"}
+                return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         client = TestClient()
         result = await client.get_trigger_out_status()
@@ -199,7 +200,7 @@ class TestMiscAPI:
         class TestClient(MiscAPI):
             async def _request(self, endpoint):
                 requests.append(endpoint)
-                return {"status": "OK"}
+                return ApiResponse(parsed={"status": "OK"}, raw=None)
 
         client = TestClient()
         await client.set_trigger_out(True)

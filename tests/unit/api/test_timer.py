@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.api.constants import (
     ALARM_OP_PLAYBACK,
     ALARM_OP_SHELL,
@@ -26,7 +27,7 @@ class TestTimerAPISleepTimer:
     @pytest.mark.asyncio
     async def test_set_sleep_timer_success(self, mock_client):
         """Test setting sleep timer successfully."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_sleep_timer(1800)
 
@@ -35,7 +36,7 @@ class TestTimerAPISleepTimer:
     @pytest.mark.asyncio
     async def test_set_sleep_timer_immediate(self, mock_client):
         """Test immediate shutdown."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_sleep_timer(0)
 
@@ -44,7 +45,7 @@ class TestTimerAPISleepTimer:
     @pytest.mark.asyncio
     async def test_set_sleep_timer_cancel(self, mock_client):
         """Test cancelling sleep timer."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_sleep_timer(-1)
 
@@ -53,7 +54,7 @@ class TestTimerAPISleepTimer:
     @pytest.mark.asyncio
     async def test_get_sleep_timer_with_value(self, mock_client):
         """Test getting remaining sleep timer seconds."""
-        mock_client._request = AsyncMock(return_value="600")
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="600"))
 
         remaining = await mock_client.get_sleep_timer()
 
@@ -63,7 +64,7 @@ class TestTimerAPISleepTimer:
     @pytest.mark.asyncio
     async def test_get_sleep_timer_dict_response(self, mock_client):
         """Test getting sleep timer with dict response."""
-        mock_client._request = AsyncMock(return_value={"shutdown": "300"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"shutdown": "300"}, raw=None))
 
         remaining = await mock_client.get_sleep_timer()
 
@@ -72,7 +73,7 @@ class TestTimerAPISleepTimer:
     @pytest.mark.asyncio
     async def test_get_sleep_timer_no_timer(self, mock_client):
         """Test getting sleep timer when none is active."""
-        mock_client._request = AsyncMock(return_value="0")
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="0"))
 
         remaining = await mock_client.get_sleep_timer()
 
@@ -81,7 +82,7 @@ class TestTimerAPISleepTimer:
     @pytest.mark.asyncio
     async def test_get_sleep_timer_invalid_response(self, mock_client):
         """Test getting sleep timer with invalid response."""
-        mock_client._request = AsyncMock(return_value={"invalid": "data"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"invalid": "data"}, raw=None))
 
         remaining = await mock_client.get_sleep_timer()
 
@@ -90,7 +91,7 @@ class TestTimerAPISleepTimer:
     @pytest.mark.asyncio
     async def test_cancel_sleep_timer(self, mock_client):
         """Test cancel sleep timer convenience method."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.cancel_sleep_timer()
 
@@ -103,7 +104,7 @@ class TestTimerAPIAlarms:
     @pytest.mark.asyncio
     async def test_set_alarm_daily(self, mock_client):
         """Test setting a daily alarm."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_alarm(
             alarm_id=0,
@@ -117,7 +118,7 @@ class TestTimerAPIAlarms:
     @pytest.mark.asyncio
     async def test_set_alarm_once(self, mock_client):
         """Test setting a one-time alarm."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_alarm(
             alarm_id=1,
@@ -132,7 +133,7 @@ class TestTimerAPIAlarms:
     @pytest.mark.asyncio
     async def test_set_alarm_weekly(self, mock_client):
         """Test setting a weekly alarm."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_alarm(
             alarm_id=2,
@@ -147,7 +148,7 @@ class TestTimerAPIAlarms:
     @pytest.mark.asyncio
     async def test_set_alarm_weekly_bitmask(self, mock_client):
         """Test setting a weekly alarm with bitmask."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_alarm(
             alarm_id=0,
@@ -162,7 +163,7 @@ class TestTimerAPIAlarms:
     @pytest.mark.asyncio
     async def test_set_alarm_monthly(self, mock_client):
         """Test setting a monthly alarm."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_alarm(
             alarm_id=1,
@@ -177,7 +178,7 @@ class TestTimerAPIAlarms:
     @pytest.mark.asyncio
     async def test_set_alarm_with_url(self, mock_client):
         """Test setting an alarm with a media URL."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_alarm(
             alarm_id=0,
@@ -195,7 +196,7 @@ class TestTimerAPIAlarms:
     @pytest.mark.asyncio
     async def test_set_alarm_shell_operation(self, mock_client):
         """Test setting an alarm with shell operation."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_alarm(
             alarm_id=2,
@@ -249,7 +250,7 @@ class TestTimerAPIAlarms:
             "operation": "1",
             "time": "07:00:00",
         }
-        mock_client._request = AsyncMock(return_value=mock_response)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_response, raw=None))
 
         alarm = await mock_client.get_alarm(0)
 
@@ -265,7 +266,7 @@ class TestTimerAPIAlarms:
             "operation": "0",
             "time": "00:00:00",
         }
-        mock_client._request = AsyncMock(return_value=mock_response)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_response, raw=None))
 
         alarm = await mock_client.get_alarm(1)
 
@@ -285,7 +286,7 @@ class TestTimerAPIAlarms:
             {"enable": "0", "trigger": "0", "time": "00:00:00"},
             {"enable": "1", "trigger": "4", "time": "08:00:00"},
         ]
-        mock_client._request = AsyncMock(side_effect=mock_responses)
+        mock_client._request = AsyncMock(side_effect=[ApiResponse(parsed=r, raw=None) for r in mock_responses])
 
         alarms = await mock_client.get_alarms()
 
@@ -300,9 +301,15 @@ class TestTimerAPIAlarms:
         """Test getting alarms when one request fails."""
         mock_client._request = AsyncMock(
             side_effect=[
-                {"enable": "1", "trigger": "2", "time": "07:00:00"},
+                ApiResponse(
+                    parsed={"enable": "1", "trigger": "2", "time": "07:00:00"},
+                    raw=None,
+                ),
                 Exception("Network error"),
-                {"enable": "1", "trigger": "4", "time": "08:00:00"},
+                ApiResponse(
+                    parsed={"enable": "1", "trigger": "4", "time": "08:00:00"},
+                    raw=None,
+                ),
             ]
         )
 
@@ -317,7 +324,7 @@ class TestTimerAPIAlarms:
     @pytest.mark.asyncio
     async def test_delete_alarm(self, mock_client):
         """Test deleting an alarm."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.delete_alarm(0)
 
@@ -333,7 +340,7 @@ class TestTimerAPIAlarms:
     @pytest.mark.asyncio
     async def test_stop_current_alarm(self, mock_client):
         """Test stopping currently ringing alarm."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.stop_current_alarm()
 
@@ -342,7 +349,7 @@ class TestTimerAPIAlarms:
     @pytest.mark.asyncio
     async def test_sync_time(self, mock_client):
         """Test syncing device time."""
-        mock_client._request = AsyncMock(return_value={"status": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.sync_time("20250117123045")
 

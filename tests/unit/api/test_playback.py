@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.exceptions import WiiMError
 
 
@@ -18,7 +19,7 @@ class TestPlaybackAPI:
     @pytest.mark.asyncio
     async def test_play(self, mock_client):
         """Test play command."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.play()
 
@@ -29,7 +30,7 @@ class TestPlaybackAPI:
     @pytest.mark.asyncio
     async def test_pause(self, mock_client):
         """Test pause command."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.pause()
 
@@ -40,7 +41,7 @@ class TestPlaybackAPI:
     @pytest.mark.asyncio
     async def test_resume(self, mock_client):
         """Test resume command."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.resume()
 
@@ -51,7 +52,7 @@ class TestPlaybackAPI:
     @pytest.mark.asyncio
     async def test_stop(self, mock_client):
         """Test stop command."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.stop()
 
@@ -62,7 +63,7 @@ class TestPlaybackAPI:
     @pytest.mark.asyncio
     async def test_next_track(self, mock_client):
         """Test next track command."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.next_track()
 
@@ -73,7 +74,7 @@ class TestPlaybackAPI:
     @pytest.mark.asyncio
     async def test_previous_track(self, mock_client):
         """Test previous track command."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.previous_track()
 
@@ -84,7 +85,7 @@ class TestPlaybackAPI:
     @pytest.mark.asyncio
     async def test_seek(self, mock_client):
         """Test seek command."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.seek(120)
 
@@ -95,7 +96,7 @@ class TestPlaybackAPI:
     @pytest.mark.asyncio
     async def test_seek_zero(self, mock_client):
         """Test seek to position 0."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.seek(0)
 
@@ -109,7 +110,7 @@ class TestPlaybackAPIVolume:
     @pytest.mark.asyncio
     async def test_set_volume_min(self, mock_client):
         """Test setting volume to minimum (0.0)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         mock_client._host = "192.168.1.100"
 
         await mock_client.set_volume(0.0)
@@ -122,7 +123,7 @@ class TestPlaybackAPIVolume:
     @pytest.mark.asyncio
     async def test_set_volume_max(self, mock_client):
         """Test setting volume to maximum (1.0)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         mock_client._host = "192.168.1.100"
 
         await mock_client.set_volume(1.0)
@@ -134,7 +135,7 @@ class TestPlaybackAPIVolume:
     @pytest.mark.asyncio
     async def test_set_volume_mid(self, mock_client):
         """Test setting volume to middle (0.5)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         mock_client._host = "192.168.1.100"
 
         await mock_client.set_volume(0.5)
@@ -146,7 +147,7 @@ class TestPlaybackAPIVolume:
     @pytest.mark.asyncio
     async def test_set_volume_clamps_above_max(self, mock_client):
         """Test volume clamps values above 1.0."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         mock_client._host = "192.168.1.100"
 
         await mock_client.set_volume(1.5)
@@ -158,7 +159,7 @@ class TestPlaybackAPIVolume:
     @pytest.mark.asyncio
     async def test_set_volume_clamps_below_min(self, mock_client):
         """Test volume clamps values below 0.0."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         mock_client._host = "192.168.1.100"
 
         await mock_client.set_volume(-0.5)
@@ -183,7 +184,7 @@ class TestPlaybackAPIMute:
     @pytest.mark.asyncio
     async def test_set_mute_true(self, mock_client):
         """Test setting mute to True."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_mute(True)
 
@@ -195,7 +196,7 @@ class TestPlaybackAPIMute:
     @pytest.mark.asyncio
     async def test_set_mute_false(self, mock_client):
         """Test setting mute to False."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_mute(False)
 
@@ -210,7 +211,7 @@ class TestPlaybackAPILoopMode:
     @pytest.mark.asyncio
     async def test_set_loop_mode_normal(self, mock_client):
         """Test setting loop mode to normal (0)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_loop_mode(0)
 
@@ -220,7 +221,7 @@ class TestPlaybackAPILoopMode:
     @pytest.mark.asyncio
     async def test_set_loop_mode_repeat_one(self, mock_client):
         """Test setting loop mode to repeat_one (1)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_loop_mode(1)
 
@@ -230,7 +231,7 @@ class TestPlaybackAPILoopMode:
     @pytest.mark.asyncio
     async def test_set_loop_mode_repeat_all(self, mock_client):
         """Test setting loop mode to repeat_all (2)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_loop_mode(2)
 
@@ -240,7 +241,7 @@ class TestPlaybackAPILoopMode:
     @pytest.mark.asyncio
     async def test_set_loop_mode_shuffle(self, mock_client):
         """Test setting loop mode to shuffle (4)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_loop_mode(4)
 
@@ -264,7 +265,7 @@ class TestPlaybackAPISource:
     @pytest.mark.asyncio
     async def test_set_source_wifi(self, mock_client):
         """Test setting source to wifi."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_source("wifi")
 
@@ -276,7 +277,7 @@ class TestPlaybackAPISource:
     @pytest.mark.asyncio
     async def test_set_source_bluetooth(self, mock_client):
         """Test setting source to bluetooth."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_source("bluetooth")
 
@@ -287,7 +288,7 @@ class TestPlaybackAPISource:
     @pytest.mark.asyncio
     async def test_set_source_line_in(self, mock_client):
         """Test setting source to line_in."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_source("line_in")
 
@@ -302,7 +303,9 @@ class TestPlaybackAPIAudioOutput:
     @pytest.mark.asyncio
     async def test_get_audio_output_status_success(self, mock_client):
         """Test getting audio output status successfully."""
-        mock_client._request = AsyncMock(return_value={"hardware": 0, "source": 0, "audiocast": 0})
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(parsed={"hardware": 0, "source": 0, "audiocast": 0}, raw=None)
+        )
 
         result = await mock_client.get_audio_output_status()
 
@@ -321,7 +324,7 @@ class TestPlaybackAPIAudioOutput:
     @pytest.mark.asyncio
     async def test_set_audio_output_hardware_mode(self, mock_client):
         """Test setting audio output hardware mode."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_audio_output_hardware_mode(1)
 
@@ -406,7 +409,7 @@ class TestPlaybackAPIPlaylist:
     @pytest.mark.asyncio
     async def test_clear_playlist(self, mock_client):
         """Test clearing playlist."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.clear_playlist()
 
@@ -420,7 +423,7 @@ class TestPlaybackAPIURLPlayback:
     @pytest.mark.asyncio
     async def test_play_url(self, mock_client):
         """Test playing a URL."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         url = "http://example.com/audio.mp3"
 
         await mock_client.play_url(url)
@@ -432,7 +435,7 @@ class TestPlaybackAPIURLPlayback:
     @pytest.mark.asyncio
     async def test_play_url_with_special_chars(self, mock_client):
         """Test playing URL with special characters."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         url = "http://example.com/audio file.mp3?param=value&other=123"
 
         await mock_client.play_url(url)
@@ -443,7 +446,7 @@ class TestPlaybackAPIURLPlayback:
     @pytest.mark.asyncio
     async def test_play_playlist(self, mock_client):
         """Test playing a playlist URL."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         playlist_url = "http://example.com/playlist.m3u"
 
         await mock_client.play_playlist(playlist_url)
@@ -454,7 +457,7 @@ class TestPlaybackAPIURLPlayback:
     @pytest.mark.asyncio
     async def test_play_notification(self, mock_client):
         """Test playing notification sound."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         url = "http://example.com/notification.mp3"
 
         await mock_client.play_notification(url)
@@ -469,7 +472,12 @@ class TestPlaybackAPIMetadata:
     @pytest.mark.asyncio
     async def test_get_meta_info_success(self, mock_client):
         """Test getting metadata successfully."""
-        mock_client._request = AsyncMock(return_value={"metaData": {"title": "Test Song", "artist": "Test Artist"}})
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(
+                parsed={"metaData": {"title": "Test Song", "artist": "Test Artist"}},
+                raw=None,
+            )
+        )
 
         result = await mock_client.get_meta_info()
 
@@ -478,7 +486,7 @@ class TestPlaybackAPIMetadata:
     @pytest.mark.asyncio
     async def test_get_meta_info_not_supported(self, mock_client):
         """Test getting metadata when not supported."""
-        mock_client._request = AsyncMock(return_value={"raw": "unknown command"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="unknown command"))
 
         result = await mock_client.get_meta_info()
 

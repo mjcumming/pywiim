@@ -283,7 +283,7 @@ class PEQAPI:
             endpoint = API_ENDPOINT_PEQ_GET_BAND + quote(PEQ_PLUGIN_URI, safe="")
 
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
-        return _parse_peq_settings(raw)
+        return _parse_peq_settings(raw.parsed if isinstance(raw.parsed, dict) else {})
 
     # ------------------------------------------------------------------
     # Tune (set)
@@ -514,9 +514,10 @@ class PEQAPI:
         self._require_peq()
         endpoint = API_ENDPOINT_PEQ_GET_LIST + quote(PEQ_PLUGIN_URI, safe="")
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
+        data = raw.parsed if isinstance(raw.parsed, dict) else {}
         return {
-            "custom": list(raw.get("custom", [])),
-            "preset": list(raw.get("preset", [])),
+            "custom": list(data.get("custom", [])),
+            "preset": list(data.get("preset", [])),
         }
 
     async def get_peq_preset_list_detailed(self) -> dict[str, list[PEQPresetInfo]]:
@@ -533,6 +534,7 @@ class PEQAPI:
         payload = {"pluginURI": PEQ_PLUGIN_URI}
         endpoint = API_ENDPOINT_PEQ_GET_NEW_LIST + _encode_json_param(payload)
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
+        data = raw.parsed if isinstance(raw.parsed, dict) else {}
 
         def _parse_entries(entries: list[Any]) -> list[PEQPresetInfo]:
             result = []
@@ -550,8 +552,8 @@ class PEQAPI:
             return result
 
         return {
-            "custom": _parse_entries(raw.get("custom", [])),
-            "preset": _parse_entries(raw.get("preset", [])),
+            "custom": _parse_entries(data.get("custom", [])),
+            "preset": _parse_entries(data.get("preset", [])),
         }
 
     async def save_peq(
@@ -613,7 +615,7 @@ class PEQAPI:
             payload = {"pluginURI": PEQ_PLUGIN_URI, "Name": name}
             endpoint = API_ENDPOINT_PEQ_LOAD + _encode_json_param(payload)
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
-        return _parse_peq_settings(raw)
+        return _parse_peq_settings(raw.parsed if isinstance(raw.parsed, dict) else {})
 
     async def delete_peq(self, name: str) -> None:
         """Delete a custom PEQ preset by name.

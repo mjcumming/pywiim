@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.exceptions import WiiMError
 
 
@@ -65,7 +66,7 @@ class TestDiagnosticsAPI:
     @pytest.mark.asyncio
     async def test_request_reboot_success(self, mock_client):
         """Test _request_reboot with successful response."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client._request_reboot("/httpapi.asp?command=reboot")
 
@@ -102,7 +103,7 @@ class TestDiagnosticsAPI:
     @pytest.mark.asyncio
     async def test_sync_time_with_timestamp(self, mock_client):
         """Test sync_time with provided timestamp."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.sync_time(1234567890)
 
@@ -112,7 +113,7 @@ class TestDiagnosticsAPI:
     @pytest.mark.asyncio
     async def test_sync_time_without_timestamp(self, mock_client):
         """Test sync_time uses current system time when timestamp not provided."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         with patch("pywiim.api.diagnostics.time.time", return_value=1234567890.5):
             await mock_client.sync_time()
@@ -123,7 +124,7 @@ class TestDiagnosticsAPI:
     @pytest.mark.asyncio
     async def test_send_command_success(self, mock_client):
         """Test send_command with valid command."""
-        mock_client._request = AsyncMock(return_value={"status": "ok", "volume": 50})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok", "volume": 50}, raw=None))
 
         result = await mock_client.send_command("getStatusEx")
 
@@ -134,7 +135,7 @@ class TestDiagnosticsAPI:
     @pytest.mark.asyncio
     async def test_send_command_with_special_chars(self, mock_client):
         """Test send_command URL-encodes special characters."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.send_command("getStatus:param=value")
 
@@ -154,12 +155,15 @@ class TestDiagnosticsAPI:
     async def test_get_debug_info_success(self, mock_client):
         """Test get_debug_info returns raw debug info dict."""
         mock_client._request = AsyncMock(
-            return_value={
-                "system_ready": "1",
-                "slave_status": "0",
-                "play_status": "0",
-                "slave_num": "0",
-            }
+            return_value=ApiResponse(
+                parsed={
+                    "system_ready": "1",
+                    "slave_status": "0",
+                    "play_status": "0",
+                    "slave_num": "0",
+                },
+                raw=None,
+            )
         )
 
         result = await mock_client.get_debug_info()

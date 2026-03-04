@@ -41,7 +41,9 @@ class AudioSettingsAPI:
         """
         try:
             response = await self._request(API_ENDPOINT_GET_SPDIF_SAMPLE_RATE)  # type: ignore[attr-defined]
-            return str(response) if response else ""
+            if response.parsed is not None:
+                return str(response.parsed)
+            return response.raw or ""
         except WiiMError:
             return ""
 
@@ -73,10 +75,11 @@ class AudioSettingsAPI:
         """
         try:
             response = await self._request(API_ENDPOINT_GET_CHANNEL_BALANCE)  # type: ignore[attr-defined]
-            if isinstance(response, (int, float)):
-                return float(response)
-            if isinstance(response, str):
-                return float(response)
+            val = response.parsed if response.parsed is not None else response.raw
+            if isinstance(val, (int, float)):
+                return float(val)
+            if isinstance(val, str):
+                return float(val)
             return 0.0
         except WiiMError:
             return 0.0

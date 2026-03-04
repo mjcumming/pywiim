@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.exceptions import WiiMError, WiiMRequestError
 from pywiim.models import DeviceInfo
 
@@ -30,7 +31,7 @@ class TestPresetAPIGetPresets:
                 {"number": 2, "name": "Jazz Station", "url": "http://example.com/jazz", "picurl": None},
             ]
         }
-        mock_client._request = AsyncMock(return_value=mock_presets)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_presets, raw=None))
         mock_client._capabilities = {"supports_presets": True}
 
         result = await mock_client.get_presets()
@@ -67,7 +68,7 @@ class TestPresetAPIGetPresets:
                 {"number": 1, "name": "Station", "url": "unknow", "picurl": "unknow"},
             ]
         }
-        mock_client._request = AsyncMock(return_value=mock_presets)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_presets, raw=None))
         mock_client._capabilities = {"supports_presets": True}
 
         result = await mock_client.get_presets()
@@ -84,7 +85,7 @@ class TestPresetAPIGetPresets:
                 {"number": 2, "name": "Station 2", "url": "", "picurl": "Unknown"},
             ]
         }
-        mock_client._request = AsyncMock(return_value=mock_presets)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_presets, raw=None))
         mock_client._capabilities = {"supports_presets": True}
 
         result = await mock_client.get_presets()
@@ -97,7 +98,7 @@ class TestPresetAPIGetPresets:
     @pytest.mark.asyncio
     async def test_get_presets_empty_list(self, mock_client):
         """Test getting presets when list is empty."""
-        mock_client._request = AsyncMock(return_value={"preset_list": []})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"preset_list": []}, raw=None))
         mock_client._capabilities = {"supports_presets": True}
 
         result = await mock_client.get_presets()
@@ -124,8 +125,8 @@ class TestPresetAPIGetPresets:
 
     @pytest.mark.asyncio
     async def test_get_presets_non_dict_response(self, mock_client):
-        """Test getting presets when response is not a dict."""
-        mock_client._request = AsyncMock(return_value=[])
+        """Test getting presets when response is not a dict (e.g. list)."""
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=[], raw=None))
         mock_client._capabilities = {"supports_presets": True}
 
         result = await mock_client.get_presets()

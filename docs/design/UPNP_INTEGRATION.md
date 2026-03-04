@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `pywiim` library uses a **hybrid approach** for device communication:
+The `pywiim` library uses a **hybrid approach** for device communication (formalized in **[ADR 004: UPnP for Events Only, HTTP for Control](adr/004-upnp-events-http-control.md)**):
 - **UPnP**: For real-time event notifications (play/pause, volume, track changes)
 - **HTTP API**: For all device control and configuration
 

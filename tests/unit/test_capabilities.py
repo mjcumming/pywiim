@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.capabilities import (
     WiiMCapabilities,
     detect_audio_pro_generation,
@@ -255,7 +256,7 @@ class TestWiiMCapabilitiesClass:
         device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro", firmware="5.0.1")
         # mock_client already has host set from fixture
         mock_client.get_status = AsyncMock(return_value={"status": "ok"})
-        mock_client._request = AsyncMock(return_value={"status": "ok"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok"}, raw=None))
 
         detector = WiiMCapabilities()
 
@@ -279,11 +280,21 @@ class TestWiiMCapabilitiesClass:
         # Mock EQ read (EQGetBand) and set (EQLoad:Flat) responses
         def request_side_effect(endpoint, **kwargs):
             if "EQGetBand" in endpoint or "EQGetList" in endpoint or "EQGetStat" in endpoint:
-                return {"EQBand": [{"value": 50} for _ in range(10)], "Name": "Flat"}
+                return ApiResponse(
+                    parsed={"EQBand": [{"value": 50} for _ in range(10)], "Name": "Flat"},
+                    raw=None,
+                )
             elif "EQLoad:Flat" in endpoint:
-                # Valid EQ response with EQ fields
-                return {"status": "OK", "EQStat": "On", "Name": "Flat", "EQBand": [{"value": 50} for _ in range(10)]}
-            return {"status": "ok"}
+                return ApiResponse(
+                    parsed={
+                        "status": "OK",
+                        "EQStat": "On",
+                        "Name": "Flat",
+                        "EQBand": [{"value": 50} for _ in range(10)],
+                    },
+                    raw=None,
+                )
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
@@ -323,7 +334,7 @@ class TestWiiMCapabilitiesClass:
         def request_side_effect(endpoint, **kwargs):
             if "getMetaInfo" in endpoint:
                 raise WiiMError("Failed")
-            return {"status": "ok", "volume": 10}
+            return ApiResponse(parsed={"status": "ok", "volume": 10}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
@@ -342,7 +353,7 @@ class TestWiiMCapabilitiesClass:
         def request_side_effect(endpoint, **kwargs):
             if "getAudioOutputStatus" in endpoint or "getNewAudioOutputHardwareMode" in endpoint:
                 raise WiiMError("Failed")
-            return {"status": "ok"}
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
@@ -366,8 +377,8 @@ class TestWiiMCapabilitiesClass:
             if "getNewAudioOutputHardwareMode" in endpoint:
                 raise WiiMError("Not supported")
             if "getAudioOutputStatus" in endpoint:
-                return {"hardware": "2"}
-            return {"status": "ok"}
+                return ApiResponse(parsed={"hardware": "2"}, raw=None)
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
@@ -387,8 +398,8 @@ class TestWiiMCapabilitiesClass:
 
         def request_side_effect(endpoint, **kwargs):
             if "getTriggeroutStatus" in endpoint:
-                return {"status": 0}
-            return {"status": "ok"}
+                return ApiResponse(parsed={"status": 0}, raw=None)
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
@@ -406,7 +417,7 @@ class TestWiiMCapabilitiesClass:
         def request_side_effect(endpoint, **kwargs):
             if "getTriggeroutStatus" in endpoint:
                 raise WiiMError("unknown command")
-            return {"status": "ok"}
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
@@ -425,9 +436,11 @@ class TestWiiMCapabilitiesClass:
         # Mock EQ read works (we no longer test setting to avoid changing device state)
         def request_side_effect(endpoint, **kwargs):
             if "EQGetBand" in endpoint or "EQGetList" in endpoint or "EQGetStat" in endpoint:
-                # Can read EQ - with read-only probing, this means we support EQ
-                return {"EQBand": [{"value": 50} for _ in range(10)], "Name": "Flat"}
-            return {"status": "ok"}
+                return ApiResponse(
+                    parsed={"EQBand": [{"value": 50} for _ in range(10)], "Name": "Flat"},
+                    raw=None,
+                )
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
@@ -435,7 +448,6 @@ class TestWiiMCapabilitiesClass:
         capabilities = await detector.detect_capabilities(mock_client, device_info)
 
         # With read-only probing: if we can read EQ, we assume we can set it
-        # This prevents changing device settings during initialization
         assert capabilities["supports_eq"] is True
 
     @pytest.mark.asyncio
@@ -448,17 +460,14 @@ class TestWiiMCapabilitiesClass:
         # Mock EQ read works (we no longer test EQLoad to avoid changing device settings)
         def request_side_effect(endpoint, **kwargs):
             if "EQGetBand" in endpoint or "EQGetList" in endpoint or "EQGetStat" in endpoint:
-                # Can read EQ - with read-only probing, this means we support EQ
-                return {"EQEnable": 0, "Treble": 0, "Bass": 0}
-            return {"status": "ok"}
+                return ApiResponse(parsed={"EQEnable": 0, "Treble": 0, "Bass": 0}, raw=None)
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
         detector = WiiMCapabilities()
         capabilities = await detector.detect_capabilities(mock_client, device_info)
 
-        # With read-only probing: if we can read EQ, we assume we can set it
-        # This prevents changing device settings during initialization
         assert capabilities["supports_eq"] is True
 
     @pytest.mark.asyncio
@@ -467,7 +476,7 @@ class TestWiiMCapabilitiesClass:
         device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro")
         # mock_client already has host set from fixture
         mock_client.get_status = AsyncMock(return_value={"status": "ok"})
-        mock_client._request = AsyncMock(return_value={"status": "ok"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok"}, raw=None))
 
         detector = WiiMCapabilities()
         await detector.detect_capabilities(mock_client, device_info)
@@ -492,7 +501,7 @@ class TestWiiMCapabilitiesClass:
         device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro")
         # mock_client already has host set from fixture
         mock_client.get_status = AsyncMock(return_value={"status": "ok"})
-        mock_client._request = AsyncMock(return_value={"status": "ok"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok"}, raw=None))
 
         detector = WiiMCapabilities()
         await detector.detect_capabilities(mock_client, device_info)
@@ -510,7 +519,7 @@ class TestWiiMCapabilitiesClass:
         # mock_client already has host set from fixture
         mock_client.get_status = AsyncMock(return_value={"status": "ok"})
         # getPlayerStatusEx succeeds
-        mock_client._request = AsyncMock(return_value={"volume": 5, "status": "stop"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"volume": 5, "status": "stop"}, raw=None))
 
         detector = WiiMCapabilities()
         capabilities = await detector.detect_capabilities(mock_client, device_info)
@@ -533,14 +542,13 @@ class TestWiiMCapabilitiesClass:
         def request_side_effect(endpoint, **kwargs):
             if "getPlayerStatusEx" in endpoint:
                 raise WiiMError("Not supported")
-            return {"status": "ok"}
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
         detector = WiiMCapabilities()
         capabilities = await detector.detect_capabilities(mock_client, device_info)
 
-        # Should detect that getPlayerStatusEx is not supported
         assert capabilities["supports_player_status_ex"] is False
 
     @pytest.mark.asyncio
@@ -549,7 +557,7 @@ class TestWiiMCapabilitiesClass:
         device_info = DeviceInfo(uuid="test-uuid", model="ARYLIC_H50", firmware="4.6.529755")
         # mock_client already has host set from fixture
         mock_client.get_status = AsyncMock(return_value={"status": "ok"})
-        mock_client._request = AsyncMock(return_value={"volume": 5, "status": "stop"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"volume": 5, "status": "stop"}, raw=None))
 
         detector = WiiMCapabilities()
         capabilities = await detector.detect_capabilities(mock_client, device_info)
@@ -576,7 +584,7 @@ class TestWiiMCapabilitiesClass:
         def request_side_effect(endpoint, **kwargs):
             if "getPlayerStatusEx" in endpoint:
                 raise WiiMError("Not supported")
-            return {"status": "ok"}
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
@@ -601,8 +609,8 @@ class TestWiiMCapabilitiesClass:
         # getPresetInfo succeeds
         def request_side_effect(endpoint, **kwargs):
             if "getPresetInfo" in endpoint:
-                return {"preset_list": []}
-            return {"status": "ok"}
+                return ApiResponse(parsed={"preset_list": []}, raw=None)
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
@@ -622,7 +630,7 @@ class TestWiiMCapabilitiesClass:
         def request_side_effect(endpoint, **kwargs):
             if "getPresetInfo" in endpoint:
                 raise WiiMError("404 Not Found")
-            return {"status": "ok"}
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 
@@ -642,7 +650,7 @@ class TestWiiMCapabilitiesClass:
         def request_side_effect(endpoint, **kwargs):
             if "getPresetInfo" in endpoint:
                 raise WiiMError("404 Not Found")
-            return {"status": "ok"}
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         mock_client._request = AsyncMock(side_effect=request_side_effect)
 

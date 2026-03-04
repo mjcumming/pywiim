@@ -65,7 +65,9 @@ class DeviceAPI:
             WiiMError: If the request fails.
         """
         result = await self._request(API_ENDPOINT_STATUS)  # type: ignore[attr-defined]
-        return cast(dict[str, Any], result)
+        if isinstance(result.parsed, dict):
+            return cast(dict[str, Any], result.parsed)
+        return {"raw": result.raw} if result.raw is not None else {}
 
     async def get_device_info_model(self) -> DeviceInfo:
         """Return a pydantic-validated :class:`DeviceInfo`.
@@ -89,7 +91,7 @@ class DeviceAPI:
             WiiMError: If the request fails.
         """
         resp = await self._request(API_ENDPOINT_FIRMWARE)  # type: ignore[attr-defined]
-        return resp.get("firmware", "") if isinstance(resp, dict) else ""
+        return resp.parsed.get("firmware", "") if isinstance(resp.parsed, dict) else ""
 
     async def get_mac_address(self) -> str:
         """Return MAC address string (empty on error).
@@ -101,7 +103,7 @@ class DeviceAPI:
             WiiMError: If the request fails.
         """
         resp = await self._request(API_ENDPOINT_MAC)  # type: ignore[attr-defined]
-        return resp.get("mac", "") if isinstance(resp, dict) else ""
+        return resp.parsed.get("mac", "") if isinstance(resp.parsed, dict) else ""
 
     # ------------------------------------------------------------------
     # LED helpers

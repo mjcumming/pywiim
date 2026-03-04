@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.exceptions import WiiMError
 
 
@@ -18,7 +19,7 @@ class TestAudioSettingsAPISPDIF:
     @pytest.mark.asyncio
     async def test_get_spdif_sample_rate(self, mock_client):
         """Test getting SPDIF sample rate."""
-        mock_client._request = AsyncMock(return_value="48000")
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed="48000", raw=None))
 
         result = await mock_client.get_spdif_sample_rate()
 
@@ -36,7 +37,7 @@ class TestAudioSettingsAPISPDIF:
     @pytest.mark.asyncio
     async def test_get_spdif_sample_rate_empty(self, mock_client):
         """Test getting SPDIF sample rate when response is empty."""
-        mock_client._request = AsyncMock(return_value=None)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw=None))
 
         result = await mock_client.get_spdif_sample_rate()
 
@@ -45,7 +46,7 @@ class TestAudioSettingsAPISPDIF:
     @pytest.mark.asyncio
     async def test_set_spdif_switch_delay(self, mock_client):
         """Test setting SPDIF switch delay."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_spdif_switch_delay(100)
 
@@ -68,7 +69,7 @@ class TestAudioSettingsAPISPDIF:
     @pytest.mark.asyncio
     async def test_set_spdif_switch_delay_boundary(self, mock_client):
         """Test setting SPDIF delay at boundaries."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_spdif_switch_delay(0)
         await mock_client.set_spdif_switch_delay(3000)
@@ -127,7 +128,7 @@ class TestAudioSettingsAPIChannelBalance:
     @pytest.mark.asyncio
     async def test_get_channel_balance(self, mock_client):
         """Test getting channel balance."""
-        mock_client._request = AsyncMock(return_value=0.5)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=0.5, raw=None))
 
         result = await mock_client.get_channel_balance()
 
@@ -136,7 +137,7 @@ class TestAudioSettingsAPIChannelBalance:
     @pytest.mark.asyncio
     async def test_get_channel_balance_string(self, mock_client):
         """Test getting channel balance as string."""
-        mock_client._request = AsyncMock(return_value="0.75")
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed="0.75", raw=None))
 
         result = await mock_client.get_channel_balance()
 
@@ -154,7 +155,7 @@ class TestAudioSettingsAPIChannelBalance:
     @pytest.mark.asyncio
     async def test_get_channel_balance_invalid_type(self, mock_client):
         """Test getting channel balance with invalid response type."""
-        mock_client._request = AsyncMock(return_value={"error": "invalid"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"error": "invalid"}, raw=None))
 
         result = await mock_client.get_channel_balance()
 
@@ -163,7 +164,7 @@ class TestAudioSettingsAPIChannelBalance:
     @pytest.mark.asyncio
     async def test_set_channel_balance(self, mock_client):
         """Test setting channel balance."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_channel_balance(0.5)
 
@@ -174,7 +175,7 @@ class TestAudioSettingsAPIChannelBalance:
     @pytest.mark.asyncio
     async def test_set_channel_balance_negative(self, mock_client):
         """Test setting negative channel balance (left)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_channel_balance(-0.5)
 
@@ -196,7 +197,7 @@ class TestAudioSettingsAPIChannelBalance:
     @pytest.mark.asyncio
     async def test_set_channel_balance_boundary(self, mock_client):
         """Test setting channel balance at boundaries."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_channel_balance(-1.0)
         await mock_client.set_channel_balance(0.0)
@@ -207,7 +208,7 @@ class TestAudioSettingsAPIChannelBalance:
     @pytest.mark.asyncio
     async def test_set_channel_balance_formatting(self, mock_client):
         """Test channel balance formatting removes unnecessary decimals."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_channel_balance(1.0)
 

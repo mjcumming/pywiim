@@ -124,7 +124,7 @@ class PlaybackAPI:
         _LOGGER.info("Sending volume API request: %s to %s (%.0f%%)", endpoint, self._host, vol_pct)  # type: ignore[attr-defined]
         try:
             result = await self._request(endpoint)  # type: ignore[attr-defined]
-            _LOGGER.debug("Volume API request successful: %s", result)
+            _LOGGER.debug("Volume API request successful: %s", result.parsed or result.raw)
         except Exception as err:
             _LOGGER.error(
                 "Volume API request failed: %s to %s: %s (type: %s)",
@@ -206,7 +206,7 @@ class PlaybackAPI:
         """
         try:
             result = await self._request(API_ENDPOINT_AUDIO_OUTPUT_STATUS)  # type: ignore[attr-defined]
-            return result if result else None
+            return result.parsed if isinstance(result.parsed, dict) else None
         except Exception as e:
             # Log with more details for first few failures
             if not hasattr(self, "_audio_output_error_count"):
@@ -391,10 +391,10 @@ class PlaybackAPI:
         """
         try:
             resp = await self._request("/httpapi.asp?command=getMetaInfo")  # type: ignore[attr-defined]
-            if "raw" in resp and str(resp["raw"]).lower().startswith("unknown command"):
+            if resp.raw and str(resp.raw).lower().startswith("unknown command"):
                 return {}
-            if "metaData" in resp:
-                return {"metaData": resp["metaData"]}
+            if isinstance(resp.parsed, dict) and "metaData" in resp.parsed:
+                return {"metaData": resp.parsed["metaData"]}
             return {}
         except Exception:  # noqa: BLE001 – older firmware returns plain text
             return {}

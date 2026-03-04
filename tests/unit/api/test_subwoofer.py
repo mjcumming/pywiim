@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.api.subwoofer import SubwooferStatus
 from pywiim.exceptions import WiiMError
 
@@ -126,16 +127,19 @@ class TestSubwooferAPIStatus:
     async def test_get_subwoofer_status_success(self, mock_client):
         """Test successful subwoofer status retrieval."""
         mock_client._request = AsyncMock(
-            return_value={
-                "status": 1,
-                "plugged": 1,
-                "cross": 85,
-                "phase": 0,
-                "level": -3,
-                "main_filter": 0,
-                "sub_filter": 1,
-                "sub_delay": 10,
-            }
+            return_value=ApiResponse(
+                parsed={
+                    "status": 1,
+                    "plugged": 1,
+                    "cross": 85,
+                    "phase": 0,
+                    "level": -3,
+                    "main_filter": 0,
+                    "sub_filter": 1,
+                    "sub_delay": 10,
+                },
+                raw=None,
+            )
         )
 
         status = await mock_client.get_subwoofer_status()
@@ -161,7 +165,7 @@ class TestSubwooferAPIStatus:
     async def test_get_subwoofer_status_raw(self, mock_client):
         """Test raw status retrieval returns dict directly."""
         raw_response = {"status": 1, "cross": 80, "custom_field": "value"}
-        mock_client._request = AsyncMock(return_value=raw_response)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=raw_response, raw=None))
 
         result = await mock_client.get_subwoofer_status_raw()
 
@@ -170,7 +174,7 @@ class TestSubwooferAPIStatus:
     @pytest.mark.asyncio
     async def test_is_subwoofer_supported_yes(self, mock_client):
         """Test subwoofer support detection when available."""
-        mock_client._request = AsyncMock(return_value={"status": 0, "cross": 80})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": 0, "cross": 80}, raw=None))
 
         supported = await mock_client.is_subwoofer_supported()
 
@@ -188,7 +192,7 @@ class TestSubwooferAPIStatus:
     @pytest.mark.asyncio
     async def test_is_subwoofer_connected(self, mock_client):
         """Test subwoofer connection detection."""
-        mock_client._request = AsyncMock(return_value={"status": 1, "plugged": 1})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": 1, "plugged": 1}, raw=None))
 
         connected = await mock_client.is_subwoofer_connected()
 
@@ -201,7 +205,7 @@ class TestSubwooferAPIEnable:
     @pytest.mark.asyncio
     async def test_set_subwoofer_enabled_true(self, mock_client):
         """Test enabling subwoofer."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_enabled(True)
 
@@ -211,7 +215,7 @@ class TestSubwooferAPIEnable:
     @pytest.mark.asyncio
     async def test_set_subwoofer_enabled_false(self, mock_client):
         """Test disabling subwoofer."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_enabled(False)
 
@@ -225,7 +229,7 @@ class TestSubwooferAPICrossover:
     @pytest.mark.asyncio
     async def test_set_crossover_valid(self, mock_client):
         """Test setting valid crossover frequency."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_crossover(80)
 
@@ -235,7 +239,7 @@ class TestSubwooferAPICrossover:
     @pytest.mark.asyncio
     async def test_set_crossover_min_boundary(self, mock_client):
         """Test setting minimum crossover frequency."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_crossover(30)
 
@@ -244,7 +248,7 @@ class TestSubwooferAPICrossover:
     @pytest.mark.asyncio
     async def test_set_crossover_max_boundary(self, mock_client):
         """Test setting maximum crossover frequency."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_crossover(250)
 
@@ -269,7 +273,7 @@ class TestSubwooferAPIPhase:
     @pytest.mark.asyncio
     async def test_set_phase_0(self, mock_client):
         """Test setting phase to 0 degrees."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_phase(0)
 
@@ -279,7 +283,7 @@ class TestSubwooferAPIPhase:
     @pytest.mark.asyncio
     async def test_set_phase_180(self, mock_client):
         """Test setting phase to 180 degrees."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_phase(180)
 
@@ -299,7 +303,7 @@ class TestSubwooferAPILevel:
     @pytest.mark.asyncio
     async def test_set_level_valid(self, mock_client):
         """Test setting valid level."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_level(5)
 
@@ -309,7 +313,7 @@ class TestSubwooferAPILevel:
     @pytest.mark.asyncio
     async def test_set_level_negative(self, mock_client):
         """Test setting negative level."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_level(-10)
 
@@ -318,7 +322,7 @@ class TestSubwooferAPILevel:
     @pytest.mark.asyncio
     async def test_set_level_min_boundary(self, mock_client):
         """Test setting minimum level."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_level(-15)
 
@@ -327,7 +331,7 @@ class TestSubwooferAPILevel:
     @pytest.mark.asyncio
     async def test_set_level_max_boundary(self, mock_client):
         """Test setting maximum level."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_level(15)
 
@@ -352,7 +356,7 @@ class TestSubwooferAPIFilters:
     @pytest.mark.asyncio
     async def test_set_main_speaker_bass_enabled(self, mock_client):
         """Test enabling bass to main speakers."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_main_speaker_bass(True)
 
@@ -363,7 +367,7 @@ class TestSubwooferAPIFilters:
     @pytest.mark.asyncio
     async def test_set_main_speaker_bass_disabled(self, mock_client):
         """Test disabling bass to main speakers."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_main_speaker_bass(False)
 
@@ -374,7 +378,7 @@ class TestSubwooferAPIFilters:
     @pytest.mark.asyncio
     async def test_set_subwoofer_filter_enabled(self, mock_client):
         """Test enabling subwoofer low-pass filter."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_filter(True)
 
@@ -385,7 +389,7 @@ class TestSubwooferAPIFilters:
     @pytest.mark.asyncio
     async def test_set_subwoofer_filter_disabled(self, mock_client):
         """Test disabling subwoofer filter (bypass mode)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_filter(False)
 
@@ -400,7 +404,7 @@ class TestSubwooferAPIDelay:
     @pytest.mark.asyncio
     async def test_set_delay_positive(self, mock_client):
         """Test setting positive delay (subwoofer closer)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_delay(50)
 
@@ -410,7 +414,7 @@ class TestSubwooferAPIDelay:
     @pytest.mark.asyncio
     async def test_set_delay_negative(self, mock_client):
         """Test setting negative delay (subwoofer further)."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_delay(-50)
 
@@ -419,7 +423,7 @@ class TestSubwooferAPIDelay:
     @pytest.mark.asyncio
     async def test_set_delay_min_boundary(self, mock_client):
         """Test setting minimum delay."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_delay(-200)
 
@@ -428,7 +432,7 @@ class TestSubwooferAPIDelay:
     @pytest.mark.asyncio
     async def test_set_delay_max_boundary(self, mock_client):
         """Test setting maximum delay."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
 
         await mock_client.set_subwoofer_delay(200)
 

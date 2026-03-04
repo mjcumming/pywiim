@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.93] - 2026-03-04
+
+### Added
+- **ApiResponse(parsed, raw)** - Base API now returns a consistent `ApiResponse(parsed, raw)` from `_request` / `_request_with_protocol_fallback`. JSON responses use `parsed`; non-JSON or empty body use `raw`. All API callers and unit tests updated to use `.parsed` / `.raw`. Documented in API_DESIGN_PATTERNS.
+
+### Changed
+- **Player.get_subwoofer_status()** - Now returns `SubwooferStatus` (attribute access: `.enabled`, `.crossover`, etc.) instead of raw dict; internal cache still uses raw keys for existing properties.
+
 ## [2.1.92] - 2026-03-03
 
 ### Added

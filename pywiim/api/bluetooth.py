@@ -68,15 +68,16 @@ class BluetoothAPI:
             WiiMError: If the request fails
         """
         result = await self._request(API_ENDPOINT_GET_BT_DISCOVERY_RESULT)  # type: ignore[attr-defined]
+        data = result.parsed
 
         # Handle case where API returns error string instead of dict
-        if isinstance(result, str):
+        if data is None and result.raw:
             return {"num": 0, "scan_status": 0, "bt_device": []}
 
         # Normalize API response: API returns 'list' with 'ad' for MAC, we normalize to 'bt_device' with 'mac'
-        if "list" in result and isinstance(result["list"], list):
+        if isinstance(data, dict) and "list" in data and isinstance(data["list"], list):
             normalized_devices = []
-            for device in result["list"]:
+            for device in data["list"]:
                 # Extract MAC address - API uses 'ad' field
                 mac = device.get("ad", "")
                 name = device.get("name", "Unknown")
@@ -101,19 +102,19 @@ class BluetoothAPI:
             _LOGGER.debug(
                 "Normalized %d Bluetooth devices from API response (num=%s, scan_status=%s)",
                 len(normalized_devices),
-                result.get("num"),
-                result.get("scan_status"),
+                data.get("num"),
+                data.get("scan_status"),
             )
 
             # Return normalized format
             return {
-                "num": result.get("num", len(normalized_devices)),
-                "scan_status": result.get("scan_status", 0),
+                "num": data.get("num", len(normalized_devices)),
+                "scan_status": data.get("scan_status", 0),
                 "bt_device": normalized_devices,
             }
 
         # Fallback: if 'bt_device' already exists (backward compatibility)
-        return cast(dict[str, Any], result)
+        return cast(dict[str, Any], data or {})
 
     # ------------------------------------------------------------------
     # Helper methods
@@ -327,7 +328,7 @@ class BluetoothAPI:
         """
         try:
             result = await self._request(API_ENDPOINT_GET_BT_PAIR_STATUS)  # type: ignore[attr-defined]
-            return result if isinstance(result, dict) else {}
+            return result.parsed if isinstance(result.parsed, dict) else {}
         except WiiMError:
             return {}
 
@@ -343,14 +344,14 @@ class BluetoothAPI:
         """
         try:
             result = await self._request(API_ENDPOINT_GET_BT_HISTORY)  # type: ignore[attr-defined]
-            if isinstance(result, list):
-                return result
-            elif isinstance(result, dict):
-                # API returns dict with "list" field containing devices
-                if "list" in result and isinstance(result["list"], list):
-                    return result["list"]
-                elif "bt_device" in result and isinstance(result["bt_device"], list):
-                    return result["bt_device"]
+            data = result.parsed
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                if "list" in data and isinstance(data["list"], list):
+                    return data["list"]
+                if "bt_device" in data and isinstance(data["bt_device"], list):
+                    return data["bt_device"]
             return []
         except WiiMError:
             return []

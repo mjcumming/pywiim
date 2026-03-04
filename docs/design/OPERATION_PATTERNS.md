@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document defines the patterns for implementing state-changing operations in the pywiim library. It covers:
+This document defines the patterns for implementing state-changing operations in the pywiim library. The core principle is formalized in **[ADR 002: Trust the API After Success](adr/002-trust-api-after-success.md)**. It covers:
 1. **Core Pattern**: The "Trust the API" approach for immediate operations
 2. **Operation Categorization**: Which operations need polling vs immediate updates
 3. **Implementation Guidelines**: How to implement each pattern consistently

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.exceptions import WiiMError
 
 
@@ -22,11 +23,11 @@ class TestLMSAPI:
             "connected_server": "192.168.1.4:3483",
             "auto_connect": "1",
         }
-        mock_client._request = AsyncMock(return_value=expected_state)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=expected_state, raw=None))
 
         class TestClient(LMSAPI):
             async def _request(self, endpoint):
-                return expected_state
+                return ApiResponse(parsed=expected_state, raw=None)
 
         client = TestClient()
         state = await client.get_squeezelite_state()
@@ -40,7 +41,7 @@ class TestLMSAPI:
 
         class TestClient(LMSAPI):
             async def _request(self, endpoint):
-                return {"status": "ok"}
+                return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         client = TestClient()
         await client.discover_lms_servers()
@@ -52,7 +53,7 @@ class TestLMSAPI:
 
         class TestClient(LMSAPI):
             async def _request(self, endpoint):
-                return {"status": "ok"}
+                return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         client = TestClient()
         await client.set_auto_connect_enabled(True)
@@ -65,7 +66,7 @@ class TestLMSAPI:
 
         class TestClient(LMSAPI):
             async def _request(self, endpoint):
-                return {"status": "ok"}
+                return ApiResponse(parsed={"status": "ok"}, raw=None)
 
         client = TestClient()
         await client.connect_to_lms_server("192.168.1.4:3483")

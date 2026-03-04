@@ -766,7 +766,7 @@ class StateManager:
                 self.player._eq_presets = None
 
         # EQ Enabled Status - Fetch on full refresh, track change, or periodically (every 60s)
-        # This determines whether to show "Off" or the actual preset in sound_mode
+        # This determines whether to show "Off" or the actual preset in sound_mode.
         should_fetch_eq_status = (
             full
             or track_changed

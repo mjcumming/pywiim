@@ -80,8 +80,8 @@ class MiscAPI:
         """
         try:
             result = await self._request(API_ENDPOINT_TRIGGER_OUT_STATUS)  # type: ignore[attr-defined]
-            if isinstance(result, dict) and "status" in result:
-                return int(result["status"]) == 1
+            if isinstance(result.parsed, dict) and "status" in result.parsed:
+                return int(result.parsed["status"]) == 1
             return None
         except WiiMError:
             return None

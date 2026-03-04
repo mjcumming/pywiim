@@ -60,16 +60,17 @@ async def test_device(host: str) -> None:
         print(f"\n3. Raw getStatusEx response:")
         try:
             raw_statusex = await client._request("/httpapi.asp?command=getStatusEx")
-            print(f"   Type: {type(raw_statusex)}")
-            if isinstance(raw_statusex, dict):
-                volume = raw_statusex.get("volume")
+            data = raw_statusex.parsed
+            print(f"   Type: {type(data)}")
+            if isinstance(data, dict):
+                volume = data.get("volume")
                 print(f"   volume field: {volume} (type: {type(volume)})")
                 # Check for volume in any field
-                volume_fields = {k: v for k, v in raw_statusex.items() if "vol" in k.lower()}
+                volume_fields = {k: v for k, v in data.items() if "vol" in k.lower()}
                 if volume_fields:
                     print(f"   Volume-related fields: {volume_fields}")
             else:
-                print(f"   Response: {raw_statusex}")
+                print(f"   Response: {data or raw_statusex.raw}")
         except Exception as err:
             print(f"   Error: {err}")
 
@@ -77,17 +78,18 @@ async def test_device(host: str) -> None:
         print(f"\n4. Raw getPlayerStatusEx response:")
         try:
             raw_player_status = await client._request("/httpapi.asp?command=getPlayerStatusEx")
-            print(f"   Type: {type(raw_player_status)}")
-            if isinstance(raw_player_status, dict):
-                volume = raw_player_status.get("volume")
+            data = raw_player_status.parsed
+            print(f"   Type: {type(data)}")
+            if isinstance(data, dict):
+                volume = data.get("volume")
                 print(f"   volume field: {volume} (type: {type(volume)})")
                 # Check for volume in any field
-                volume_fields = {k: v for k, v in raw_player_status.items() if "vol" in k.lower()}
+                volume_fields = {k: v for k, v in data.items() if "vol" in k.lower()}
                 if volume_fields:
                     print(f"   Volume-related fields: {volume_fields}")
-                print(f"   Keys: {list(raw_player_status.keys())[:20]}...")  # First 20 keys
+                print(f"   Keys: {list(data.keys())[:20]}...")  # First 20 keys
             else:
-                print(f"   Response: {raw_player_status}")
+                print(f"   Response: {data or raw_player_status.raw}")
         except Exception as err:
             print(f"   Error: {err}")
 

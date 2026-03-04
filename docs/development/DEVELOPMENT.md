@@ -357,10 +357,11 @@ pywiim/
 - Requirements
 
 **Design Documentation** (`docs/design/`):
-- Architecture and design decisions
+- Architecture and design decisions (and **Architecture Decision Records** in `docs/design/adr/`)
 - Patterns and best practices
 - Lessons learned
 - Design principles
+- Before implementing features that touch behavior covered by an ADR, check the [ADR index](../design/adr/README.md); for significant new decisions, add an ADR per the format there.
 
 **Development Guides** (`docs/development/`):
 - Setup instructions

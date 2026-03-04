@@ -105,7 +105,7 @@ class DiagnosticsAPI:
             WiiMError: If the request fails.
         """
         result = await self._request(API_ENDPOINT_DEBUG_INFO)  # type: ignore[attr-defined]
-        return cast(dict[str, Any], result)
+        return cast(dict[str, Any], result.parsed or {})
 
     async def send_command(self, command: str) -> dict[str, Any]:
         """Send arbitrary LinkPlay HTTP command (expert use only).
@@ -127,4 +127,4 @@ class DiagnosticsAPI:
         """
         endpoint = f"/httpapi.asp?command={quote(command)}"
         result = await self._request(endpoint)  # type: ignore[attr-defined]
-        return cast(dict[str, Any], result)
+        return cast(dict[str, Any], result.parsed or {})

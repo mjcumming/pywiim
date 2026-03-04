@@ -70,6 +70,7 @@ class TestStateManager:
         mock_player._audio_output_status = None
         mock_player._last_audio_output_check = None
         mock_player._last_eq_presets_check = None
+        mock_player._last_eq_status_check = None
         mock_player._last_presets_check = None
         mock_player._last_bt_history_check = None
         mock_player._upnp_health_tracker = None
@@ -362,6 +363,24 @@ class TestStateManager:
         mock_player.get_audio_output_status.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_refresh_updates_eq_enabled_from_get_eq_status(self, state_manager, mock_player):
+        """Test we update _eq_enabled from get_eq_status() when EQ is supported."""
+        mock_status = PlayerStatus(play_state="play", eq_preset="flat", title="Same")
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_eq": True})
+        mock_player.client.get_eq_status = AsyncMock(return_value=False)
+        mock_player._coverart_mgr._last_track_signature = "Same|Track"
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+
+            await state_manager.refresh(full=True)
+
+        mock_player.client.get_eq_status.assert_called_once()
+        assert mock_player._eq_enabled is False
+
+    @pytest.mark.asyncio
     async def test_refresh_fetches_eq_presets(self, state_manager, mock_player):
         """Test refresh fetches EQ presets on track change."""
         mock_status = PlayerStatus(play_state="play", title="New Track")
@@ -370,6 +389,7 @@ class TestStateManager:
         type(mock_player.client).capabilities = PropertyMock(return_value={"supports_eq": True})
         mock_player.client.get_eq_presets = AsyncMock(return_value=["rock", "jazz"])
         mock_player._last_eq_presets_check = None
+        mock_player.client.get_eq_status = AsyncMock(return_value=True)
         # Track signature is now managed by CoverArtManager
         mock_player._coverart_mgr._last_track_signature = "Old|Track"
 

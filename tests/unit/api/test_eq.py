@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.exceptions import WiiMError
 
 
@@ -96,7 +97,7 @@ class TestEQAPIPresets:
     async def test_get_eq_presets(self, mock_client):
         """Test getting EQ presets list."""
         mock_presets = ["flat", "rock", "pop", "jazz", "classical"]
-        mock_client._request = AsyncMock(return_value=mock_presets)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_presets, raw=None))
 
         result = await mock_client.get_eq_presets()
 
@@ -105,7 +106,7 @@ class TestEQAPIPresets:
     @pytest.mark.asyncio
     async def test_get_eq_presets_non_list(self, mock_client):
         """Test getting presets when response is not a list."""
-        mock_client._request = AsyncMock(return_value={"error": "not found"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"error": "not found"}, raw=None))
 
         result = await mock_client.get_eq_presets()
 
@@ -151,7 +152,7 @@ class TestEQAPICustom:
             "band9": 4,
             "band10": 2,
         }
-        mock_client._request = AsyncMock(return_value=mock_eq)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=mock_eq, raw=None))
 
         result = await mock_client.get_eq()
 
@@ -185,70 +186,47 @@ class TestEQAPIEnableDisable:
 
     @pytest.mark.asyncio
     async def test_get_eq_status_enabled(self, mock_client):
-        """Test getting EQ status when enabled."""
-        mock_client._request = AsyncMock(return_value={"EQStat": "on"})
+        """EQGetBand response with EQStat On returns True."""
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(
+                parsed={"status": "OK", "EQStat": "on", "Name": "Rock", "EQBand": []},
+                raw=None,
+            )
+        )
 
         result = await mock_client.get_eq_status()
 
         assert result is True
+        mock_client._request.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_eq_status_disabled(self, mock_client):
-        """Test getting EQ status when disabled."""
-        mock_client._request = AsyncMock(return_value={"EQStat": "off"})
+        """EQGetBand response with EQStat Off returns False."""
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(
+                parsed={"status": "OK", "EQStat": "Off", "Name": "Rock", "EQBand": []},
+                raw=None,
+            )
+        )
+
+        result = await mock_client.get_eq_status()
+
+        assert result is False
+        mock_client._request.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_eq_status_no_eqstat_returns_false(self, mock_client):
+        """EQGetBand response without EQStat key returns False."""
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "OK", "Name": "Rock"}, raw=None))
 
         result = await mock_client.get_eq_status()
 
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_get_eq_status_fallback_to_get(self, mock_client):
-        """Test EQ status fallback to get_eq when status endpoint fails."""
-        # First call fails, second succeeds
-        mock_client._request = AsyncMock(
-            side_effect=[
-                {"status": "failed"},  # EQStatus returns failed
-                {"status": "OK", "band1": 0},  # EQGet succeeds
-            ]
-        )
-
-        result = await mock_client.get_eq_status()
-
-        assert result is True
-        assert mock_client._request.call_count == 2
-
-    @pytest.mark.asyncio
-    async def test_get_eq_status_fallback_fails(self, mock_client):
-        """Test EQ status when both status and get fail."""
+    async def test_get_eq_status_request_raises_returns_false(self, mock_client):
+        """When EQGetBand request raises, return False."""
         mock_client._request = AsyncMock(side_effect=WiiMError("Failed"))
-
-        result = await mock_client.get_eq_status()
-
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_get_eq_status_fallback_invalid_response(self, mock_client):
-        """Test EQ status when fallback returns invalid response."""
-        mock_client._request = AsyncMock(
-            side_effect=[
-                {"status": "failed"},
-                {"status": "error"},  # Not "OK"
-            ]
-        )
-
-        result = await mock_client.get_eq_status()
-
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_get_eq_status_exception_in_fallback(self, mock_client):
-        """Test EQ status when exception occurs in fallback."""
-        mock_client._request = AsyncMock(
-            side_effect=[
-                {"status": "failed"},
-                Exception("Error"),  # Exception in fallback
-            ]
-        )
 
         result = await mock_client.get_eq_status()
 

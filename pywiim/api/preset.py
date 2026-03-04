@@ -57,8 +57,9 @@ class PresetAPI:
 
         try:
             payload = await self._request(API_ENDPOINT_PRESET_INFO)  # type: ignore[attr-defined]
-            if isinstance(payload, dict):
-                preset_list = payload.get("preset_list", []) or []
+            parsed = payload.parsed
+            if isinstance(parsed, dict):
+                preset_list = parsed.get("preset_list", []) or []
                 # Normalize preset data - convert "unknow" to None for URL fields
                 normalized_presets = []
                 for preset in preset_list:

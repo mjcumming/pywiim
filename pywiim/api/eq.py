@@ -18,7 +18,6 @@ from .constants import (
     API_ENDPOINT_EQ_OFF,
     API_ENDPOINT_EQ_ON,
     API_ENDPOINT_EQ_PRESET,
-    API_ENDPOINT_EQ_STATUS,
     EQ_PRESET_MAP,
 )
 
@@ -125,23 +124,19 @@ class EQAPI:
             WiiMError: If the request fails.
         """
         resp = await self._request(API_ENDPOINT_EQ_LIST)  # type: ignore[attr-defined]
+        parsed = resp.parsed
 
         # Handle direct list response (most common)
-        if isinstance(resp, list):
-            # Ensure all items are strings
-            return [str(item) for item in resp if item]
+        if isinstance(parsed, list):
+            return [str(item) for item in parsed if item]
 
         # Handle dict response (some devices wrap the list)
-        if isinstance(resp, dict):
-            # Check common keys that might contain the list
+        if isinstance(parsed, dict):
             for key in ["EQList", "eq_list", "list", "presets", "preset_list"]:
-                if key in resp and isinstance(resp[key], list):
-                    # Ensure all items are strings
-                    return [str(item) for item in resp[key] if item]
-            # If no list found in dict, return empty
+                if key in parsed and isinstance(parsed[key], list):
+                    return [str(item) for item in parsed[key] if item]
             return []
 
-        # Fallback for unexpected types
         return []
 
     # ------------------------------------------------------------------
@@ -173,7 +168,7 @@ class EQAPI:
             WiiMError: If the request fails.
         """
         result = await self._request(API_ENDPOINT_EQ_GET)  # type: ignore[attr-defined]
-        return cast(dict[str, Any], result)
+        return cast(dict[str, Any], result.parsed or {})
 
     # ------------------------------------------------------------------
     # Enable / disable
@@ -191,29 +186,16 @@ class EQAPI:
         await self._request(API_ENDPOINT_EQ_ON if enabled else API_ENDPOINT_EQ_OFF)  # type: ignore[attr-defined]
 
     async def get_eq_status(self) -> bool:
-        """Return True if device reports EQ enabled (best-effort).
+        """Return True when the device reports EQ enabled (On), False otherwise.
 
-        This method attempts to determine if EQ is enabled by checking
-        the EQ status endpoint. If that fails, it tries to get EQ band
-        values as a fallback.
-
-        Returns:
-            True if EQ appears to be enabled, False otherwise.
+        Uses EQGetBand only: its response includes EQStat ("On"/"Off") and works
+        on all devices we care about. EQGetStat fails on some firmware (e.g. WiiM Pro
+        Linkplay 4.8) with "unknown command", so we do not use it.
         """
         try:
-            response = await self._request(API_ENDPOINT_EQ_STATUS)  # type: ignore[attr-defined]
-            if "EQStat" in response:
-                return str(response["EQStat"]).lower() == "on"
-            if str(response.get("status", "")).lower() == "failed":
-                # heuristic: if EQGetBand succeeds, EQ subsystem exists – treat as enabled
-                try:
-                    response = await self._request(API_ENDPOINT_EQ_GET)  # type: ignore[attr-defined]
-                    # Verify we got a valid response (not "unknown command")
-                    if isinstance(response, dict) and response.get("status") == "OK":
-                        return True
-                    return False
-                except Exception:  # noqa: BLE001
-                    return False
+            response = await self._request(API_ENDPOINT_EQ_GET)  # type: ignore[attr-defined]
+            if isinstance(response.parsed, dict) and "EQStat" in response.parsed:
+                return str(response.parsed["EQStat"]).lower() == "on"
             return False
         except Exception:  # noqa: BLE001
             return False

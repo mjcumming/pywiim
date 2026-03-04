@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.api.firmware import FirmwareAPI, compare_firmware_versions, parse_firmware_version
 
 
@@ -216,7 +217,7 @@ class TestFirmwareAPI:
                 return device_info
 
             async def _request(self, endpoint):
-                return {}
+                return ApiResponse(parsed={}, raw=None)
 
         client = TestClient()
         # Should not raise (capabilities indicate support)
@@ -239,7 +240,7 @@ class TestFirmwareAPI:
                 return device_info
 
             async def _request(self, endpoint):
-                return {}
+                return ApiResponse(parsed={}, raw=None)
 
         client = TestClient()
 
@@ -253,7 +254,7 @@ class TestFirmwareAPI:
 
         device_info = DeviceInfo(uuid="test", model="WiiM Pro", firmware="5.0.1")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
-        mock_client._request = AsyncMock(return_value={"status": "ok"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok"}, raw=None))
 
         class TestClient(FirmwareAPI):
             def __init__(self):
@@ -263,7 +264,7 @@ class TestFirmwareAPI:
                 return device_info
 
             async def _request(self, endpoint):
-                return {"status": "ok", "update_available": True}
+                return ApiResponse(parsed={"status": "ok", "update_available": True}, raw=None)
 
         client = TestClient()
         result = await client.check_for_updates_wiim()
@@ -289,7 +290,7 @@ class TestFirmwareAPI:
 
             async def _request(self, endpoint):
                 self._request_called = True
-                return await request_mock(endpoint)
+                return ApiResponse(parsed=None, raw=await request_mock(endpoint))
 
         client = TestClient()
         await client.install_firmware_update()
@@ -305,7 +306,7 @@ class TestFirmwareAPI:
 
         device_info = DeviceInfo(uuid="test", model="WiiM Pro", firmware="5.0.1")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
-        mock_client._request = AsyncMock(return_value={"status": "27", "progress": "100"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "27", "progress": "100"}, raw=None))
 
         class TestClient(FirmwareAPI):
             def __init__(self):
@@ -315,7 +316,7 @@ class TestFirmwareAPI:
                 return device_info
 
             async def _request(self, endpoint):
-                return {"status": "27", "progress": "100"}
+                return ApiResponse(parsed={"status": "27", "progress": "100"}, raw=None)
 
         client = TestClient()
         result = await client.get_update_download_status()
@@ -330,7 +331,7 @@ class TestFirmwareAPI:
 
         device_info = DeviceInfo(uuid="test", model="WiiM Pro", firmware="5.0.1")
         mock_client.get_device_info_model = AsyncMock(return_value=device_info)
-        mock_client._request = AsyncMock(return_value={"status": "0", "progress": "50"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "0", "progress": "50"}, raw=None))
 
         class TestClient(FirmwareAPI):
             def __init__(self):
@@ -340,7 +341,7 @@ class TestFirmwareAPI:
                 return device_info
 
             async def _request(self, endpoint):
-                return {"status": "0", "progress": "50"}
+                return ApiResponse(parsed={"status": "0", "progress": "50"}, raw=None)
 
         client = TestClient()
         result = await client.get_update_install_status()

@@ -16,6 +16,7 @@
    - `docs/design/API_DESIGN_PATTERNS.md` - How we handle device variations
    - `docs/design/DESIGN_PRINCIPLES.md` - Our architectural patterns
    - `docs/design/ARCHITECTURE.md` - System structure and data flow
+   - `docs/design/adr/` - Architecture Decision Records (decisions we have committed to; check before changing behavior that might be covered)
 
 2. ☐ **Find similar patterns** - Search the codebase:
    - How does existing code handle similar device variations?
@@ -63,6 +64,7 @@
 - Follow existing patterns in the codebase
 - If the design guide says "do X", do X - don't add extra complexity
 - If you're not sure, ask the user
+- **Significant decisions** (user-facing contracts, naming stability, compatibility promises): record in an ADR in `docs/design/adr/`; see `docs/design/adr/README.md` for format and when to write one
 
 ## Testing Requirements
 

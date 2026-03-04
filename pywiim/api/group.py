@@ -85,9 +85,9 @@ class GroupAPI:
         # Try getStatusEx first (primary endpoint for modern devices)
         try:
             response = await self._request("/httpapi.asp?command=getStatusEx")  # type: ignore[attr-defined]
-            if isinstance(response, dict):
-                ssid = response.get("ssid")
-                wifi_channel = response.get("WifiChannel")
+            if isinstance(response.parsed, dict):
+                ssid = response.parsed.get("ssid")
+                wifi_channel = response.parsed.get("WifiChannel")
                 if ssid or wifi_channel:
                     _logger.debug(
                         "get_wifi_direct_info: Got from getStatusEx: ssid=%s, channel=%s",
@@ -101,9 +101,9 @@ class GroupAPI:
         # Try getStatus as fallback (used by old Linkplay code for HTTP devices)
         try:
             response = await self._request("/httpapi.asp?command=getStatus")  # type: ignore[attr-defined]
-            if isinstance(response, dict):
-                ssid = response.get("ssid")
-                wifi_channel = response.get("WifiChannel")
+            if isinstance(response.parsed, dict):
+                ssid = response.parsed.get("ssid")
+                wifi_channel = response.parsed.get("WifiChannel")
                 if ssid or wifi_channel:
                     _logger.debug(
                         "get_wifi_direct_info: Got from getStatus: ssid=%s, channel=%s",
@@ -154,13 +154,13 @@ class GroupAPI:
             try:
                 # Query getSlaveList endpoint directly
                 slaves_resp = await self._request(API_ENDPOINT_GROUP_SLAVES)  # type: ignore[attr-defined]
-                _logger.debug("get_multiroom_status: getSlaveList response: %s", slaves_resp)
+                _logger.debug("get_multiroom_status: getSlaveList response: %s", slaves_resp.parsed or slaves_resp.raw)
 
-                if isinstance(slaves_resp, dict):
+                if isinstance(slaves_resp.parsed, dict):
                     # Extract slave count and list
-                    slave_count = slaves_resp.get("slaves", 0)
-                    slave_list = slaves_resp.get("slave_list", [])
-                    wmrm_version = slaves_resp.get("wmrm_version")
+                    slave_count = slaves_resp.parsed.get("slaves", 0)
+                    slave_list = slaves_resp.parsed.get("slave_list", [])
+                    wmrm_version = slaves_resp.parsed.get("wmrm_version")
 
                     # Build multiroom dict from getSlaveList data
                     multiroom = {
@@ -345,16 +345,16 @@ class GroupAPI:
 
         _logger = logging.getLogger(__name__)
         resp = await self._request(API_ENDPOINT_GROUP_SLAVES)  # type: ignore[attr-defined]
-        _logger.debug("get_slaves() raw response: %s", resp)
+        _logger.debug("get_slaves() raw response: %s", resp.parsed or resp.raw)
 
         # The API returns "slave_list" (array of objects) and "slaves" (count)
         # We need to extract from "slave_list"
-        if isinstance(resp, dict):
+        if isinstance(resp.parsed, dict):
             # Try slave_list first (the actual list of slave objects)
-            data = resp.get("slave_list")
+            data = resp.parsed.get("slave_list")
             # Fallback to "slaves" if slave_list is missing or not a list
             if not isinstance(data, list):
-                data = resp.get("slaves", [])
+                data = resp.parsed.get("slaves", [])
         else:
             data = []
 
@@ -385,8 +385,8 @@ class GroupAPI:
             List of slave dicts with ip, uuid, name, etc.
         """
         resp = await self._request(API_ENDPOINT_GROUP_SLAVES)  # type: ignore[attr-defined]
-        if isinstance(resp, dict):
-            slave_list = resp.get("slave_list", [])
+        if isinstance(resp.parsed, dict):
+            slave_list = resp.parsed.get("slave_list", [])
             if isinstance(slave_list, list):
                 return slave_list
         return []

@@ -51,7 +51,7 @@
 
 ### 4. Document Decisions
 - **Principle**: Document why decisions were made, not just what was implemented
-- **Implementation**: Architecture docs, design decisions, trade-offs documented
+- **Implementation**: Architecture docs, design decisions, trade-offs documented. For significant committed decisions (user-facing stability, API contracts), use [Architecture Decision Records (ADRs)](adr/README.md).
 - **Example**: Document why capability detection is multi-layered vs single check
 
 ### 5. Framework Agnostic with HA Integration Support

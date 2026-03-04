@@ -2,6 +2,18 @@
 
 This directory contains design documentation, architecture decisions, and implementation patterns for the pywiim library.
 
+## Architecture Decision Records (ADRs)
+
+Decisions we have explicitly committed to (e.g. user-facing stability, API contracts) are recorded as ADRs:
+
+- **[adr/](adr/)** - ADR index and when to write one
+- **[001: Source Naming Stability](adr/001-source-naming-stability.md)** - Locked display names and smart normalization for sources
+- **[002: Trust the API After Success](adr/002-trust-api-after-success.md)** - No polling to confirm operations; update state immediately
+- **[003: Capability Probing Before Endpoints](adr/003-capability-probing-before-endpoints.md)** - Probe optional endpoints at runtime, don't hardcode by device
+- **[004: UPnP for Events, HTTP for Control](adr/004-upnp-events-http-control.md)** - Single control path (HTTP); UPnP for notifications only
+
+When changing behavior that might be covered by an ADR, check the ADR first. When making a significant decision, add a new ADR (see `adr/README.md` for format).
+
 ## Core Architecture
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - High-level system architecture, components, and design patterns

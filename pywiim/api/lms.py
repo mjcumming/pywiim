@@ -47,7 +47,7 @@ class LMSAPI:
             WiiMError: If the request fails.
         """
         result = await self._request(API_ENDPOINT_SQUEEZELITE_STATE)  # type: ignore[attr-defined]
-        return cast(dict[str, Any], result)
+        return cast(dict[str, Any], result.parsed or {})
 
     async def discover_lms_servers(self) -> None:
         """Trigger discovery of LMS servers on the network.

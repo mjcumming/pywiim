@@ -161,8 +161,8 @@ class SubwooferAPI:
         """
         try:
             response = await self._request(API_ENDPOINT_SUBWOOFER_STATUS)  # type: ignore[attr-defined]
-            if isinstance(response, dict):
-                return SubwooferStatus.from_dict(response)
+            if isinstance(response.parsed, dict):
+                return SubwooferStatus.from_dict(response.parsed)
             return None
         except WiiMError:
             return None
@@ -175,7 +175,7 @@ class SubwooferAPI:
         """
         try:
             response = await self._request(API_ENDPOINT_SUBWOOFER_STATUS)  # type: ignore[attr-defined]
-            return response if isinstance(response, dict) else None
+            return response.parsed if isinstance(response.parsed, dict) else None
         except WiiMError:
             return None
 

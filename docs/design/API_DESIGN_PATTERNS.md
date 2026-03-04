@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document captures API design patterns, defensive programming strategies, and implementation details learned from the WiiM integration to ensure robust device communication.
+This document captures API design patterns, defensive programming strategies, and implementation details learned from the WiiM integration to ensure robust device communication. **Capability probing** (probe before using optional endpoints) is formalized in **[ADR 003: Capability Probing Before Using Endpoints](adr/003-capability-probing-before-endpoints.md)**.
 
 ## API Reliability Matrix
 
@@ -33,6 +33,15 @@ These endpoints are **WiiM-specific enhancements** that may not exist on pure Li
 | **`getMetaInfo`** | Missing on many older LinkPlay devices | Always have fallback metadata           |
 
 **🚨 CRITICAL**: `getStatus` (basic LinkPlay endpoint) **does not work** on WiiM devices!
+
+### Base API response shape
+
+All base-layer HTTP requests return a single type: **`ApiResponse(parsed, raw)`**.
+
+- **`parsed`**: `dict | list | None` — the JSON body when the response was valid JSON (object or array).
+- **`raw`**: `str | None` — the response body as text when it was not JSON (e.g. `"OK"`, `"unknown command"`), or when the caller needs the raw string.
+
+The base layer parses JSON in one place and **never raises** for non-JSON bodies; only transport failures (timeout, connection error) raise. Callers use `response.parsed` when they need structured data and `response.raw` when they need the body string. This avoids endpoint whitelists and keeps behavior consistent.
 
 ## Defensive Programming Patterns
 
@@ -108,42 +117,22 @@ Missing advanced features shouldn't break core functionality:
 
 ```python
 async def get_eq_status(self) -> bool:
-    """Return True if the device reports that EQ is enabled.
+    """Return True when EQ is on, False otherwise.
 
-    Not all firmware builds implement EQGetStat – many return the
-    generic {"status":"Failed"} payload instead. In that case we
-    fall back to calling EQGetBand: if the speaker answers with a
-    valid response (status "OK") we assume that EQ support is present
-    and therefore enabled.
+    We use EQGetBand only. Its response includes EQStat ("On"/"Off") and
+    Name (current preset). EQGetStat fails on some firmware (e.g. WiiM Pro
+    Linkplay 4.8) with "unknown command", so we don't use it.
     """
     try:
-        response = await self._request(API_ENDPOINT_EQ_STATUS)
-
-        # Normal, spec-compliant reply → {"EQStat":"On"|"Off"}
-        if "EQStat" in response:
+        response = await self._request(API_ENDPOINT_EQ_GET)  # EQGetBand
+        if isinstance(response, dict) and "EQStat" in response:
             return str(response["EQStat"]).lower() == "on"
-
-        # Some firmwares return {"status":"Failed"} for unsupported
-        # commands – treat this as unknown and use a heuristic.
-        if str(response.get("status", "")).lower() == "failed":
-            # If EQGetBand succeeds we take that as evidence that the EQ
-            # subsystem is operational which implies it is enabled.
-            try:
-                response = await self._request(API_ENDPOINT_EQ_GET)
-                # Verify we got a valid response (not "unknown command")
-                if isinstance(response, dict) and response.get("status") == "OK":
-                    return True
-                return False
-            except WiiMError:
-                return False
-
-        # Fallback – any other structure counts as EQ disabled.
         return False
-
     except WiiMError:
-        # On explicit request error, still proceed without raising.
         return False
 ```
+
+**EQ status: protocol vs implementation.** The [WiiM HTTP API v1.2](https://www.wiimhome.com/pdf/HTTP%20API%20for%20WiiM%20Products.pdf) specifies **EQGetStat** for on/off (`{"EQStat":"On"}` or `"Off"`). On some devices (e.g. WiiM Pro, Linkplay 4.8) **EQGetStat** returns plain text `"unknown command"` and does not work. **EQGetBand** works and its response includes **EQStat** and **Name** (current preset), e.g. `{"status":"OK","EQStat":"Off","Name":"Rock","EQBand":[...]}`. We therefore use **EQGetBand only** for `get_eq_status()` and do not call EQGetStat (wiim#165).
 
 ## Thin Integration Pattern: Source Management
 

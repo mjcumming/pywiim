@@ -356,7 +356,7 @@ class FirmwareAPI:
         """
         await self._ensure_wiim_device()
         result = await self._request("/httpapi.asp?command=getMvRemoteUpdateStartCheck")  # type: ignore[attr-defined]
-        return cast(dict[str, Any], result)
+        return cast(dict[str, Any], result.parsed or {})
 
     async def install_firmware_update(self) -> None:
         """Install firmware update (WiiM devices only).
@@ -413,7 +413,7 @@ class FirmwareAPI:
         """
         await self._ensure_wiim_device()
         result = await self._request("/httpapi.asp?command=getMvRemoteUpdateStatus")  # type: ignore[attr-defined]
-        return cast(dict[str, Any], result)
+        return cast(dict[str, Any], result.parsed or {})
 
     async def get_update_install_status(self) -> dict[str, Any]:
         """Get firmware update installation status (WiiM devices only).
@@ -436,4 +436,4 @@ class FirmwareAPI:
         """
         await self._ensure_wiim_device()
         result = await self._request("/httpapi.asp?command=getMvRomBurnPrecent")  # type: ignore[attr-defined]
-        return cast(dict[str, Any], result)
+        return cast(dict[str, Any], result.parsed or {})

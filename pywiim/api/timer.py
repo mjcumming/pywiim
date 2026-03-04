@@ -92,16 +92,15 @@ class TimerAPI:
         """
         result = await self._request(API_ENDPOINT_GET_SHUTDOWN)  # type: ignore[attr-defined]
         # API returns the number as a string or in a dict
-        if isinstance(result, dict):
-            # Try various possible response formats
-            seconds = result.get("shutdown", result.get("timer", result.get("seconds", 0)))
+        if isinstance(result.parsed, dict):
+            seconds = result.parsed.get("shutdown", result.parsed.get("timer", result.parsed.get("seconds", 0)))
         else:
-            seconds = result
+            seconds = result.raw or result.parsed
 
         try:
             return int(seconds)  # type: ignore[arg-type]
         except (ValueError, TypeError):
-            _LOGGER.warning("Unexpected response format from getShutdown: %s", result)
+            _LOGGER.warning("Unexpected response format from getShutdown: %s", result.parsed or result.raw)
             return 0
 
     async def cancel_sleep_timer(self) -> None:
@@ -247,11 +246,10 @@ class TimerAPI:
         result = await self._request(endpoint)  # type: ignore[attr-defined]
 
         # API returns dict with alarm configuration
-        if isinstance(result, dict):
-            return result
-        else:
-            _LOGGER.warning("Unexpected response format from getAlarmClock: %s", result)
-            return {}
+        if isinstance(result.parsed, dict):
+            return result.parsed
+        _LOGGER.warning("Unexpected response format from getAlarmClock: %s", result.parsed or result.raw)
+        return {}
 
     async def get_alarms(self) -> list[dict[str, Any]]:
         """Get all alarm configurations (3 slots).
