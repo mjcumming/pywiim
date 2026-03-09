@@ -526,6 +526,11 @@ def detect_vendor(device_info: DeviceInfo) -> str:
     if "audio pro" in name_lower or "addon" in name_lower:
         return "audio_pro"
 
+    # Firmware-based fallback for Audio Pro devices with non-standard model strings
+    # (e.g. Link 2 model is "LINK 2 Wireless multiroom HiFi player" but firmware starts with "audiopro_")
+    if device_info.firmware and "audiopro" in device_info.firmware.lower():
+        return "audio_pro"
+
     return "linkplay_generic"
 
 
@@ -576,6 +581,13 @@ def detect_audio_pro_generation(device_info: DeviceInfo) -> str:
 
         return "mkii"  # Default to MkII for modern Audio Pro models
     else:
+        # For unrecognized Audio Pro models (e.g. Link 2), fall back to firmware version
+        if device_info.firmware:
+            firmware_lower = device_info.firmware.lower()
+            if any(version in firmware_lower for version in ["1.56", "1.57", "1.58", "1.59", "1.60"]):
+                return "mkii"  # MkII firmware range
+            elif any(version in firmware_lower for version in ["2.0", "2.1", "2.2", "2.3"]):
+                return "w_generation"
         return "original"
 
 

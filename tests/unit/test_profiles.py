@@ -372,3 +372,24 @@ class TestProfileIntegration:
         assert mkii_profile.endpoints.supports_getMetaInfo is False
         # WiiM does
         assert wiim_profile.endpoints.supports_getMetaInfo is True
+
+
+class TestLink2FirmwareFallback:
+    """Test that Link 2 with non-standard model string gets the correct MkII profile."""
+
+    def test_link2_gets_mkii_profile(self):
+        """Link 2 model + audiopro firmware → audio_pro vendor, mkii generation."""
+        device_info = DeviceInfo(
+            uuid="FF98F08F07C5B3572C4FB7E1",
+            name="Turntable",
+            model="LINK 2 Wireless multiroom HiFi player",
+            firmware="audiopro_link2-user 1.56",
+        )
+        profile = get_device_profile(device_info)
+        assert profile.vendor == "audio_pro"
+        assert profile.generation == "mkii"
+
+    def test_mkii_profile_source_is_upnp(self):
+        """MkII profile must prefer UPnP for source (HTTP returns mode=0 when idle)."""
+        profile = PROFILES["audio_pro_mkii"]
+        assert profile.state_sources.source == "upnp"

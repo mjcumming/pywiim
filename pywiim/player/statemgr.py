@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
+from ..api.constants import MODE_MAP
 from ..exceptions import WiiMTimeoutError
 from ..metadata import is_valid_metadata_value
 from ..polling import PollingStrategy
@@ -304,6 +305,10 @@ class StateManager:
             # Device info - only on full refresh or first time (not needed every poll)
             if full or self.player._device_info is None:
                 await self._refresh_device_info()
+                # If the full refresh just established a new profile that prefers UPnP for source,
+                # _refresh_core_status() ran before the profile was set and skipped
+                # GetControlDeviceInfo. Re-seed the source now that the profile is known.
+                await self._seed_source_after_profile()
 
             # Trigger-based fetching (skip for slaves - they get data from master)
             if not self.player.is_slave:
@@ -402,6 +407,7 @@ class StateManager:
         # during mode/source transitions. See: https://github.com/mjcumming/wiim/issues/157
         upnp_volume: int | None = None
         upnp_mute: bool | None = None
+        upnp_source: str | None = None
 
         if (
             self.player._upnp_client
@@ -424,6 +430,32 @@ class StateManager:
                     err,
                 )
 
+            # Poll source via GetControlDeviceInfo for devices that prefer UPnP for source
+            # (e.g. Audio Pro MkII: HTTP getStatusEx returns mode=0 when idle, masking actual input)
+            if (
+                self.player._profile is not None
+                and self.player._profile.state_sources.source == "upnp"
+            ):
+                try:
+                    info = await self.player._upnp_client.get_control_device_info()
+                    play_mode = info.get("PlayMode")
+                    if play_mode is not None:
+                        mapped = MODE_MAP.get(str(play_mode))
+                        if mapped and mapped not in ("unknown", "idle"):
+                            upnp_source = mapped
+                            _LOGGER.debug(
+                                "Got source from UPnP GetControlDeviceInfo for %s: PlayMode=%s -> %s",
+                                self.player.client.host,
+                                play_mode,
+                                upnp_source,
+                            )
+                except Exception as err:
+                    _LOGGER.debug(
+                        "UPnP GetControlDeviceInfo failed for %s: %s",
+                        self.player.client.host,
+                        err,
+                    )
+
         # Update StateSynchronizer with HTTP data
         status_dict = status.model_dump(exclude_none=False) if status else {}
         if "entity_picture" in status_dict:
@@ -432,11 +464,13 @@ class StateManager:
             if field_name not in status_dict:
                 status_dict[field_name] = None
 
-        # Override volume/mute with UPnP values if available (UPnP preferred)
+        # Override volume/mute/source with UPnP values if available (UPnP preferred)
         if upnp_volume is not None:
             status_dict["volume"] = upnp_volume
         if upnp_mute is not None:
             status_dict["muted"] = upnp_mute
+        if upnp_source is not None:
+            status_dict["source"] = upnp_source
 
         self.player._state_synchronizer.update_from_http(status_dict)
 
@@ -553,6 +587,42 @@ class StateManager:
         self.player._device_info = device_info
         # Update device profile when device_info changes
         self.player._update_profile_from_device_info()
+
+    async def _seed_source_after_profile(self) -> None:
+        """Seed source via GetControlDeviceInfo after profile is established on full refresh.
+
+        _refresh_core_status() runs before device info is fetched, so on the initial full
+        refresh the profile isn't set yet and GetControlDeviceInfo is skipped. This method
+        re-runs the source poll once the profile is known, so the source is correct
+        immediately after startup rather than waiting for the first incremental refresh.
+        """
+        if (
+            self.player._profile is None
+            or self.player._profile.state_sources.source != "upnp"
+            or not self.player._upnp_client
+            or not self.player._upnp_client.rendering_control
+        ):
+            return
+
+        try:
+            info = await self.player._upnp_client.get_control_device_info()
+            play_mode = info.get("PlayMode")
+            if play_mode is not None:
+                mapped = MODE_MAP.get(str(play_mode))
+                if mapped and mapped not in ("unknown", "idle"):
+                    self.player._state_synchronizer.update_from_http({"source": mapped})
+                    _LOGGER.debug(
+                        "Seeded source from GetControlDeviceInfo after profile set for %s: PlayMode=%s -> %s",
+                        self.player.client.host,
+                        play_mode,
+                        mapped,
+                    )
+        except Exception as err:
+            _LOGGER.debug(
+                "GetControlDeviceInfo source seed failed for %s: %s",
+                self.player.client.host,
+                err,
+            )
 
     async def _handle_triggers(self, status: PlayerStatus) -> None:
         """Handle trigger-based fetching (track change, source change, EQ change).

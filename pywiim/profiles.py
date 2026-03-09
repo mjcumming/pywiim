@@ -232,8 +232,9 @@ PROFILE_AUDIO_PRO_MKII = DeviceProfile(
         # Position/duration can come from either, prefer UPnP for real-time
         position="upnp",
         duration="upnp",
-        # Metadata and source are fine from HTTP
-        source="http",
+        # Source: prefer UPnP (PlaybackStorageMedium events are reliable on MkII)
+        # HTTP mode returns 0 (idle) when nothing is playing, masking the actual input
+        source="upnp",
         title="http",
         artist="http",
         album="http",
@@ -385,6 +386,11 @@ def _detect_vendor(device_info: DeviceInfo) -> str:
     if "audio pro" in name_lower or "addon" in name_lower:
         return "audio_pro"
 
+    # Firmware-based fallback for Audio Pro devices with non-standard model strings
+    # (e.g. Link 2 model is "LINK 2 Wireless multiroom HiFi player" but firmware starts with "audiopro_")
+    if device_info.firmware and "audiopro" in device_info.firmware.lower():
+        return "audio_pro"
+
     return "linkplay_generic"
 
 
@@ -422,6 +428,15 @@ def _detect_audio_pro_generation(device_info: DeviceInfo) -> str:
                 return "w_generation"
         # Default modern Audio Pro to MkII (most likely)
         return "mkii"
+
+    # Firmware-based fallback for Audio Pro devices with non-standard model strings
+    # (e.g. Link 2: firmware "audiopro_link2-user 1.56..." → MkII)
+    if device_info.firmware:
+        firmware_lower = device_info.firmware.lower()
+        if any(v in firmware_lower for v in ["1.56", "1.57", "1.58", "1.59", "1.60"]):
+            return "mkii"
+        if any(v in firmware_lower for v in ["2.0", "2.1", "2.2", "2.3"]):
+            return "w_generation"
 
     # Older models or unknown
     return "original"

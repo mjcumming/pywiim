@@ -161,6 +161,36 @@ class TestAudioProGenerationDetection:
         # Unknown models return "original" as fallback
         assert generation == "original"
 
+    def test_detect_audio_pro_generation_link2_firmware_fallback(self):
+        """Link 2 with audiopro firmware 1.56 → MkII via firmware version fallback."""
+        device_info = DeviceInfo(
+            uuid="test",
+            model="LINK 2 Wireless multiroom HiFi player",
+            firmware="audiopro_link2-user 1.56",
+        )
+        generation = detect_audio_pro_generation(device_info)
+        assert generation == "mkii"
+
+
+class TestVendorFirmwareFallback:
+    """Test vendor detection via firmware string for non-standard model names."""
+
+    def test_detect_vendor_link2_firmware_fallback(self):
+        """Link 2 model string doesn't match keywords → firmware 'audiopro_...' → audio_pro."""
+        device_info = DeviceInfo(
+            uuid="test",
+            model="LINK 2 Wireless multiroom HiFi player",
+            firmware="audiopro_link2-user 1.56",
+        )
+        vendor = detect_vendor(device_info)
+        assert vendor == "audio_pro"
+
+    def test_detect_vendor_no_firmware_fallback(self):
+        """Unknown model with no firmware → linkplay_generic (no firmware to check)."""
+        device_info = DeviceInfo(uuid="test", model="Some Unknown Speaker")
+        vendor = detect_vendor(device_info)
+        assert vendor == "linkplay_generic"
+
 
 class TestLEDControlDetection:
     """Test LED control format detection."""
