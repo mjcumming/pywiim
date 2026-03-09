@@ -41,7 +41,7 @@ from .exceptions import WiiMError
 from .model_names import is_known_wiim_model
 from .models import DeviceInfo
 from .normalize import normalize_vendor
-from .profiles import get_device_profile
+from .profiles import detect_audio_pro_generation, detect_vendor, get_device_profile
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -489,51 +489,6 @@ def detect_device_capabilities(device_info: DeviceInfo) -> dict[str, Any]:
     return capabilities
 
 
-def detect_vendor(device_info: DeviceInfo) -> str:
-    """Detect device vendor from device information.
-
-    Args:
-        device_info: Device information
-
-    Returns:
-        Normalized vendor string: "wiim", "arylic", "audio_pro", or "linkplay_generic"
-    """
-    if not device_info.model:
-        # Try device name as fallback
-        if device_info.name:
-            return normalize_vendor(device_info.name)
-        return "linkplay_generic"
-
-    model_lower = device_info.model.lower()
-    name_lower = (device_info.name or "").lower()
-
-    # WiiM devices - include known raw model aliases (e.g., "Muzo_Mini")
-    # and project variants like "WiiM_Pro_with_gc4a".
-    if is_known_wiim_model(device_info.model) or "wiim" in model_lower:
-        return "wiim"
-    if "wiim" in name_lower:
-        return "wiim"
-
-    # Arylic devices
-    if any(arylic in model_lower for arylic in ["arylic", "up2stream", "s10+"]):
-        return "arylic"
-    if "arylic" in name_lower or "up2stream" in name_lower:
-        return "arylic"
-
-    # Audio Pro devices
-    if any(pro in model_lower for pro in ["audio pro", "addon", "a10", "a15", "a28", "c10"]):
-        return "audio_pro"
-    if "audio pro" in name_lower or "addon" in name_lower:
-        return "audio_pro"
-
-    # Firmware-based fallback for Audio Pro devices with non-standard model strings
-    # (e.g. Link 2 model is "LINK 2 Wireless multiroom HiFi player" but firmware starts with "audiopro_")
-    if device_info.firmware and "audiopro" in device_info.firmware.lower():
-        return "audio_pro"
-
-    return "linkplay_generic"
-
-
 def is_wiim_device(device_info: DeviceInfo) -> bool:
     """Check if device is a WiiM device.
 
@@ -548,47 +503,6 @@ def is_wiim_device(device_info: DeviceInfo) -> bool:
 
     model_lower = device_info.model.lower()
     return is_known_wiim_model(device_info.model) or "wiim" in model_lower
-
-
-def detect_audio_pro_generation(device_info: DeviceInfo) -> str:
-    """Detect Audio Pro device generation for optimized handling.
-
-    Args:
-        device_info: Device information
-
-    Returns:
-        Generation string: "original", "mkii", "w_generation", or "unknown"
-    """
-    if not device_info.model:
-        return "unknown"
-
-    model_lower = device_info.model.lower()
-
-    # Audio Pro generation patterns
-    if any(gen in model_lower for gen in ["mkii", "mk2", "mk ii", "mark ii"]):
-        return "mkii"
-    elif any(gen in model_lower for gen in ["w-", "w series", "w generation", "w gen"]):
-        return "w_generation"
-    elif any(model in model_lower for model in ["a10", "a15", "a28", "c10", "audio pro"]):
-        # Modern Audio Pro devices (assume MkII if not specified)
-        if device_info.firmware:
-            # Try to determine from firmware version if available
-            firmware_lower = device_info.firmware.lower()
-            if any(version in firmware_lower for version in ["1.56", "1.57", "1.58", "1.59", "1.60"]):
-                return "mkii"  # MkII firmware range
-            elif any(version in firmware_lower for version in ["2.0", "2.1", "2.2", "2.3"]):
-                return "w_generation"  # W-generation firmware range
-
-        return "mkii"  # Default to MkII for modern Audio Pro models
-    else:
-        # For unrecognized Audio Pro models (e.g. Link 2), fall back to firmware version
-        if device_info.firmware:
-            firmware_lower = device_info.firmware.lower()
-            if any(version in firmware_lower for version in ["1.56", "1.57", "1.58", "1.59", "1.60"]):
-                return "mkii"  # MkII firmware range
-            elif any(version in firmware_lower for version in ["2.0", "2.1", "2.2", "2.3"]):
-                return "w_generation"
-        return "original"
 
 
 def is_legacy_device(device_info: DeviceInfo) -> bool:

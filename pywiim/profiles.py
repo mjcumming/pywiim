@@ -29,10 +29,17 @@ Usage:
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from .model_names import is_known_wiim_model
+from .normalize import normalize_vendor
+
+# Firmware version patterns for Audio Pro generation detection.
+# Use word-boundary–style lookarounds to avoid matching substrings like "420200" or "v1.205".
+_MKII_FIRMWARE_RE = r"(?<!\d)1\.5[6-9](?!\d)|(?<!\d)1\.60(?!\d)"
+_W_GEN_FIRMWARE_RE = r"(?<!\d)2\.[0-3](?!\d)"
 
 if TYPE_CHECKING:
     from .models import DeviceInfo
@@ -47,6 +54,8 @@ __all__ = [
     "GroupingConfig",
     "get_device_profile",
     "PROFILES",
+    "detect_vendor",
+    "detect_audio_pro_generation",
 ]
 
 
@@ -344,25 +353,18 @@ PROFILES: dict[str, DeviceProfile] = {
 # =============================================================================
 
 
-def _detect_vendor(device_info: DeviceInfo) -> str:
+def detect_vendor(device_info: DeviceInfo) -> str:
     """Detect device vendor from device information.
 
     Args:
         device_info: Device information
 
     Returns:
-        Vendor string: "wiim", "arylic", "audio_pro", or "linkplay_generic"
+        Normalized vendor string: "wiim", "arylic", "audio_pro", or "linkplay_generic"
     """
     if not device_info.model:
-        # Try device name as fallback
         if device_info.name:
-            name_lower = device_info.name.lower()
-            if "wiim" in name_lower:
-                return "wiim"
-            if "arylic" in name_lower or "up2stream" in name_lower:
-                return "arylic"
-            if "audio pro" in name_lower or "addon" in name_lower:
-                return "audio_pro"
+            return normalize_vendor(device_info.name)
         return "linkplay_generic"
 
     model_lower = device_info.model.lower()
@@ -394,8 +396,8 @@ def _detect_vendor(device_info: DeviceInfo) -> str:
     return "linkplay_generic"
 
 
-def _detect_audio_pro_generation(device_info: DeviceInfo) -> str:
-    """Detect Audio Pro device generation.
+def detect_audio_pro_generation(device_info: DeviceInfo) -> str:
+    """Detect Audio Pro device generation for optimized handling.
 
     Args:
         device_info: Device information
@@ -408,37 +410,30 @@ def _detect_audio_pro_generation(device_info: DeviceInfo) -> str:
 
     model_lower = device_info.model.lower()
 
-    # MkII detection
     if any(gen in model_lower for gen in ["mkii", "mk2", "mk ii", "mark ii"]):
         return "mkii"
-
-    # W-Generation detection
     if any(gen in model_lower for gen in ["w-", "w series", "w generation", "w gen"]):
         return "w_generation"
 
-    # For generic Audio Pro models, try to determine from firmware
+    # For known Audio Pro model strings, try firmware to distinguish MkII from W-gen
     if any(model in model_lower for model in ["a10", "a15", "a28", "c10", "audio pro"]):
         if device_info.firmware:
             firmware_lower = device_info.firmware.lower()
-            # MkII firmware versions
-            if any(v in firmware_lower for v in ["1.56", "1.57", "1.58", "1.59", "1.60"]):
+            if re.search(_MKII_FIRMWARE_RE, firmware_lower):
                 return "mkii"
-            # W-generation firmware versions
-            if any(v in firmware_lower for v in ["2.0", "2.1", "2.2", "2.3"]):
+            if re.search(_W_GEN_FIRMWARE_RE, firmware_lower):
                 return "w_generation"
-        # Default modern Audio Pro to MkII (most likely)
-        return "mkii"
+        return "mkii"  # Default to MkII for modern Audio Pro models
 
     # Firmware-based fallback for Audio Pro devices with non-standard model strings
     # (e.g. Link 2: firmware "audiopro_link2-user 1.56..." → MkII)
     if device_info.firmware:
         firmware_lower = device_info.firmware.lower()
-        if any(v in firmware_lower for v in ["1.56", "1.57", "1.58", "1.59", "1.60"]):
+        if re.search(_MKII_FIRMWARE_RE, firmware_lower):
             return "mkii"
-        if any(v in firmware_lower for v in ["2.0", "2.1", "2.2", "2.3"]):
+        if re.search(_W_GEN_FIRMWARE_RE, firmware_lower):
             return "w_generation"
 
-    # Older models or unknown
     return "original"
 
 
@@ -487,11 +482,11 @@ def get_device_profile(device_info: DeviceInfo) -> DeviceProfile:
     Returns:
         DeviceProfile for this device type
     """
-    vendor = _detect_vendor(device_info)
+    vendor = detect_vendor(device_info)
 
     # Audio Pro has multiple generations with different profiles
     if vendor == "audio_pro":
-        generation = _detect_audio_pro_generation(device_info)
+        generation = detect_audio_pro_generation(device_info)
         profile_key = f"audio_pro_{generation}"
 
         if profile_key in PROFILES:

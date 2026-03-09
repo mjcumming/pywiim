@@ -431,17 +431,20 @@ class StateManager:
                 )
 
             # Poll source via GetControlDeviceInfo for devices that prefer UPnP for source
-            # (e.g. Audio Pro MkII: HTTP getStatusEx returns mode=0 when idle, masking actual input)
+            # (e.g. Audio Pro MkII: HTTP getStatusEx returns mode=0 when idle, masking actual input).
+            # Skip when HTTP already returned a valid streaming source to avoid an unnecessary round-trip.
+            http_source = status.source if status else None
             if (
                 self.player._profile is not None
                 and self.player._profile.state_sources.source == "upnp"
+                and http_source in (None, "idle")
             ):
                 try:
                     info = await self.player._upnp_client.get_control_device_info()
                     play_mode = info.get("PlayMode")
                     if play_mode is not None:
                         mapped = MODE_MAP.get(str(play_mode))
-                        if mapped and mapped not in ("unknown", "idle"):
+                        if mapped and mapped != "idle":
                             upnp_source = mapped
                             _LOGGER.debug(
                                 "Got source from UPnP GetControlDeviceInfo for %s: PlayMode=%s -> %s",
@@ -601,6 +604,7 @@ class StateManager:
             or self.player._profile.state_sources.source != "upnp"
             or not self.player._upnp_client
             or not self.player._upnp_client.rendering_control
+            or self.player.source not in (None, "idle")
         ):
             return
 
@@ -609,7 +613,7 @@ class StateManager:
             play_mode = info.get("PlayMode")
             if play_mode is not None:
                 mapped = MODE_MAP.get(str(play_mode))
-                if mapped and mapped not in ("unknown", "idle"):
+                if mapped and mapped != "idle":
                     self.player._state_synchronizer.update_from_http({"source": mapped})
                     _LOGGER.debug(
                         "Seeded source from GetControlDeviceInfo after profile set for %s: PlayMode=%s -> %s",
