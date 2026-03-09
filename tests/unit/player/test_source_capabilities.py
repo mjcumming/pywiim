@@ -71,7 +71,7 @@ class TestSourceCapabilitiesMapping:
 
     def test_physical_inputs_have_no_control(self):
         """Test physical inputs have no control."""
-        physical = ["line_in", "linein", "optical", "coaxial", "coax", "aux", "hdmi", "phono"]
+        physical = ["line_in", "linein", "optical", "coaxial", "coax", "aux", "hdmi", "phono", "rca"]
         for source in physical:
             caps = SOURCE_CAPABILITIES[source]
             assert caps == SourceCapability.NONE, f"{source} should have NONE"

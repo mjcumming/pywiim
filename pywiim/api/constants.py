@@ -134,6 +134,7 @@ MODE_MAP: dict[str, str] = {
     "40": "line_in",
     "41": "bluetooth",
     "43": "optical",
+    "44": "rca",  # Audio Pro RCA line input (confirmed via tcpdump on Link 2)
     "47": "line_in_2",
     "49": "hdmi",
     "51": "usb",

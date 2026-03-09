@@ -586,3 +586,74 @@ class TestUpnpEventer:
         # Should update source
         call_args = mock_state_manager.apply_diff.call_args[0][0]
         assert call_args["source"] == "spotify"
+
+
+class TestPlaybackStorageMedium:
+    """Test PlaybackStorageMedium fallback for physical inputs (RCA, Bluetooth, etc.)."""
+
+    def _make_eventer(self):
+        mock_upnp_client = MagicMock()
+        mock_upnp_client.host = "192.168.1.200"
+        mock_state_manager = MagicMock()
+        mock_state_manager.apply_diff = MagicMock()
+        mock_state_manager.play_state = None
+        return UpnpEventer(mock_upnp_client, mock_state_manager, "test-uuid"), mock_state_manager
+
+    def _make_service(self):
+        mock_service = MagicMock()
+        mock_service.service_id = "AVTransport"
+        return mock_service
+
+    def _make_var(self, name, value):
+        var = MagicMock()
+        var.name = name
+        var.value = value
+        return var
+
+    def test_source_from_playback_storage_medium_rca(self):
+        """PlaybackStorageMedium=RCA sets source=rca when TrackSource is absent."""
+        eventer, state_manager = self._make_eventer()
+        eventer._on_event(
+            self._make_service(),
+            [self._make_var("PlaybackStorageMedium", "RCA")],
+        )
+        call_args = state_manager.apply_diff.call_args[0][0]
+        assert call_args["source"] == "rca"
+
+    def test_source_from_playback_storage_medium_bluetooth(self):
+        """PlaybackStorageMedium=BLUETOOTH sets source=bluetooth when TrackSource is absent."""
+        eventer, state_manager = self._make_eventer()
+        eventer._on_event(
+            self._make_service(),
+            [self._make_var("PlaybackStorageMedium", "BLUETOOTH")],
+        )
+        call_args = state_manager.apply_diff.call_args[0][0]
+        assert call_args["source"] == "bluetooth"
+
+    def test_playback_storage_medium_ignored_when_track_source_present(self):
+        """TrackSource takes priority over PlaybackStorageMedium."""
+        eventer, state_manager = self._make_eventer()
+        eventer._on_event(
+            self._make_service(),
+            [
+                self._make_var("TrackSource", "spotify"),
+                self._make_var("PlaybackStorageMedium", "RCA"),
+            ],
+        )
+        call_args = state_manager.apply_diff.call_args[0][0]
+        assert call_args["source"] == "spotify"
+
+    def test_parse_last_change_playback_storage_medium(self):
+        """PlaybackStorageMedium in LastChange XML sets source when TrackSource is absent."""
+        eventer, state_manager = self._make_eventer()
+        last_change_xml = """<Event xmlns="urn:schemas-upnp-org:metadata-1-0/AVT/">
+            <InstanceID val="0">
+                <PlaybackStorageMedium val="OPTICAL"/>
+            </InstanceID>
+        </Event>"""
+        eventer._on_event(
+            self._make_service(),
+            [self._make_var("LastChange", last_change_xml)],
+        )
+        call_args = state_manager.apply_diff.call_args[0][0]
+        assert call_args["source"] == "optical"
