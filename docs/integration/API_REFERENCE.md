@@ -435,24 +435,31 @@ await player.play()  # Callback fires automatically every second while playing
 
 **Example - With UPnP for Real-time Events:**
 
-```python
-from pywiim.upnp import UpnpClient, UpnpEventer
+UPnP is optional. To use it you must create an `UpnpClient` with a **description URL** (the device’s UPnP description document), then pass it to `Player`. For full event subscriptions you also use `UpnpEventer` with the same client. See [UPNP_INTEGRATION.md](../design/UPNP_INTEGRATION.md) and [HA_INTEGRATION.md](HA_INTEGRATION.md) for the complete setup.
 
-# Setup UPnP for immediate track change notifications
-upnp_client = UpnpClient("192.168.1.100")
+```python
+from pywiim import Player, WiiMClient
+from pywiim.upnp import UpnpClient
+
+# Create HTTP client and get device UUID (needed for optional UpnpEventer)
+client = WiiMClient("192.168.1.100")
+device_info = await client.get_device_info_model()
+
+# UPnP description URL: WiiM devices use port 49152 (HTTP)
+description_url = f"http://{client.host}:49152/description.xml"
+upnp_client = await UpnpClient.create(
+    client.host,
+    description_url,
+    session=None,  # optional: pass client's session for connection pooling
+)
 player = Player(client, upnp_client=upnp_client)
 
-eventer = UpnpEventer(
-    upnp_client=upnp_client,
-    on_event=lambda changes: player.update_from_upnp(changes)
-)
-await eventer.async_subscribe()
-
-# Position now updates via:
-# - UPnP events (immediate track changes)
-# - Position estimation (smooth 1-second ticks)
-# - HTTP polling (fallback + verification)
+# Optional: subscribe to UPnP events for immediate track/volume updates.
+# UpnpEventer requires (upnp_client, state_manager, device_uuid, state_updated_callback)
+# and is started with eventer.start(). See UPNP_INTEGRATION.md for full example.
 ```
+
+Position then updates via UPnP events (when subscribed), position estimation (smooth 1-second ticks), and HTTP polling (fallback + verification).
 
 **Position Estimation:**
 - Runs automatically in background while playing

@@ -1050,7 +1050,8 @@ The UPnP client is used for two purposes:
 **Setup Pattern:**
 
 ```python
-from pywiim import Player, WiiMClient, UpnpClient, UpnpEventer
+from pywiim import Player, WiiMClient
+from pywiim.upnp import UpnpClient, UpnpEventer
 
 class WiiMCoordinator(DataUpdateCoordinator):
     async def async_setup(self):

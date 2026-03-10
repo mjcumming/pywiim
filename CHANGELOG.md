@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.94] - 2026-03-10
+
+### Changed
+- **UPnP documentation** - Docs now match the code: `UpnpClient` is created with `await UpnpClient.create(host, description_url, session=None)` (description URL e.g. `http://<device_ip>:49152/description.xml`). Clarified that "state_manager" is only a parameter of `UpnpEventer`, not `UpnpClient`. Added user-facing "Creating and Using the UPnP Client" section in UPNP_INTEGRATION.md; fixed API_REFERENCE and HA_INTEGRATION examples and imports (`from pywiim.upnp import UpnpClient, UpnpEventer`).
+
 ## [2.1.93] - 2026-03-04
 
 ### Added

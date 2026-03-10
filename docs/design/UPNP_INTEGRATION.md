@@ -98,9 +98,78 @@ Application receives state change callback
 - Better error handling: HTTP API errors are easier to handle than UPnP SOAP errors
 - Feature parity: HTTP API supports everything, UPnP doesn't (no EQ, no groups, etc.)
 
+## Creating and Using the UPnP Client (user-facing)
+
+You do **not** pass a "state_manager" when creating the UPnP client. The library uses these components:
+
+- **`UpnpClient`** – created with host, description URL, and optional session. Used for queue management (e.g. `play_url(..., enqueue='add')`) and for subscribing to events.
+- **`Player`** – has an internal state manager. You pass the optional `upnp_client` into `Player(client, upnp_client=upnp_client)` so the player can use UPnP for queue ops and (when combined with `UpnpEventer`) receive event updates.
+- **`UpnpEventer`** – optional. Subscribes to UPnP events and pushes them into a state object. You pass the **Player** (or any object with `apply_diff()`) as the state manager and a device UUID from `get_device_info_model().uuid`.
+
+### Creating UpnpClient
+
+`UpnpClient` is created via the **async factory** `UpnpClient.create()`, not by passing only the host. You must provide:
+
+1. **host** – device IP or hostname (e.g. `"192.168.1.100"`).
+2. **description_url** – URL of the device’s UPnP description document. WiiM devices typically serve it on port **49152** (HTTP):
+
+   `http://<device_ip>:49152/description.xml`
+
+   You can also obtain this URL from SSDP discovery (see [UPnP Discovery](#upnp-discovery) below).
+
+3. **session** – optional `aiohttp.ClientSession`. If omitted, the client creates its own. Passing the same session as your `WiiMClient` allows connection pooling.
+
+```python
+from pywiim import WiiMClient
+from pywiim.upnp import UpnpClient
+
+client = WiiMClient("192.168.1.100")
+description_url = f"http://{client.host}:49152/description.xml"
+upnp_client = await UpnpClient.create(
+    client.host,
+    description_url,
+    session=None,  # optional
+)
+player = Player(client, upnp_client=upnp_client)
+```
+
+There is **no** `state_manager` parameter on `UpnpClient.create()`. The "state manager" is only used when you create an **`UpnpEventer`** (see below).
+
+### Optional: Subscribing to UPnP events with UpnpEventer
+
+For real-time events (play/pause, volume, track changes), create an `UpnpEventer` and call `start()`. The eventer needs:
+
+- **upnp_client** – the same `UpnpClient` instance you passed to `Player`.
+- **state_manager** – an object with `apply_diff(changes)` (and a `play_state` property). Typically you pass the **Player** instance; the player’s internal state manager will merge UPnP events with HTTP state.
+- **device_uuid** – from `(await client.get_device_info_model()).uuid`.
+- **state_updated_callback** – optional callback when an event is received (e.g. to refresh your UI).
+
+Then call `await eventer.start(callback_host=..., callback_port=0)` so the device can send events to your app. The callback URL must be reachable from the device (see [Callback URL](#callback-url)).
+
+```python
+from pywiim import Player, WiiMClient
+from pywiim.upnp import UpnpClient, UpnpEventer
+
+client = WiiMClient("192.168.1.100")
+device_info = await client.get_device_info_model()
+description_url = f"http://{client.host}:49152/description.xml"
+upnp_client = await UpnpClient.create(client.host, description_url)
+player = Player(client, upnp_client=upnp_client)
+
+eventer = UpnpEventer(
+    upnp_client,
+    player,  # state_manager: Player has apply_diff()
+    device_info.uuid,
+    state_updated_callback=lambda *a: print("UPnP event received"),
+)
+await eventer.start(callback_host=None, callback_port=0)  # None = auto-detect IP
+```
+
+Full integration examples (including lifecycle and error handling) are in [HA_INTEGRATION.md](../integration/HA_INTEGRATION.md).
+
 ## Implementation Details
 
-### UPnP Client Setup
+### UPnP Client Setup (internal)
 
 Following the **DLNA DMR pattern** (same as Samsung TV and DLNA DMR integrations):
 
@@ -140,15 +209,15 @@ class UpnpEventer:
 
 ### Event Handling
 
-```python
-# From pywiim/upnp/eventer.py
-class UpnpEventer:
-    """Handles UPnP events and merges into state."""
+When an UPnP event is received, the eventer parses the state variables and passes changes to the object you gave as **state_manager** when creating the `UpnpEventer` (typically the `Player`). That object’s `apply_diff(changes)` is called; the Player’s internal state manager then merges the changes into the cached state and triggers your `on_state_changed` callback if set.
 
-    def _on_event(self, service, state_variables):
-        # Parse UPnP event state variables
-        # Call state_manager.apply_diff() with changes
-        # State manager merges into Player's cached state
+```python
+# From pywiim/upnp/eventer.py (conceptual)
+# state_manager is the object passed to UpnpEventer(..., state_manager=player, ...)
+def _on_event(self, service, state_variables):
+    # Parse UPnP event state variables
+    # Call state_manager.apply_diff(changes)  # e.g. player.apply_diff(changes)
+    # Player's StateManager merges into cached state and notifies app
 ```
 
 ### State Merging
