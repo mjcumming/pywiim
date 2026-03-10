@@ -87,7 +87,7 @@ from .profiles import (
 from .role import RoleDetectionResult, detect_role
 from .state import GroupStateSynchronizer, StateSynchronizer
 
-__version__ = "2.1.93"
+__version__ = "2.1.94"
 __all__ = [
     # Main client
     "WiiMClient",
