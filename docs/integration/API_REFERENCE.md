@@ -730,7 +730,10 @@ player.supports_audio_output      # bool - True if audio output mode control is 
 player.supports_metadata          # bool - True if metadata retrieval (getMetaInfo) is supported
 player.supports_alarms            # bool - True if alarms are supported (WiiM only)
 player.supports_sleep_timer       # bool - True if sleep timer is supported (WiiM only)
-player.supports_led_control       # bool - True if LED control is supported
+player.supports_led_control       # bool - True if primary LED control (setLED/setLEDBrightness) is supported
+player.supports_led_switch        # bool - True if Status Light (LED_SWITCH_SET) is supported
+player.supports_led_indicator     # bool - True if LED indicator on/off is supported (ADR 005; Arylic + WiiM)
+player.supports_display_config    # bool - True if display/LCD on-off and brightness is supported (WiiM Ultra only)
 ```
 
 **UPnP Capabilities** (depend on UPnP client initialization):
@@ -801,9 +804,15 @@ await player.client.rename_peq(name, new_name)
 # Confirmed modes: 1=SPDIF (Optical), 2=AUX (Line Out), 3=COAX, 4=BT/Headphone, 7=HDMI (Amp Ultra), 8=USB
 await player.set_audio_output_mode(mode: str | int)  # "Line Out", "Optical Out", "USB Out", etc.
 
-# LED control
+# LED control (primary: setLED / setLEDBrightness)
 await player.set_led(enabled: bool)
 await player.set_led_brightness(brightness: int)  # 0-100
+# LED Indicator (ADR 005; Arylic + WiiM) – preferred for on/off switch
+on_off = await player.get_led_indicator()  # bool; assumes on if device has no read API
+await player.set_led_indicator(enabled: bool)     # uses LED_SWITCH_SET
+# Display (WiiM Ultra only; screen on/off and brightness – not the status LED)
+await player.set_display_enabled(enabled: bool)
+await player.set_display_config(auto_sense_enable=0, default_bright=1, disable=0)  # disable: 0=on, 1=off
 
 # Audio settings
 await player.set_channel_balance(balance: float)  # -1.0 to 1.0

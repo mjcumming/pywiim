@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pywiim.model_names import is_known_wiim_model, to_friendly_model_name
+from pywiim.model_names import is_known_wiim_model, is_wiim_ultra, to_friendly_model_name
 
 
 class TestIsKnownWiiMModel:
@@ -19,6 +19,32 @@ class TestIsKnownWiiMModel:
     def test_non_wiim_model_not_detected(self):
         """Non-WiiM project should not be recognized."""
         assert is_known_wiim_model("Audio Pro A10") is False
+
+
+class TestIsWiiMUltra:
+    """Test WiiM Ultra model detection (display/LCD config)."""
+
+    def test_wiim_ultra_alias_detected(self):
+        """Raw wiim_ultra should be recognized."""
+        assert is_wiim_ultra("wiim_ultra") is True
+
+    def test_wiim_ultra_prefix_detected(self):
+        """Variant with ultra in name should be recognized."""
+        assert is_wiim_ultra("WiiM_Ultra") is True
+
+    def test_non_ultra_wiim_not_detected(self):
+        """WiiM Pro/Mini/Amp are not Ultra."""
+        assert is_wiim_ultra("wiim_pro") is False
+        assert is_wiim_ultra("wiim_mini") is False
+        assert is_wiim_ultra("WiiM Amp") is False
+
+    def test_non_wiim_ultra_not_detected(self):
+        """Non-WiiM model with 'ultra' in name is not WiiM Ultra."""
+        assert is_wiim_ultra("Other Ultra Device") is False
+
+    def test_none_returns_false(self):
+        """None model should return False."""
+        assert is_wiim_ultra(None) is False
 
 
 class TestFriendlyModelName:

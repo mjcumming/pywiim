@@ -384,7 +384,11 @@ API_ENDPOINT_SET_CHANNEL_BALANCE = "/httpapi.asp?command=setChannelBalance:"
 
 # Miscellaneous endpoints
 API_ENDPOINT_SET_LED = "/httpapi.asp?command=LED_SWITCH_SET:"
+# Arylic: query LED state via MCU ASCII (getMCUASCIICmd:LED); may not be on all devices
+API_ENDPOINT_GET_LED_MCU = "/httpapi.asp?command=getMCUASCIICmd:LED"
 API_ENDPOINT_SET_BUTTONS = "/httpapi.asp?command=Button_Enable_SET:"
+# WiiM Ultra display/LCD (setLightOperationBrightConfig) - screen on/off and brightness
+API_ENDPOINT_DISPLAY_CONFIG = "/httpapi.asp?command=setLightOperationBrightConfig:"
 
 # Bluetooth endpoints
 API_ENDPOINT_START_BT_DISCOVERY = "/httpapi.asp?command=startbtdiscovery:"
@@ -640,6 +644,7 @@ __all__ = [
     "API_ENDPOINT_LED_BRIGHTNESS",
     "API_ENDPOINT_ARYLIC_LED",
     "API_ENDPOINT_ARYLIC_LED_BRIGHTNESS",
+    "API_ENDPOINT_DISPLAY_CONFIG",
     "API_ENDPOINT_SET_ALARM",
     "API_ENDPOINT_GET_ALARM",
     "API_ENDPOINT_ALARM_STOP",

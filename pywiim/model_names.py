@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-__all__ = ["is_known_wiim_model", "to_friendly_model_name"]
+__all__ = ["is_known_wiim_model", "is_wiim_ultra", "to_friendly_model_name"]
 
 # Raw `project` aliases seen on WiiM firmware variants.
 # Keep this list conservative and add entries when confirmed by real devices.
@@ -59,6 +59,14 @@ def is_known_wiim_model(model: str | None) -> bool:
     if not key:
         return False
     return key in _WIIM_MODEL_ALIASES or key.startswith("wiim_") or key == "wiimu"
+
+
+def is_wiim_ultra(model: str | None) -> bool:
+    """Return True if model is WiiM Ultra (has LCD/display config API)."""
+    key = _normalize_model_key(model)
+    if not key:
+        return False
+    return key == "wiim_ultra" or (key.startswith("wiim_") and "ultra" in key)
 
 
 def to_friendly_model_name(model: str | None) -> str | None:

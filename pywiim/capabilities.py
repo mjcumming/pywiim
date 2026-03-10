@@ -34,11 +34,12 @@ from .api.constants import (
     API_ENDPOINT_EQ_LIST,
     API_ENDPOINT_EQ_STATUS,
     API_ENDPOINT_PEQ_GET_LIST,
+    API_ENDPOINT_SET_LED,
     API_ENDPOINT_TRIGGER_OUT_STATUS,
     PEQ_PLUGIN_URI,
 )
 from .exceptions import WiiMError
-from .model_names import is_known_wiim_model
+from .model_names import is_known_wiim_model, is_wiim_ultra
 from .models import DeviceInfo
 from .normalize import normalize_vendor
 from .profiles import get_device_profile
@@ -124,6 +125,18 @@ class WiiMCapabilities:
         capabilities.setdefault("supports_eq", True)
         capabilities.setdefault("supports_peq", False)
         capabilities.setdefault("supports_trigger_out", False)
+        capabilities.setdefault("supports_led_switch", False)
+        capabilities.setdefault("supports_display_config", False)
+
+        # LED Indicator (ADR 005): Arylic — set by vendor, try-and-ignore on write; no probe
+        if capabilities.get("vendor") == "arylic":
+            capabilities["supports_led_switch"] = True
+            _LOGGER.debug("Device %s: LED Indicator supported (Arylic vendor, try-and-ignore)", client.host)
+
+        # Display/LCD (WiiM Ultra only) - model-based, no probe to avoid changing screen state
+        if is_wiim_ultra(device_info.model):
+            capabilities["supports_display_config"] = True
+            _LOGGER.debug("Device %s supports display/LCD config (WiiM Ultra)", client.host)
 
         # Probe for getStatusEx support
         try:
@@ -321,6 +334,14 @@ class WiiMCapabilities:
         except WiiMError:
             _LOGGER.debug("Device %s does not support 12V trigger (getTriggeroutStatus)", client.host)
 
+        # Probe for Status Light (LED_SWITCH_SET) - "Status Light" in app; some devices use this instead of setLED
+        try:
+            await client._request(f"{API_ENDPOINT_SET_LED}0")
+            capabilities["supports_led_switch"] = True
+            _LOGGER.debug("Device %s supports Status Light (LED_SWITCH_SET)", client.host)
+        except WiiMError:
+            _LOGGER.debug("Device %s does not support Status Light (LED_SWITCH_SET)", client.host)
+
         # Get device profile for profile-specific settings (like reboot command)
         # Profile provides device-specific command variations
         # See: https://github.com/mjcumming/wiim/issues/177
@@ -438,6 +459,9 @@ def detect_device_capabilities(device_info: DeviceInfo) -> dict[str, Any]:
         capabilities["supports_sleep_timer"] = True  # WiiM devices support sleep timer
         capabilities["max_alarm_slots"] = 3  # WiiM supports 3 independent alarms
         capabilities["supports_firmware_install"] = True  # WiiM devices support firmware update installation via API
+        # Display/LCD on/off and brightness (setLightOperationBrightConfig) - WiiM Ultra only
+        if is_wiim_ultra(device_info.model):
+            capabilities["supports_display_config"] = True
     elif capabilities["is_legacy_device"]:
         # Apply Audio Pro generation specific optimizations ONLY for Audio Pro devices
         # Other legacy devices (e.g., Arylic) should use defaults or be probed

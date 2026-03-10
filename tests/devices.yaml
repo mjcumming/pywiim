@@ -58,7 +58,7 @@ devices:
     capabilities: [eq, presets]
     notes: "Arylic H50 with EQ support"
 
-  - ip: 192.168.6.221
+  - ip: 192.168.6.223
     name: "Cabin"
     model: wiim_pro
     capabilities: [eq, peq, presets, multi_output, grouping]

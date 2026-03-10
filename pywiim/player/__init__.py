@@ -367,6 +367,16 @@ class Player(PlayerBase):
         """Set LED brightness level."""
         await self._audio_config.set_led_brightness(brightness)
 
+    # === LED Indicator (ADR 005) ===
+
+    async def get_led_indicator(self) -> bool:
+        """Read LED indicator state (on/off). Assumes on if device has no read API."""
+        return await self.client.get_led_indicator()
+
+    async def set_led_indicator(self, enabled: bool) -> None:
+        """Set LED indicator on or off (LED_SWITCH_SET)."""
+        await self.client.set_led_switch(enabled)
+
     async def set_channel_balance(self, balance: float) -> None:
         """Set channel balance (left/right stereo balance)."""
         await self._audio_config.set_channel_balance(balance)
@@ -486,6 +496,26 @@ class Player(PlayerBase):
             self._subwoofer_status["sub_delay"] = delay_ms
         if self._on_state_changed:
             self._on_state_changed()
+
+    # === Display (WiiM Ultra; ADR 005) ===
+
+    async def set_display_enabled(self, enabled: bool) -> None:
+        """Turn display/LCD on or off (WiiM Ultra only)."""
+        await self.client.set_display_enabled(enabled)
+
+    async def set_display_config(
+        self,
+        *,
+        auto_sense_enable: int = 0,
+        default_bright: int = 1,
+        disable: int = 0,
+    ) -> None:
+        """Set display/LCD config (WiiM Ultra only). disable: 0=on, 1=off."""
+        await self.client.set_display_config(
+            auto_sense_enable=auto_sense_enable,
+            default_bright=default_bright,
+            disable=disable,
+        )
 
     # === 12V Trigger (WiiM Ultra / Pro / Pro Plus) ===
 
@@ -1252,8 +1282,23 @@ class Player(PlayerBase):
 
     @property
     def supports_led_control(self) -> bool:
-        """Whether LED control is supported."""
+        """Whether LED control is supported (primary setLED/setLEDBrightness API)."""
         return self._properties.supports_led_control
+
+    @property
+    def supports_led_switch(self) -> bool:
+        """Whether Status Light (LED_SWITCH_SET) is supported."""
+        return self._properties.supports_led_switch
+
+    @property
+    def supports_led_indicator(self) -> bool:
+        """Whether LED indicator on/off is supported (ADR 005)."""
+        return self._properties.supports_led_indicator
+
+    @property
+    def supports_display_config(self) -> bool:
+        """Whether display/LCD on-off and brightness is supported (WiiM Ultra only)."""
+        return self._properties.supports_display_config
 
     # === UPnP Capabilities ===
 

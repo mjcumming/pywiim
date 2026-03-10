@@ -35,5 +35,6 @@ File naming: `NNN-short-slug.md` (e.g. `002-trust-api-after-success.md`). Number
 | [002](002-trust-api-after-success.md) | Trust the API After Success — No Polling to Confirm | Accepted |
 | [003](003-capability-probing-before-endpoints.md) | Capability Probing Before Using Endpoints           | Accepted |
 | [004](004-upnp-events-http-control.md) | UPnP for Events Only, HTTP API for All Control     | Accepted |
+| [005](005-led-indicator-and-display-apis.md) | LED Indicator and Display APIs                       | Accepted |
 
 When adding a new ADR, add a row to this table.

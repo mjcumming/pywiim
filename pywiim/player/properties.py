@@ -1666,10 +1666,34 @@ class PlayerProperties:
 
     @property
     def supports_led_control(self) -> bool:
-        """Whether LED control is supported."""
+        """Whether LED control is supported (primary setLED/setLEDBrightness API)."""
         if not self.player.client:
             return False
         return bool(self.player.client.capabilities.get("supports_led_control", False))
+
+    @property
+    def supports_led_switch(self) -> bool:
+        """Whether Status Light (LED_SWITCH_SET) is supported.
+
+        Use when primary LED control does not work; e.g. for app 'Status Light' toggle.
+        """
+        if not self.player.client:
+            return False
+        return bool(self.player.client.capabilities.get("supports_led_switch", False))
+
+    @property
+    def supports_led_indicator(self) -> bool:
+        """Whether LED indicator on/off is supported (ADR 005; Arylic + WiiM via probe)."""
+        if not self.player.client:
+            return False
+        return bool(self.player.client.capabilities.get("supports_led_switch", False))
+
+    @property
+    def supports_display_config(self) -> bool:
+        """Whether display/LCD on-off and brightness is supported (WiiM Ultra only)."""
+        if not self.player.client:
+            return False
+        return bool(self.player.client.capabilities.get("supports_display_config", False))
 
     # === UPnP Capabilities ===
     # These are determined at runtime based on UPnP client initialization

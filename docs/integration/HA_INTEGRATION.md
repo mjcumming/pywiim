@@ -2172,6 +2172,79 @@ class WiiMSubwooferLevel(NumberEntity):
 - **No manual fetching needed**: Just access the properties - state is always current
 - **Optimistic updates**: Methods update cached state immediately after API success
 
+## LED Indicator and Display Control (ADR 005)
+
+pywiim exposes two distinct capabilities: **LED Indicator** (on/off) and **Display** (WiiM Ultra screen). Use the player API below; no persistent state is stored between sessions.
+
+| Concept | Capability | Player API | Use |
+|--------|------------|------------|-----|
+| **LED Indicator** | `supports_led_indicator` | `get_led_indicator()`, `set_led_indicator(enabled)` | Small status light; Arylic + WiiM (probe). Read assumes **on** if device has no read API. |
+| **Display** | `supports_display_config` | `set_display_enabled(enabled)`, `set_display_config(...)` | WiiM Ultra LCD on/off and brightness; **not** the status LED. |
+
+- **LED Indicator**: We try to read from the device; if read fails or no API exists, we return **on** and log a warning. No persistent state between restarts.
+- **Display** (WiiM Ultra only): Check `player.supports_display_config`; then use the player methods. No read API; integration may track state if needed.
+
+### LED Indicator (Light Entity)
+
+Integrations that expose the **LED indicator** as a Home Assistant **Light** entity must satisfy HA's Light platform contract.
+
+### pywiim API
+
+```python
+# LED Indicator (ADR 005) – preferred for on/off switch
+player.supports_led_indicator  # bool (Arylic + WiiM)
+
+on_off = await player.get_led_indicator()  # bool; assumes on if device has no read API
+await player.set_led_indicator(True)   # or False
+
+# Legacy: primary LED (setLED) and Status Light (client only)
+player.supports_led_control
+await player.set_led(True)
+await player.set_led_brightness(50)
+await player.client.set_led_switch(True)  # same as set_led_indicator
+```
+
+### Display (WiiM Ultra)
+
+WiiM Ultra has an LCD screen. Control it via the player:
+
+```python
+if player.supports_display_config:
+    await player.set_display_enabled(True)   # screen on
+    await player.set_display_enabled(False)  # screen off
+    await player.set_display_config(auto_sense_enable=0, default_bright=1, disable=0)  # disable: 0=on, 1=off
+```
+
+No getter: display state is not in device status; track it in the integration if needed.
+
+### Home Assistant: "does not report a color mode"
+
+If the coordinator update fails with:
+
+```text
+HomeAssistantError: light.<entity> (<class '...WiiMLEDLight'>) does not report a color mode
+```
+
+the cause is in the **integration**, not in pywiim. HA's Light platform requires every light entity to report `color_mode` and `supported_color_modes`. The fix is in the integration's Light entity class:
+
+- Set **`supported_color_modes`** (e.g. `{ColorMode.BRIGHTNESS}` for on/off + brightness, or `{ColorMode.ONOFF}` for on/off only).
+- Set **`color_mode`** in the entity state (e.g. `ColorMode.BRIGHTNESS` when brightness is supported, `ColorMode.ONOFF` otherwise).
+
+Example for a dimmable LED (on/off + brightness):
+
+```python
+from homeassistant.components.light import ColorMode
+
+# In your WiiMLEDLight entity:
+_supported_color_modes = {ColorMode.BRIGHTNESS}
+
+@property
+def color_mode(self) -> ColorMode:
+    return ColorMode.BRIGHTNESS
+```
+
+For LED Indicator use `get_led_indicator()`; it returns the device state when available, or **assumes on** and logs a warning when the device has no read API. No persistent state is stored between sessions.
+
 ## 12V Trigger (WiiM Ultra / Pro / Pro Plus)
 
 WiiM Ultra, Pro, and Pro Plus have a 12V trigger output that can control external amplifiers (e.g. turn on when playing). The library exposes read/set and a capability flag.

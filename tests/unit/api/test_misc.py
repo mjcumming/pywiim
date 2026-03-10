@@ -1,5 +1,8 @@
 """Unit tests for Misc API."""
 
+import json
+from urllib.parse import unquote
+
 import pytest
 
 from pywiim.api.base import ApiResponse
@@ -58,6 +61,117 @@ class TestMiscAPI:
         client = TestClient()
         await client.set_led_switch(True)
         await client.set_led_switch(False)
+
+    @pytest.mark.asyncio
+    async def test_get_led_indicator_from_status_returns_false_when_led_0(self, mock_client):
+        """Test get_led_indicator returns False when getStatusEx has led=0."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def get_device_info(self):
+                return {"led": 0}
+
+        client = TestClient()
+        client._capabilities = {}
+        result = await client.get_led_indicator()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_get_led_indicator_from_status_returns_true_when_led_1(self, mock_client):
+        """Test get_led_indicator returns True when getStatusEx has led=1."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def get_device_info(self):
+                return {"LED": 1}
+
+        client = TestClient()
+        client._capabilities = {}
+        result = await client.get_led_indicator()
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_get_led_indicator_assumes_on_when_no_read_api(self, mock_client):
+        """Test get_led_indicator returns True (assume on) when no led in status."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def get_device_info(self):
+                return {"vol": 50}
+
+        client = TestClient()
+        client._capabilities = {}
+        result = await client.get_led_indicator()
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_get_led_indicator_arylic_parses_mcu_response(self, mock_client):
+        """Test get_led_indicator for Arylic parses getMCUASCIICmd:LED response."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def get_device_info(self):
+                return {}
+
+            async def _request(self, endpoint):
+                return ApiResponse(parsed=None, raw="LED:0")
+
+        client = TestClient()
+        client._capabilities = {"vendor": "arylic"}
+        result = await client.get_led_indicator()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_set_led_switch_arylic_does_not_raise(self, mock_client):
+        """Test set_led_switch for Arylic does not raise on failure (try-and-ignore)."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                raise WiiMError("unknown command")
+
+        client = TestClient()
+        client._capabilities = {"vendor": "arylic"}
+        await client.set_led_switch(True)
+        await client.set_led_switch(False)
+
+    @pytest.mark.asyncio
+    async def test_set_display_config(self, mock_client):
+        """Test set_display_config sends correct setLightOperationBrightConfig command."""
+        from pywiim.api.constants import API_ENDPOINT_DISPLAY_CONFIG
+        from pywiim.api.misc import MiscAPI
+
+        requests = []
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                return ApiResponse(parsed="OK", raw=None)
+
+        client = TestClient()
+        await client.set_display_config(auto_sense_enable=0, default_bright=1, disable=1)
+        assert len(requests) == 1
+        assert requests[0].startswith(API_ENDPOINT_DISPLAY_CONFIG)
+        # Payload after base: URL-encoded JSON
+        payload_str = unquote(requests[0][len(API_ENDPOINT_DISPLAY_CONFIG) :])
+        payload = json.loads(payload_str)
+        assert payload == {"auto_sense_enable": 0, "default_bright": 1, "disable": 1}
+
+    @pytest.mark.asyncio
+    async def test_set_display_enabled(self, mock_client):
+        """Test set_display_enabled calls set_display_config with correct disable value."""
+        from pywiim.api.misc import MiscAPI
+
+        calls = []
+
+        class TestClient(MiscAPI):
+            async def set_display_config(self, *, auto_sense_enable=0, default_bright=1, disable=0):
+                calls.append({"disable": disable})
+
+        client = TestClient()
+        await client.set_display_enabled(True)
+        await client.set_display_enabled(False)
+        assert calls == [{"disable": 0}, {"disable": 1}]
 
     @pytest.mark.asyncio
     async def test_get_device_capabilities(self, mock_client):

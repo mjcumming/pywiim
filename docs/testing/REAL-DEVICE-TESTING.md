@@ -111,6 +111,24 @@ default_device: 192.168.1.115
 
 **PEQ integration tests:** Run Parametric EQ tests against a WiiM device with `pytest tests/integration/test_peq.py -v -m integration` (requires `WIIM_TEST_DEVICE` or default from config). See [PR #12](https://github.com/mjcumming/pywiim/pull/12) for the PEQ API contribution.
 
+**LED Indicator and Display:** To verify LED indicator and display capabilities on a device, run the diagnostics CLI. It reports `supports_led_indicator` (LED Indicator) and `supports_display_config` (Display, WiiM Ultra only).
+
+```bash
+python -m pywiim.cli.diagnostics <device_ip>
+# or: wiim-diagnostics <device_ip>
+```
+
+Validation results (six test devices, 2026-03-10):
+
+| Device IP     | Model / Name           | Vendor | supports_led_indicator | supports_display_config |
+|---------------|------------------------|--------|------------------------|-------------------------|
+| 192.168.1.115 | WiiM Pro (Outdoor)     | wiim   | Yes                    | No                      |
+| 192.168.1.116 | WiiM Pro (Master Bedroom) | wiim | Yes                    | No                      |
+| 192.168.1.68  | WiiM Pro (Main Floor)  | wiim   | Yes                    | No                      |
+| 192.168.6.95  | UP2STREAM_AMP_V4 (Dock) | arylic | Yes                    | No                      |
+| 192.168.6.50  | ARYLIC_H50 (Main Deck) | arylic | Yes                    | No                      |
+| 192.168.6.223 | WiiM Pro (Cabin)       | wiim   | Yes                    | No                      |
+
 ### Options
 
 - `--device IP` - Specify device IP (default from config)

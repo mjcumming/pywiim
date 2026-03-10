@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.95] - 2026-03-10
+
+### Added
+- **LED Indicator and Display APIs (ADR 005)** - Two distinct capabilities: **LED Indicator** (on/off) for Arylic + WiiM via `LED_SWITCH_SET`; **Display** (WiiM Ultra only) for LCD on/off and brightness. Player API: `get_led_indicator()` (reads state; assumes on if device has no read API), `set_led_indicator(enabled)`, `supports_led_indicator`; `set_display_enabled(enabled)`, `set_display_config(...)`. Client: `get_led_indicator()` tries getStatusEx and Arylic `getMCUASCIICmd:LED`; on read failure returns True and logs warning. Arylic: `supports_led_switch` set by vendor, `set_led_switch` try-and-ignore. Diagnostics CLI: LED Indicator and Display in feature tests and report. Docs: API_REFERENCE, HA_INTEGRATION, HA_CAPABILITIES. See ADR 005.
+
 ## [2.1.94] - 2026-03-10
 
 ### Changed

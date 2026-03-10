@@ -200,6 +200,15 @@ class TestDeviceCapabilitiesDetection:
         assert capabilities["response_timeout"] == 2.0
         assert capabilities["retry_count"] == 2
         assert capabilities["protocol_priority"] == ["https", "http"]
+        assert capabilities.get("supports_display_config") is not True  # Pro is not Ultra
+
+    def test_detect_device_capabilities_wiim_ultra_has_display_config(self):
+        """Test WiiM Ultra gets supports_display_config in static capabilities."""
+        device_info = DeviceInfo(uuid="test", model="wiim_ultra", firmware="5.0.1")
+        capabilities = detect_device_capabilities(device_info)
+
+        assert capabilities["is_wiim_device"] is True
+        assert capabilities.get("supports_display_config") is True
 
     def test_detect_device_capabilities_audio_pro_mkii(self):
         """Test detecting capabilities for Audio Pro MkII."""

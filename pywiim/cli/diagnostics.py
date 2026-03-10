@@ -240,6 +240,8 @@ class DeviceDiagnostics:
             ("Audio Output Modes", self._test_audio_output),
             ("Subwoofer", self._test_subwoofer),
             ("12V Trigger", self._test_trigger_out),
+            ("LED Indicator", self._test_led_indicator),
+            ("Display", self._test_display),
             ("PEQ (Advanced EQ)", self._test_peq),
         ]
 
@@ -649,6 +651,25 @@ class DeviceDiagnostics:
         except Exception as err:
             return {"supported": False, "error": str(err)}
 
+    async def _test_led_indicator(self) -> dict[str, Any]:
+        """Test LED indicator (ADR 005; Arylic + WiiM). Read returns on/off or assume on."""
+        try:
+            if not self.client.capabilities.get("supports_led_switch", False):
+                return {"supported": False, "reason": "LED indicator not supported"}
+            state = await self.client.get_led_indicator()
+            return {"supported": True, "state": "on" if state else "off"}
+        except Exception as err:
+            return {"supported": False, "error": str(err)}
+
+    async def _test_display(self) -> dict[str, Any]:
+        """Test display/LCD (WiiM Ultra only)."""
+        try:
+            if not self.client.capabilities.get("supports_display_config", False):
+                return {"supported": False, "reason": "Display not supported (WiiM Ultra only)"}
+            return {"supported": True, "note": "set_display_enabled / set_display_config available"}
+        except Exception as err:
+            return {"supported": False, "error": str(err)}
+
     async def _test_peq(self) -> dict[str, Any]:
         """Test PEQ (Parametric / Advanced EQ) - WiiM LV2 PEQ API."""
         try:
@@ -828,6 +849,24 @@ class DeviceDiagnostics:
                 self.report["trigger_out"] = {"supported": False}
         except Exception:
             self.report["trigger_out"] = {"supported": False}
+
+        # LED Indicator (ADR 005)
+        try:
+            if self.client.capabilities.get("supports_led_switch", False):
+                led_state = await self.client.get_led_indicator()
+                self.report["led_indicator"] = {"supported": True, "state": "on" if led_state else "off"}
+            else:
+                self.report["led_indicator"] = {"supported": False}
+        except Exception:
+            self.report["led_indicator"] = {"supported": False}
+
+        # Display (WiiM Ultra)
+        try:
+            self.report["display"] = {
+                "supported": bool(self.client.capabilities.get("supports_display_config", False)),
+            }
+        except Exception:
+            self.report["display"] = {"supported": False}
 
         # Add PEQ (Advanced EQ) preset list if supported
         try:

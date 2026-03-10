@@ -5057,6 +5057,80 @@ class TestPlayerTriggerOut:
         mock_client.set_trigger_out.assert_called_with(False)
 
 
+class TestPlayerLEDIndicatorAndDisplay:
+    """Test Player LED Indicator and Display methods (ADR 005)."""
+
+    @pytest.mark.asyncio
+    async def test_get_led_indicator_delegates_to_client(self, mock_client):
+        """Test get_led_indicator delegates to client.get_led_indicator."""
+        from pywiim.player import Player
+
+        mock_client.get_led_indicator = AsyncMock(return_value=True)
+        type(mock_client).capabilities = PropertyMock(return_value={})
+        player = Player(mock_client)
+        result = await player.get_led_indicator()
+        assert result is True
+        mock_client.get_led_indicator.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_set_led_indicator_delegates_to_client(self, mock_client):
+        """Test set_led_indicator delegates to client.set_led_switch."""
+        from pywiim.player import Player
+
+        mock_client.set_led_switch = AsyncMock()
+        type(mock_client).capabilities = PropertyMock(return_value={})
+        player = Player(mock_client)
+        await player.set_led_indicator(True)
+        mock_client.set_led_switch.assert_called_once_with(True)
+        await player.set_led_indicator(False)
+        mock_client.set_led_switch.assert_called_with(False)
+
+    @pytest.mark.asyncio
+    async def test_supports_led_indicator_reads_from_capabilities(self, mock_client):
+        """Test supports_led_indicator reads supports_led_switch from capabilities."""
+        from pywiim.player import Player
+
+        type(mock_client).capabilities = PropertyMock(return_value={"supports_led_switch": True})
+        player = Player(mock_client)
+        assert player.supports_led_indicator is True
+
+        type(mock_client).capabilities = PropertyMock(return_value={"supports_led_switch": False})
+        player2 = Player(mock_client)
+        assert player2.supports_led_indicator is False
+
+    @pytest.mark.asyncio
+    async def test_set_display_enabled_delegates_to_client(self, mock_client):
+        """Test set_display_enabled delegates to client.set_display_enabled."""
+        from pywiim.player import Player
+
+        mock_client.set_display_enabled = AsyncMock()
+        type(mock_client).capabilities = PropertyMock(return_value={})
+        player = Player(mock_client)
+        await player.set_display_enabled(True)
+        mock_client.set_display_enabled.assert_called_once_with(True)
+        await player.set_display_enabled(False)
+        mock_client.set_display_enabled.assert_called_with(False)
+
+    @pytest.mark.asyncio
+    async def test_set_display_config_delegates_to_client(self, mock_client):
+        """Test set_display_config delegates to client with kwargs."""
+        from pywiim.player import Player
+
+        mock_client.set_display_config = AsyncMock()
+        type(mock_client).capabilities = PropertyMock(return_value={})
+        player = Player(mock_client)
+        await player.set_display_config(
+            auto_sense_enable=1,
+            default_bright=2,
+            disable=1,
+        )
+        mock_client.set_display_config.assert_called_once_with(
+            auto_sense_enable=1,
+            default_bright=2,
+            disable=1,
+        )
+
+
 class TestPlayerBluetoothOutputs:
     """Test Bluetooth output device handling."""
 
