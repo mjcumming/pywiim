@@ -609,3 +609,76 @@ class TestStateManager:
 
         called_payload = mock_player._state_synchronizer.update_from_upnp.call_args[0][0]
         assert called_payload == {"volume": 0.5, "muted": True}
+
+    @pytest.mark.asyncio
+    async def test_refresh_uses_get_control_device_info_for_upnp_source_profile(self, state_manager, mock_player):
+        """When profile.state_sources.source == 'upnp', refresh polls GetControlDeviceInfo.
+
+        The resulting PlayMode is mapped via MODE_MAP and injected into the HTTP status dict
+        before calling update_from_http, so the source shows up correctly even when the
+        HTTP API returns mode=0 (idle).
+        """
+        mock_status = PlayerStatus(play_state="play", volume=50)
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+
+        # Set up UPnP client with get_control_device_info returning PlayMode=44 (rca)
+        mock_upnp_client = MagicMock()
+        mock_upnp_client.get_volume = AsyncMock(return_value=50)
+        mock_upnp_client.get_mute = AsyncMock(return_value=False)
+        mock_upnp_client.get_control_device_info = AsyncMock(return_value={"PlayMode": "44"})
+        mock_player._upnp_client = mock_upnp_client
+
+        # Set profile with source="upnp"
+        mock_profile = MagicMock()
+        mock_profile.state_sources.source = "upnp"
+        mock_profile.state_sources.volume = "upnp"
+        mock_profile.state_sources.mute = "upnp"
+        mock_player._profile = mock_profile
+
+        mock_player._device_info = DeviceInfo(uuid="test-uuid", name="Turntable")
+
+        with patch.object(mock_player._group_ops, "propagate_metadata_to_slaves", new_callable=MagicMock):
+            await state_manager.refresh(full=False)
+
+        mock_upnp_client.get_control_device_info.assert_called_once()
+        call_kwargs = mock_player._state_synchronizer.update_from_http.call_args[0][0]
+        assert call_kwargs.get("source") == "rca"
+
+    @pytest.mark.asyncio
+    async def test_seed_source_after_profile_on_full_refresh(self, state_manager, mock_player):
+        """On full refresh, _seed_source_after_profile runs after device info is fetched.
+
+        _refresh_core_status() runs before the profile is set, so GetControlDeviceInfo
+        is skipped there. _seed_source_after_profile() re-polls after the profile is
+        known so the source is seeded immediately on startup.
+        """
+        mock_status = PlayerStatus(play_state="play", volume=50)
+        mock_info = DeviceInfo(uuid="test-uuid", name="Turntable")
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        mock_player.client.get_device_info_model = AsyncMock(return_value=mock_info)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+
+        # UPnP client ready
+        mock_upnp_client = MagicMock()
+        mock_upnp_client.get_volume = AsyncMock(return_value=50)
+        mock_upnp_client.get_mute = AsyncMock(return_value=False)
+        mock_upnp_client.get_control_device_info = AsyncMock(return_value={"PlayMode": "44"})
+        mock_player._upnp_client = mock_upnp_client
+
+        # Profile is set BEFORE full refresh (simulating what _refresh_device_info does)
+        mock_profile = MagicMock()
+        mock_profile.state_sources.source = "upnp"
+        mock_profile.state_sources.volume = "upnp"
+        mock_profile.state_sources.mute = "upnp"
+        mock_player._profile = mock_profile
+
+        with patch.object(mock_player._group_ops, "propagate_metadata_to_slaves", new_callable=MagicMock):
+            await state_manager.refresh(full=True)
+
+        # _seed_source_after_profile should have called GetControlDeviceInfo
+        assert mock_upnp_client.get_control_device_info.call_count >= 1
+        # And update_from_http should have been called with source='rca' at some point
+        calls = mock_player._state_synchronizer.update_from_http.call_args_list
+        sources = [c[0][0].get("source") for c in calls if "source" in c[0][0]]
+        assert "rca" in sources, f"Expected 'rca' in source calls: {sources}"

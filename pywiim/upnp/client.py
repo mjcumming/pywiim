@@ -843,6 +843,38 @@ class UpnpClient:
             _LOGGER.warning("GetMute failed for %s: %s", self.host, err)
             raise UpnpError(f"GetMute failed: {err}") from err
 
+    async def get_control_device_info(self) -> dict[str, Any]:
+        """Fetch current device state via GetControlDeviceInfo UPnP action.
+
+        This action is specific to LinkPlay/Audio Pro firmware and returns full
+        device state including PlayMode (current input source), volume, and mute,
+        even when the device is idle. Useful for Audio Pro devices where the HTTP
+        API does not reliably report the current input mode when idle.
+
+        Returns:
+            Dictionary with raw response fields, e.g.:
+            - PlayMode: current input mode (int string, maps via MODE_MAP)
+            - CurrentVolume: current volume level
+            - CurrentMute: current mute state
+
+        Raises:
+            UpnpError: If RenderingControl service is not available or action fails
+        """
+        if not self._rendering_control_service:
+            raise UpnpError("RenderingControl service not available")
+
+        try:
+            result = await self.async_call_action(
+                "rendering_control",
+                "GetControlDeviceInfo",
+                {"InstanceID": 0},
+            )
+            _LOGGER.debug("GetControlDeviceInfo result for %s: %s", self.host, result)
+            return result
+        except Exception as err:
+            _LOGGER.debug("GetControlDeviceInfo failed for %s: %s", self.host, err)
+            raise UpnpError(f"GetControlDeviceInfo failed: {err}") from err
+
     async def get_device_capabilities(self) -> dict[str, Any]:
         """Fetch device capabilities via GetDeviceCapabilities UPnP action.
 

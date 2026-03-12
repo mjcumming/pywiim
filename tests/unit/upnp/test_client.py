@@ -677,3 +677,39 @@ class TestUpnpClient:
         assert "volume" in snapshot
         assert "muted" in snapshot
         assert "available_actions" in snapshot
+
+
+class TestGetControlDeviceInfo:
+    """Tests for UpnpClient.get_control_device_info (Audio Pro-specific action)."""
+
+    @pytest.mark.asyncio
+    async def test_get_control_device_info_success(self):
+        """Returns parsed result dict when RenderingControl service is available."""
+        from pywiim.upnp.client import UpnpClient
+
+        client = UpnpClient("192.168.1.200", "https://192.168.1.200/description.xml", None)
+        client._rendering_control_service = MagicMock()
+        client.async_call_action = AsyncMock(return_value={"PlayMode": "44", "CurrentVolume": "50"})
+
+        result = await client.get_control_device_info()
+
+        client.async_call_action.assert_called_once_with(
+            "rendering_control",
+            "GetControlDeviceInfo",
+            {"InstanceID": 0},
+        )
+        assert result["PlayMode"] == "44"
+        assert result["CurrentVolume"] == "50"
+
+    @pytest.mark.asyncio
+    async def test_get_control_device_info_no_service(self):
+        """Raises UpnpError when RenderingControl service is not available."""
+        from async_upnp_client.exceptions import UpnpError
+
+        from pywiim.upnp.client import UpnpClient
+
+        client = UpnpClient("192.168.1.200", "https://192.168.1.200/description.xml", None)
+        client._rendering_control_service = None
+
+        with pytest.raises(UpnpError, match="RenderingControl service not available"):
+            await client.get_control_device_info()

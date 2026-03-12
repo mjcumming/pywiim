@@ -109,6 +109,7 @@ SOURCE_CAPABILITIES: dict[str, SourceCapability] = {
     "aux": SourceCapability.NONE,
     "hdmi": SourceCapability.NONE,
     "phono": SourceCapability.NONE,  # WiiM Ultra turntable input
+    "rca": SourceCapability.NONE,  # Audio Pro RCA line input (mode 44)
     "line_in_2": SourceCapability.NONE,
     "linein_2": SourceCapability.NONE,
 }

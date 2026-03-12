@@ -94,6 +94,19 @@ DEVICE_CAPABILITIES: dict[str, DeviceInputs] = {
         notes="Arylic/LinkPlay devices: plm_support is documented but may be incomplete. "
         "Common inputs: Line In, Optical, Bluetooth, USB.",
     ),
+    # Audio Pro Devices (confirmed physical inputs from device owners)
+    "link_2_wireless_multiroom_hifi_player": DeviceInputs(
+        inputs=["bluetooth", "optical", "coaxial", "rca"],
+        notes="Audio Pro Link 2: WiFi, Bluetooth, Optical In (TOSLINK), Coaxial In (S/PDIF), RCA analog in",
+    ),
+    "a28_speaker": DeviceInputs(
+        inputs=["bluetooth", "optical", "rca", "hdmi"],
+        notes="Audio Pro A28: WiFi, Bluetooth, Optical In, RCA/Line In, HDMI In",
+    ),
+    "addon_c5_mkii_speaker": DeviceInputs(
+        inputs=["bluetooth", "rca"],
+        notes="Audio Pro ADDON C5 MkII: WiFi, Bluetooth, RCA/Line In",
+    ),
     # Generic LinkPlay device (augment with common inputs)
     "linkplay_generic": DeviceInputs(
         inputs=["bluetooth", "line_in", "optical", "rca"],

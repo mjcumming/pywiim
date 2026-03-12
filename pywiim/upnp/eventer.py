@@ -31,6 +31,19 @@ from .client import UpnpClient
 
 _LOGGER = logging.getLogger(__name__)
 
+# Maps UPnP AVTransport PlaybackStorageMedium values to pywiim source names.
+# Only physical inputs are listed; network sources (SONGLIST-NETWORK, etc.) are
+# left unmapped so HTTP polling continues to own them.
+_PLAYBACK_STORAGE_MEDIUM_MAP: dict[str, str] = {
+    "RCA": "rca",
+    "BLUETOOTH": "bluetooth",
+    "LINE-IN": "line_in",
+    "LINEIN": "line_in",
+    "OPTICAL": "optical",
+    "COAXIAL": "coaxial",
+    "HDMI": "hdmi",
+}
+
 
 def _is_valid_url(url: str | None) -> bool:
     """Validate that a string is a valid HTTP/HTTPS URL.
@@ -397,6 +410,16 @@ class UpnpEventer:
             if "TrackSource" in variables_dict:
                 changes["source"] = variables_dict["TrackSource"]
 
+            # Fallback: use PlaybackStorageMedium when TrackSource is absent or empty.
+            # Physical inputs (RCA, BLUETOOTH, etc.) set PlaybackStorageMedium but leave
+            # TrackSource blank, so this is the only UPnP signal available for them.
+            if not changes.get("source") and "PlaybackStorageMedium" in variables_dict:
+                medium = str(variables_dict["PlaybackStorageMedium"]).upper()
+                mapped = _PLAYBACK_STORAGE_MEDIUM_MAP.get(medium)
+                if mapped:
+                    changes["source"] = mapped
+                    _LOGGER.debug("Source from PlaybackStorageMedium: %s -> %s", medium, mapped)
+
         # Apply diff to state (same as original)
         if changes:
             self.state_manager.apply_diff(changes)
@@ -455,6 +478,7 @@ class UpnpEventer:
 
                 # Parse AVTransport service variables
                 if service_type == "AVTransport":
+                    playback_storage_medium: str | None = None
                     for var in list(instance):
                         # Strip namespace from tag name (e.g., {urn:...}TransportState -> TransportState)
                         var_name = var.tag.split("}")[-1] if "}" in var.tag else var.tag
@@ -504,11 +528,24 @@ class UpnpEventer:
                             changes.update(metadata_changes)
                         elif var_name == "TrackSource":
                             changes["source"] = var_value
+                        elif var_name == "PlaybackStorageMedium":
+                            playback_storage_medium = var_value
                         elif var_name in ("AVTransportURI", "CurrentURI"):
                             # Extract stream URL for potential ICY metadata extraction
                             # Store in changes but don't expose as a property (internal use)
                             changes["_stream_uri"] = var_value
                             _LOGGER.debug("Extracted stream URI from UPnP: %s", var_value[:100] if var_value else None)
+
+                    # Fallback: use PlaybackStorageMedium when TrackSource is absent or empty.
+                    if not changes.get("source") and playback_storage_medium:
+                        mapped = _PLAYBACK_STORAGE_MEDIUM_MAP.get(playback_storage_medium.upper())
+                        if mapped:
+                            changes["source"] = mapped
+                            _LOGGER.debug(
+                                "Source from PlaybackStorageMedium (LastChange): %s -> %s",
+                                playback_storage_medium,
+                                mapped,
+                            )
 
                 # Parse RenderingControl service variables
                 elif service_type == "RenderingControl":
