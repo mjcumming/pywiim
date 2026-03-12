@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from pywiim.device_capabilities import get_device_inputs
 
 

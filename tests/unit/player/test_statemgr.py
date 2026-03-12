@@ -611,9 +611,7 @@ class TestStateManager:
         assert called_payload == {"volume": 0.5, "muted": True}
 
     @pytest.mark.asyncio
-    async def test_refresh_uses_get_control_device_info_for_upnp_source_profile(
-        self, state_manager, mock_player
-    ):
+    async def test_refresh_uses_get_control_device_info_for_upnp_source_profile(self, state_manager, mock_player):
         """When profile.state_sources.source == 'upnp', refresh polls GetControlDeviceInfo.
 
         The resulting PlayMode is mapped via MODE_MAP and injected into the HTTP status dict
@@ -648,9 +646,7 @@ class TestStateManager:
         assert call_kwargs.get("source") == "rca"
 
     @pytest.mark.asyncio
-    async def test_seed_source_after_profile_on_full_refresh(
-        self, state_manager, mock_player
-    ):
+    async def test_seed_source_after_profile_on_full_refresh(self, state_manager, mock_player):
         """On full refresh, _seed_source_after_profile runs after device info is fetched.
 
         _refresh_core_status() runs before the profile is set, so GetControlDeviceInfo

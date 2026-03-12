@@ -56,8 +56,7 @@ class TestAudioProCapabilityDetection:
 
         vendor = detect_vendor(device_info)
         assert vendor == "audio_pro", (
-            f"Expected audio_pro but got {vendor!r}. "
-            f"model={device_info.model!r}, firmware={device_info.firmware!r}"
+            f"Expected audio_pro but got {vendor!r}. " f"model={device_info.model!r}, firmware={device_info.firmware!r}"
         )
 
     async def test_generation_detected_as_mkii(self, audio_pro_client):
@@ -68,10 +67,7 @@ class TestAudioProCapabilityDetection:
         generation = detect_audio_pro_generation(device_info)
         print(f"\n  generation={generation!r}")
 
-        assert generation == "mkii", (
-            f"Expected mkii but got {generation!r}. "
-            f"firmware={device_info.firmware!r}"
-        )
+        assert generation == "mkii", f"Expected mkii but got {generation!r}. " f"firmware={device_info.firmware!r}"
 
     async def test_profile_is_audio_pro_mkii(self, audio_pro_player):
         """Player profile must be audio_pro_mkii after initialization."""
@@ -86,9 +82,9 @@ class TestAudioProCapabilityDetection:
         """MkII profile must prefer UPnP for source (HTTP returns mode=0 when idle)."""
         player = audio_pro_player
         assert player._profile is not None
-        assert player._profile.state_sources.source == "upnp", (
-            f"Expected source='upnp', got {player._profile.state_sources.source!r}"
-        )
+        assert (
+            player._profile.state_sources.source == "upnp"
+        ), f"Expected source='upnp', got {player._profile.state_sources.source!r}"
 
 
 @pytest.mark.integration
@@ -124,8 +120,7 @@ class TestAudioProUPnPGetControlDeviceInfo:
                 mapped = MODE_MAP.get(play_mode)
                 print(f"  mapped source={mapped!r}")
                 assert mapped is not None, (
-                    f"PlayMode {play_mode!r} not in MODE_MAP. "
-                    f"Need to add it to pywiim/api/constants.py"
+                    f"PlayMode {play_mode!r} not in MODE_MAP. " f"Need to add it to pywiim/api/constants.py"
                 )
         finally:
             await upnp_client.close()
@@ -160,6 +155,5 @@ class TestAudioProSourceDetection:
         if source is None:
             pytest.skip("Device is in standby; switch to RCA input and retry")
         assert source == "rca", (
-            f"Expected source='rca' (RCA input), got {source!r}. "
-            "Make sure the device is set to RCA input."
+            f"Expected source='rca' (RCA input), got {source!r}. " "Make sure the device is set to RCA input."
         )
