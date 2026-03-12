@@ -78,7 +78,7 @@ class DeviceProfile:
 |---------|---------------------|
 | `PROFILE_WIIM` | HTTP for all state, standard ports, alarms/sleep timer supported |
 | `PROFILE_ARYLIC` | HTTP for all state, Arylic loop mode scheme, EQ read-only |
-| `PROFILE_AUDIO_PRO_MKII` | **UPnP for play_state/volume/mute**, mTLS required, port 4443 |
+| `PROFILE_AUDIO_PRO_MKII` | **UPnP for play_state/volume/mute/source** (HTTP returns mode=0 when idle), mTLS required, port 4443 |
 | `PROFILE_AUDIO_PRO_W_GENERATION` | HTTP for all state, HTTPS preferred |
 | `PROFILE_AUDIO_PRO_ORIGINAL` | HTTP for all state, WiFi Direct for grouping |
 | `PROFILE_LINKPLAY_GENERIC` | Conservative defaults |

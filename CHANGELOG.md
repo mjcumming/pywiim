@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.96] - 2026-03-12
+
+### Added
+- **Audio Pro RCA input and Link 2 source detection** (PR [#15](https://github.com/mjcumming/pywiim/pull/15)) - Audio Pro devices with non-standard model strings (e.g. Link 2: "LINK 2 Wireless multiroom HiFi player") were misidentified as `linkplay_generic` and showed `source=unknown` because HTTP `getStatusEx` returns `mode=0` when idle. Fixes: (1) **RCA input**: mode 44 → `"rca"` in MODE_MAP, SOURCE_CAPABILITIES, and UPnP PlaybackStorageMedium fallback for physical inputs (RCA, BLUETOOTH, LINE-IN, OPTICAL, COAXIAL, HDMI). (2) **Vendor/generation fallback**: firmware prefix `audiopro_` → `audio_pro` vendor; regex-based firmware version matching (1.56–1.60 → MkII, 2.0–2.3 → W-generation) avoids false positives. (3) **MkII source via UPnP**: `PROFILE_AUDIO_PRO_MKII` now uses `state_sources.source = "upnp"`; new `UpnpClient.get_control_device_info()` (RenderingControl:GetControlDeviceInfo) provides PlayMode when idle; statemgr polls it when profile prefers UPnP for source (gated when HTTP already has valid source). (4) **Device capability database**: confirmed physical inputs for Link 2, A28, ADDON C5 MkII. Vendor/generation detection consolidated in `profiles.py`; `capabilities` re-exports for existing API. Thanks to [dantheman2865](https://github.com/dantheman2865) for the contribution.
+
+### Documentation
+- **Merge verification checklist** - `docs/MERGE_VERIFICATION.md` documents steps to fetch a PR branch, run CI locally, and optionally run integration tests before merging.
+- **DEVICE_PROFILES.md** - Audio Pro MkII profile now documents UPnP for `source` (in addition to play_state/volume/mute) when HTTP returns mode=0 idle.
+
 ## [2.1.95] - 2026-03-10
 
 ### Added
