@@ -94,6 +94,18 @@ class TestEQAPIPresets:
         assert "Bass Reducer" in call_args[0]
 
     @pytest.mark.asyncio
+    async def test_set_eq_preset_dynamic_device_label(self, mock_client):
+        """Test setting a device-reported preset outside the fixed built-in map."""
+        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+
+        await mock_client.set_eq_preset("vocal booster", available_presets=["Flat", "Vocal Booster", "Custom 1"])
+
+        mock_client._request.assert_called_once()
+        call_args = mock_client._request.call_args[0]
+        assert "/httpapi.asp?command=EQLoad:" in call_args[0]
+        assert "Vocal Booster" in call_args[0]
+
+    @pytest.mark.asyncio
     async def test_get_eq_presets(self, mock_client):
         """Test getting EQ presets list."""
         mock_presets = ["flat", "rock", "pop", "jazz", "classical"]

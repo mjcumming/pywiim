@@ -33,7 +33,7 @@ class EQAPI:
     # Preset handling
     # ------------------------------------------------------------------
 
-    def _normalize_eq_preset_name(self, preset: str) -> str:
+    def _normalize_eq_preset_name(self, preset: str, available_presets: list[str] | None = None) -> str:
         """Normalize EQ preset name to match EQ_PRESET_MAP keys.
 
         Handles variations like:
@@ -47,11 +47,14 @@ class EQAPI:
             preset: Preset name (may contain spaces, hyphens, underscores, or typos).
 
         Returns:
-            Normalized preset name matching a key in EQ_PRESET_MAP.
+            Normalized preset name matching a key in EQ_PRESET_MAP, or an exact
+            device-reported preset label when matched via ``available_presets``.
 
         Raises:
             ValueError: If preset name cannot be normalized to a valid preset.
         """
+        preset = preset.strip()
+
         # Try direct lookup first (fast path for already-normalized names)
         if preset in EQ_PRESET_MAP:
             return preset
@@ -94,24 +97,38 @@ class EQAPI:
             if normalized_input == key.lower().replace(" ", "").replace("-", "").replace("_", ""):
                 return key
 
+        # Try matching against device-reported presets if available. This supports
+        # newer firmware exposing labels outside the fixed built-in map and
+        # user-defined custom EQ presets.
+        if available_presets:
+            for available_preset in available_presets:
+                if not available_preset or available_preset.lower() == "off":
+                    continue
+                available_normalized = available_preset.lower().replace(" ", "").replace("-", "").replace("_", "")
+                if normalized_input == available_normalized:
+                    return available_preset
+
         # If we get here, we couldn't normalize it
         raise ValueError(f"Invalid EQ preset: {preset}. Valid presets: {', '.join(sorted(EQ_PRESET_MAP.keys()))}")
 
-    async def set_eq_preset(self, preset: str) -> None:
+    async def set_eq_preset(self, preset: str, available_presets: list[str] | None = None) -> None:
         """Apply a named EQ preset (e.g. "rock", "flat", "bass reducer").
 
         Args:
             preset: Preset name. Can be a key from EQ_PRESET_MAP (e.g., "bassreducer"),
-                   a display name (e.g., "Bass Reducer"), or a variation with spaces/hyphens
-                   (e.g., "bass reducer", "bass-reducer", "base reducer").
+                   a display name (e.g., "Bass Reducer"), a variation with spaces/hyphens
+                   (e.g., "bass reducer", "bass-reducer", "base reducer"), or a
+                   device-reported preset label when ``available_presets`` is supplied.
+            available_presets: Optional device-reported preset labels to support
+                   dynamic/custom presets not present in the fixed built-in map.
 
         Raises:
             ValueError: If preset name is invalid.
             WiiMError: If the request fails.
         """
-        # Normalize preset name to match EQ_PRESET_MAP key
-        normalized_preset = self._normalize_eq_preset_name(preset)
-        api_value = EQ_PRESET_MAP[normalized_preset]  # convert key → label
+        # Normalize preset name to match EQ_PRESET_MAP key or a device-reported label.
+        normalized_preset = self._normalize_eq_preset_name(preset, available_presets=available_presets)
+        api_value = EQ_PRESET_MAP.get(normalized_preset, normalized_preset)
         await self._request(f"{API_ENDPOINT_EQ_PRESET}{api_value}")  # type: ignore[attr-defined]
 
     async def get_eq_presets(self) -> list[str]:

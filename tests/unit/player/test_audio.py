@@ -325,12 +325,28 @@ class TestAudioConfiguration:
         """Test setting EQ preset."""
         mock_player.client.set_eq_preset = AsyncMock()
         mock_player._on_state_changed = MagicMock()
+        mock_player._eq_presets = ["Flat", "Rock"]
 
         await audio_config.set_eq_preset("rock")
 
-        mock_player.client.set_eq_preset.assert_called_once_with("rock")
+        mock_player.client.set_eq_preset.assert_called_once_with("rock", available_presets=["Flat", "Rock"])
         assert mock_player._status_model.eq_preset == "rock"
         mock_player._on_state_changed.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_set_eq_preset_dynamic_device_label(self, audio_config, mock_player):
+        """Test setting device-reported presets outside the built-in map."""
+        mock_player.client.set_eq_preset = AsyncMock()
+        mock_player._on_state_changed = MagicMock()
+        mock_player._eq_presets = ["Flat", "Vocal Booster", "My Movie Night"]
+
+        await audio_config.set_eq_preset("vocal booster")
+
+        mock_player.client.set_eq_preset.assert_called_once_with(
+            "vocal booster",
+            available_presets=["Flat", "Vocal Booster", "My Movie Night"],
+        )
+        assert mock_player._status_model.eq_preset == "Vocal Booster"
 
     @pytest.mark.asyncio
     async def test_set_eq_custom(self, audio_config, mock_player):
@@ -787,7 +803,7 @@ class TestEQOffBehavior:
 
         # Should enable EQ first, then set preset
         mock_player.client.set_eq_enabled.assert_called_once_with(True)
-        mock_player.client.set_eq_preset.assert_called_once_with("rock")
+        mock_player.client.set_eq_preset.assert_called_once_with("rock", available_presets=None)
         assert mock_player._eq_enabled is True
 
     @pytest.mark.asyncio
@@ -803,7 +819,7 @@ class TestEQOffBehavior:
 
         # Should NOT call set_eq_enabled since EQ is already on
         mock_player.client.set_eq_enabled.assert_not_called()
-        mock_player.client.set_eq_preset.assert_called_once_with("rock")
+        mock_player.client.set_eq_preset.assert_called_once_with("rock", available_presets=None)
 
     @pytest.mark.asyncio
     async def test_set_eq_enabled_updates_cached_state(self, audio_config, mock_player):

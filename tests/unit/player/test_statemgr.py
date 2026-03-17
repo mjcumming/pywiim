@@ -3,6 +3,7 @@
 Tests state management, refresh, UPnP integration, and state synchronization.
 """
 
+import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
@@ -43,6 +44,8 @@ class TestStateManager:
             if not hasattr(PlayerClass, f"_original_{prop_name}_property"):
                 setattr(PlayerClass, f"_original_{prop_name}_property", getattr(PlayerClass, prop_name, None))
             setattr(PlayerClass, prop_name, PropertyMock(return_value=None if prop_name != "is_muted" else False))
+        player._ensure_upnp_client = AsyncMock(return_value=False)
+        player._last_upnp_attempt = time.time()
         return player
 
     @pytest.fixture
@@ -50,7 +53,29 @@ class TestStateManager:
         """Create a StateManager instance."""
         from pywiim.player.statemgr import StateManager
 
-        return StateManager(mock_player)
+        manager = StateManager(mock_player)
+        yield manager
+
+        pending_tasks = []
+
+        if manager._play_state_debouncer:
+            manager._play_state_debouncer.cancel_pending()
+            if manager._play_state_debouncer._pending_task is not None:
+                pending_tasks.append(manager._play_state_debouncer._pending_task)
+
+        coverart_task = getattr(mock_player._coverart_mgr, "_artwork_fetch_task", None)
+        if coverart_task and not coverart_task.done():
+            coverart_task.cancel()
+            pending_tasks.append(coverart_task)
+
+        enrichment_task = getattr(manager._stream_enricher, "_enrichment_task", None)
+        if enrichment_task and not enrichment_task.done():
+            enrichment_task.cancel()
+            pending_tasks.append(enrichment_task)
+
+        if pending_tasks:
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(asyncio.gather(*pending_tasks, return_exceptions=True))
 
     @staticmethod
     def _setup_refresh_mocks(mock_player, state_manager):

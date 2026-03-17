@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.97] - 2026-03-17
+
+### Fixed
+- **Dynamic EQ preset selection** - `set_eq_preset()` now resolves preset names against the device's current `eq_presets` list before falling back to the built-in preset map. This allows newer firmware labels such as "Vocal Booster" and user-defined custom preset names to be selected successfully from integrations while preserving existing built-in alias handling.
+
 ## [2.1.96] - 2026-03-12
 
 ### Added
@@ -2678,4 +2683,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.0.6]: https://github.com/mjcumming/pywiim/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/mjcumming/pywiim/compare/v1.0.0...v1.0.5
 [1.0.0]: https://github.com/mjcumming/pywiim/releases/tag/v1.0.0
-

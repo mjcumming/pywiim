@@ -371,8 +371,12 @@ class AudioConfiguration:
             await self.set_eq_enabled(False)
             return
 
-        # Normalize preset name using client's normalization (handles any case)
-        normalized_preset = self.player.client._normalize_eq_preset_name(preset)
+        # Resolve against cached device presets first so dynamic/custom labels work.
+        available_presets = [item for item in self.player.eq_presets if item and item != "Off"]
+        normalized_preset = self.player.client._normalize_eq_preset_name(
+            preset,
+            available_presets=available_presets or None,
+        )
 
         # Ensure EQ is enabled before setting a preset
         # (user may be switching from "Off" to a preset)
@@ -381,7 +385,10 @@ class AudioConfiguration:
             self.player._eq_enabled = True
 
         # Call API (raises on failure)
-        await self.player.client.set_eq_preset(preset)
+        await self.player.client.set_eq_preset(
+            preset,
+            available_presets=available_presets or None,
+        )
 
         # Update cached state immediately (optimistic) with normalized preset
         if self.player._status_model:
