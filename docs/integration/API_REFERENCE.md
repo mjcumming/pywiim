@@ -810,9 +810,9 @@ await player.set_led_brightness(brightness: int)  # 0-100
 # LED Indicator (ADR 005; Arylic + WiiM) – preferred for on/off switch
 on_off = await player.get_led_indicator()  # bool; assumes on if device has no read API
 await player.set_led_indicator(enabled: bool)     # uses LED_SWITCH_SET
-# Display (WiiM Ultra only; screen on/off and brightness – not the status LED)
-await player.set_display_enabled(enabled: bool)
-await player.set_display_config(auto_sense_enable=0, default_bright=1, disable=0)  # disable: 0=on, 1=off
+# Display (WiiM Ultra only; setLightOperationBrightConfig JSON – not LED_SWITCH_SET / setLED)
+await player.set_display_enabled(enabled: bool, default_bright: int | None = None)  # on: uses full brightness by default (1–100 scale; 1=min)
+await player.set_display_config(auto_sense_enable=0, default_bright=100, disable=0)  # disable: 0=on, 1=off; see DISPLAY_* in pywiim.api.constants
 
 # Audio settings
 await player.set_channel_balance(balance: float)  # -1.0 to 1.0

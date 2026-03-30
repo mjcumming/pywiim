@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
 
+from ..api.constants import DISPLAY_DEFAULT_BRIGHTNESS
 from ..api.subwoofer import SubwooferStatus
 from ..client import WiiMClient
 from ..models import DeviceInfo, PlayerStatus
@@ -499,15 +500,20 @@ class Player(PlayerBase):
 
     # === Display (WiiM Ultra; ADR 005) ===
 
-    async def set_display_enabled(self, enabled: bool) -> None:
-        """Turn display/LCD on or off (WiiM Ultra only)."""
-        await self.client.set_display_enabled(enabled)
+    async def set_display_enabled(self, enabled: bool, *, default_bright: int | None = None) -> None:
+        """Turn display/LCD on or off (WiiM Ultra only).
+
+        The LCD uses ``setLightOperationBrightConfig`` (brightness + on/off), not the
+        LED indicator API. When turning on, optional ``default_bright`` overrides
+        the library default (full brightness on a 1–100 scale).
+        """
+        await self.client.set_display_enabled(enabled, default_bright=default_bright)
 
     async def set_display_config(
         self,
         *,
         auto_sense_enable: int = 0,
-        default_bright: int = 1,
+        default_bright: int = DISPLAY_DEFAULT_BRIGHTNESS,
         disable: int = 0,
     ) -> None:
         """Set display/LCD config (WiiM Ultra only). disable: 0=on, 1=off."""

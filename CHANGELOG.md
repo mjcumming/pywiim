@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.98] - 2026-03-30
+
+### Fixed
+- **WiiM Ultra display brightness when turning screen on** ([mjcumming/wiim#213](https://github.com/mjcumming/wiim/issues/213)) - `setLightOperationBrightConfig` always includes `default_bright`; `set_display_enabled(True)` previously sent `default_bright: 1` (minimum). Default is now `DISPLAY_DEFAULT_BRIGHTNESS` (100 on a 1–100 scale). Added `DISPLAY_BRIGHTNESS_MIN`, `DISPLAY_BRIGHTNESS_MAX`, and `DISPLAY_DEFAULT_BRIGHTNESS` in `pywiim.api.constants`. Optional keyword `default_bright` on `set_display_enabled(..., *, default_bright=...)`.
+
+### Changed
+- **`set_display_config` default brightness** - Default `default_bright` is `DISPLAY_DEFAULT_BRIGHTNESS` instead of `1`.
+
+### Documentation
+- **API_REFERENCE / HA_INTEGRATION** - Clarify LCD (`setLightOperationBrightConfig`) vs LED indicator APIs; document optional display brightness when turning on.
+
 ## [2.1.97] - 2026-03-17
 
 ### Fixed

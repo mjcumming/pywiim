@@ -2206,16 +2206,17 @@ await player.client.set_led_switch(True)  # same as set_led_indicator
 
 ### Display (WiiM Ultra)
 
-WiiM Ultra has an LCD screen. Control it via the player:
+WiiM Ultra has an LCD controlled by **`setLightOperationBrightConfig`** (brightness + on/off in one JSON payload). That is **not** the same command family as the **LED indicator** (`LED_SWITCH_SET` / `set_led_indicator`).
 
 ```python
 if player.supports_display_config:
-    await player.set_display_enabled(True)   # screen on
+    await player.set_display_enabled(True)   # screen on at default brightness (100 on a 1–100 scale)
+    await player.set_display_enabled(True, default_bright=50)  # optional level when turning on
     await player.set_display_enabled(False)  # screen off
-    await player.set_display_config(auto_sense_enable=0, default_bright=1, disable=0)  # disable: 0=on, 1=off
+    await player.set_display_config(auto_sense_enable=0, default_bright=100, disable=0)  # full control; disable: 0=on, 1=off
 ```
 
-No getter: display state is not in device status; track it in the integration if needed.
+Constants: `DISPLAY_BRIGHTNESS_MIN`, `DISPLAY_BRIGHTNESS_MAX`, `DISPLAY_DEFAULT_BRIGHTNESS` in `pywiim.api.constants`. No getter: display state is not in device status; track it in the integration if needed.
 
 ### Home Assistant: "does not report a color mode"
 

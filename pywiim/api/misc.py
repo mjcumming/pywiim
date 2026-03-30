@@ -26,6 +26,7 @@ from .constants import (
     API_ENDPOINT_SET_LED,
     API_ENDPOINT_TRIGGER_OUT_SET,
     API_ENDPOINT_TRIGGER_OUT_STATUS,
+    DISPLAY_DEFAULT_BRIGHTNESS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -204,18 +205,18 @@ class MiscAPI:
         self,
         *,
         auto_sense_enable: int = 0,
-        default_bright: int = 1,
+        default_bright: int = DISPLAY_DEFAULT_BRIGHTNESS,
         disable: int = 0,
     ) -> None:
         """Set display/LCD config (WiiM Ultra only).
 
-        Controls the LCD screen on/off and brightness. This is separate from
-        the status LED (set_led / set_led_brightness) and Status Light
-        (set_led_switch).
+        Controls the LCD via ``setLightOperationBrightConfig`` (one JSON payload).
+        This is **not** the status LED: use ``set_led_switch`` / ``set_led`` for that.
 
         Args:
             auto_sense_enable: 1 to enable auto brightness, 0 to disable.
-            default_bright: Default brightness level (integer; device-specific scale).
+            default_bright: Brightness level (WiiM Ultra uses a 1–100 style scale;
+                1 is minimum — see ``DISPLAY_BRIGHTNESS_*`` in ``constants``).
             disable: 0 = screen on, 1 = screen off.
 
         Raises:
@@ -229,17 +230,23 @@ class MiscAPI:
         encoded = quote(json.dumps(payload, separators=(",", ":")), safe="")
         await self._request(f"{API_ENDPOINT_DISPLAY_CONFIG}{encoded}")  # type: ignore[attr-defined]
 
-    async def set_display_enabled(self, enabled: bool) -> None:
+    async def set_display_enabled(self, enabled: bool, *, default_bright: int | None = None) -> None:
         """Turn the display/LCD on or off (WiiM Ultra only).
 
-        Convenience wrapper around set_display_config(disable=...).
-        Leaves auto_sense_enable and default_bright unchanged by using
-        typical defaults when turning on.
+        The device API always sends ``default_bright`` in the same command as
+        ``disable``; this wrapper uses :data:`DISPLAY_DEFAULT_BRIGHTNESS` when
+        turning **on** so the screen is not left at level 1 (minimum).
 
         Args:
             enabled: True to turn screen on, False to turn off.
+            default_bright: When turning on, optional brightness (1–100). If omitted,
+                uses ``DISPLAY_DEFAULT_BRIGHTNESS``. Ignored when ``enabled`` is False.
         """
-        await self.set_display_config(disable=0 if enabled else 1)
+        if enabled:
+            bright = default_bright if default_bright is not None else DISPLAY_DEFAULT_BRIGHTNESS
+            await self.set_display_config(disable=0, default_bright=bright)
+        else:
+            await self.set_display_config(disable=1)
 
     # ------------------------------------------------------------------
     # Status and information helpers

@@ -159,19 +159,55 @@ class TestMiscAPI:
 
     @pytest.mark.asyncio
     async def test_set_display_enabled(self, mock_client):
-        """Test set_display_enabled calls set_display_config with correct disable value."""
+        """Test set_display_enabled sends full JSON; on uses max default brightness."""
+        from pywiim.api.constants import (
+            API_ENDPOINT_DISPLAY_CONFIG,
+            DISPLAY_DEFAULT_BRIGHTNESS,
+        )
         from pywiim.api.misc import MiscAPI
 
-        calls = []
+        requests = []
 
         class TestClient(MiscAPI):
-            async def set_display_config(self, *, auto_sense_enable=0, default_bright=1, disable=0):
-                calls.append({"disable": disable})
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                return ApiResponse(parsed="OK", raw=None)
 
         client = TestClient()
         await client.set_display_enabled(True)
         await client.set_display_enabled(False)
-        assert calls == [{"disable": 0}, {"disable": 1}]
+        assert len(requests) == 2
+        on_payload = json.loads(unquote(requests[0][len(API_ENDPOINT_DISPLAY_CONFIG) :]))
+        off_payload = json.loads(unquote(requests[1][len(API_ENDPOINT_DISPLAY_CONFIG) :]))
+        assert on_payload == {
+            "auto_sense_enable": 0,
+            "default_bright": DISPLAY_DEFAULT_BRIGHTNESS,
+            "disable": 0,
+        }
+        assert off_payload == {
+            "auto_sense_enable": 0,
+            "default_bright": DISPLAY_DEFAULT_BRIGHTNESS,
+            "disable": 1,
+        }
+
+    @pytest.mark.asyncio
+    async def test_set_display_enabled_custom_brightness(self, mock_client):
+        """Test set_display_enabled(True, default_bright=...) overrides default."""
+        from pywiim.api.constants import API_ENDPOINT_DISPLAY_CONFIG
+        from pywiim.api.misc import MiscAPI
+
+        requests = []
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                return ApiResponse(parsed="OK", raw=None)
+
+        client = TestClient()
+        await client.set_display_enabled(True, default_bright=42)
+        payload = json.loads(unquote(requests[0][len(API_ENDPOINT_DISPLAY_CONFIG) :]))
+        assert payload["default_bright"] == 42
+        assert payload["disable"] == 0
 
     @pytest.mark.asyncio
     async def test_get_device_capabilities(self, mock_client):

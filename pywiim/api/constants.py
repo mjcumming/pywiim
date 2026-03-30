@@ -389,7 +389,12 @@ API_ENDPOINT_SET_LED = "/httpapi.asp?command=LED_SWITCH_SET:"
 API_ENDPOINT_GET_LED_MCU = "/httpapi.asp?command=getMCUASCIICmd:LED"
 API_ENDPOINT_SET_BUTTONS = "/httpapi.asp?command=Button_Enable_SET:"
 # WiiM Ultra display/LCD (setLightOperationBrightConfig) - screen on/off and brightness
+# Single JSON command (not the same as LED_SWITCH_SET / setLED). Payload always includes
+# default_bright; 1 is minimum on-device (see mjcumming/wiim#213).
 API_ENDPOINT_DISPLAY_CONFIG = "/httpapi.asp?command=setLightOperationBrightConfig:"
+DISPLAY_BRIGHTNESS_MIN = 1
+DISPLAY_BRIGHTNESS_MAX = 100
+DISPLAY_DEFAULT_BRIGHTNESS = 100
 
 # Bluetooth endpoints
 API_ENDPOINT_START_BT_DISCOVERY = "/httpapi.asp?command=startbtdiscovery:"
@@ -646,6 +651,9 @@ __all__ = [
     "API_ENDPOINT_ARYLIC_LED",
     "API_ENDPOINT_ARYLIC_LED_BRIGHTNESS",
     "API_ENDPOINT_DISPLAY_CONFIG",
+    "DISPLAY_BRIGHTNESS_MIN",
+    "DISPLAY_BRIGHTNESS_MAX",
+    "DISPLAY_DEFAULT_BRIGHTNESS",
     "API_ENDPOINT_SET_ALARM",
     "API_ENDPOINT_GET_ALARM",
     "API_ENDPOINT_ALARM_STOP",
