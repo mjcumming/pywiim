@@ -934,6 +934,24 @@ class FeatureTester:
                 self.results["failed"].append(f"audio_settings: Error - {str(e)}")
                 print(f"   ✗ Error: {e}")
 
+    async def test_channel_balance(self) -> None:
+        """Test stereo channel balance (read-only; WiiM capability-gated)."""
+        print("\n⚖️  Testing Channel Balance...")
+
+        if not self.client.capabilities.get("supports_channel_balance", False):
+            self.results["skipped"].append("channel_balance: Not supported")
+            print("   ⊘ Channel balance not supported (non-WiiM or firmware)")
+            return
+
+        try:
+            balance = await self.client.get_channel_balance()
+            self.results["passed"].append("channel_balance: get_channel_balance")
+            print(f"   ✓ get_channel_balance: {balance} (-1=left … +1=right)")
+            self._print_data("Channel balance", {"balance": balance}, show_always=True)
+        except Exception as e:
+            self.results["failed"].append(f"channel_balance: Error - {str(e)}")
+            print(f"   ✗ Error: {e}")
+
     async def test_lms_controls(self) -> None:
         """Test LMS/Squeezelite controls."""
         print("\n🎵 Testing LMS Integration...")
@@ -1158,6 +1176,7 @@ class FeatureTester:
         await self.test_multiroom_controls()
         await self.test_bluetooth_controls()
         await self.test_audio_settings()
+        await self.test_channel_balance()
         await self.test_lms_controls()
         await self.test_subwoofer_controls()
         await self.test_trigger_out()

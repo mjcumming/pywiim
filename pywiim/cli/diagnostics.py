@@ -235,6 +235,7 @@ class DeviceDiagnostics:
             ("Multiroom", self._test_multiroom),
             ("Bluetooth", self._test_bluetooth),
             ("Audio Settings", self._test_audio_settings),
+            ("Channel Balance", self._test_channel_balance),
             ("LMS Integration", self._test_lms),
             ("Source Selection", self._test_sources),
             ("Audio Output Modes", self._test_audio_output),
@@ -347,6 +348,10 @@ class DeviceDiagnostics:
                     if max_slots > 0 and preset_count < max_slots:
                         print(f"      Available slots: {max_slots - preset_count}")
 
+                # Channel balance (stereo L/R)
+                if name == "Channel Balance" and result.get("supported"):
+                    print(f"      Current balance: {result.get('balance', 'Unknown')} (-1=left … +1=right)")
+
                 # Special handling for Subwoofer to show settings
                 if name == "Subwoofer" and result.get("supported"):
                     print(f"      Enabled: {result.get('enabled', 'Unknown')}")
@@ -457,6 +462,18 @@ class DeviceDiagnostics:
             }
         except WiiMError:
             return {"supported": False}
+
+    async def _test_channel_balance(self) -> dict[str, Any]:
+        """Stereo channel balance (WiiM getChannelBalance / setChannelBalance); gated by capability probe."""
+        if not self.client.capabilities.get("supports_channel_balance", False):
+            return {"supported": False, "reason": "Not supported (non-WiiM or firmware)"}
+        try:
+            balance = await self.client.get_channel_balance()
+            return {"supported": True, "balance": balance}
+        except WiiMError:
+            return {"supported": False, "reason": "getChannelBalance failed"}
+        except Exception as err:
+            return {"supported": False, "error": str(err)}
 
     async def _test_lms(self) -> dict[str, Any]:
         """Test LMS integration."""
@@ -805,6 +822,18 @@ class DeviceDiagnostics:
                 self.report["eq"] = None
         except Exception:
             self.report["eq"] = None
+
+        # Channel balance (WiiM; capability-gated)
+        try:
+            if self.client.capabilities.get("supports_channel_balance", False):
+                self.report["channel_balance"] = {
+                    "supported": True,
+                    "balance": await self.client.get_channel_balance(),
+                }
+            else:
+                self.report["channel_balance"] = {"supported": False}
+        except Exception:
+            self.report["channel_balance"] = {"supported": False}
 
         # Add audio output status
         try:

@@ -434,6 +434,8 @@ if player.repeat_supported:
 # Raises WiiMError for external sources (AirPlay, Bluetooth, etc.)
 await player.set_led(True)
 await player.set_led_brightness(50)
+await player.get_channel_balance()  # None if unsupported; updates cache / callback if changed
+# player.channel_balance — cached -1.0…1.0 (also updated on refresh() when supports_channel_balance)
 await player.set_channel_balance(0.0)
 await player.sync_time()
 

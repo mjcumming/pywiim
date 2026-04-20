@@ -378,6 +378,25 @@ class Player(PlayerBase):
         """Set LED indicator on or off (LED_SWITCH_SET)."""
         await self.client.set_led_switch(enabled)
 
+    async def get_channel_balance(self) -> float | None:
+        """Read stereo channel balance from the device and refresh the player cache.
+
+        Uses HTTP ``getChannelBalance`` when ``supports_channel_balance`` is true.
+        There is no UPnP event for balance; integrations should rely on this call,
+        periodic refresh during ``refresh()``, or optimistic updates after ``set_channel_balance``.
+
+        Returns:
+            Cached balance -1.0 (left) to 1.0 (right), or None if unsupported or unreadable.
+        """
+        if not self.supports_channel_balance:
+            return None
+        bal = await self._audio_config.get_channel_balance()
+        if bal != self._channel_balance:
+            self._channel_balance = bal
+            if self._on_state_changed:
+                self._on_state_changed()
+        return self._channel_balance
+
     async def set_channel_balance(self, balance: float) -> None:
         """Set channel balance (left/right stereo balance)."""
         await self._audio_config.set_channel_balance(balance)
@@ -851,6 +870,15 @@ class Player(PlayerBase):
         return self._properties.is_muted
 
     @property
+    def channel_balance(self) -> float | None:
+        """Cached stereo channel balance (-1.0 left … 1.0 right), or None if unknown.
+
+        Updated by ``get_channel_balance()``, ``set_channel_balance()``, and periodic ``refresh()``
+        when the device supports channel balance.
+        """
+        return self._properties.channel_balance
+
+    @property
     def play_state(self) -> str | None:
         """Current playback state from cached status."""
         return self._properties.play_state
@@ -1245,6 +1273,11 @@ class Player(PlayerBase):
     def supports_eq(self) -> bool:
         """Whether EQ control is supported."""
         return self._properties.supports_eq
+
+    @property
+    def supports_channel_balance(self) -> bool:
+        """Whether stereo channel balance is supported (WiiM devices; probed at connect)."""
+        return self._properties.supports_channel_balance
 
     @property
     def supports_presets(self) -> bool:

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 
+from pywiim.api.base import ApiResponse
 from pywiim.models import PlayerStatus
 
 
@@ -309,10 +310,45 @@ class TestAudioConfiguration:
     async def test_set_channel_balance(self, audio_config, mock_player):
         """Test setting channel balance."""
         mock_player.client.set_channel_balance = AsyncMock()
+        mock_player._on_state_changed = MagicMock()
 
         await audio_config.set_channel_balance(0.5)
 
         mock_player.client.set_channel_balance.assert_called_once_with(0.5)
+        assert mock_player._channel_balance == 0.5
+        mock_player._on_state_changed.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_channel_balance_not_supported(self, audio_config, mock_player):
+        """When capability is false, get_channel_balance does not HTTP."""
+        mock_player.client._capabilities = {"supports_channel_balance": False}
+        mock_player.client._request = AsyncMock()
+
+        result = await audio_config.get_channel_balance()
+
+        assert result is None
+        mock_player.client._request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_channel_balance_success(self, audio_config, mock_player):
+        """Read balance parses numeric JSON from getChannelBalance."""
+        mock_player.client._capabilities = {"supports_channel_balance": True}
+        mock_player.client._request = AsyncMock(return_value=ApiResponse(parsed=-0.25, raw=None))
+
+        result = await audio_config.get_channel_balance()
+
+        assert result == -0.25
+        mock_player.client._request.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_channel_balance_unknown_command(self, audio_config, mock_player):
+        """Non-numeric body returns None."""
+        mock_player.client._capabilities = {"supports_channel_balance": True}
+        mock_player.client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="unknown command"))
+
+        result = await audio_config.get_channel_balance()
+
+        assert result is None
 
     @pytest.mark.asyncio
     async def test_set_channel_balance_invalid(self, audio_config, mock_player):

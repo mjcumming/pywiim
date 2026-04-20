@@ -341,6 +341,8 @@ class PlayerMonitor:
                 print(f"   Firmware: {device_info_print.firmware}")
                 print(f"   MAC: {device_info_print.mac}")
                 print(f"   Vendor: {self.player.client.capabilities.get('vendor', 'unknown')}")
+                if self.player.client.capabilities.get("supports_channel_balance"):
+                    print("   Channel balance: HTTP get (refreshed with EQ interval in monitor; no UPnP)")
                 print(f"   Role: {self.player.role}")
                 print(f"   pywiim: v{__version__}")
 
@@ -497,7 +499,9 @@ class PlayerMonitor:
                         # Never received any UPnP events - likely not working
                         eq_interval = 5.0
 
-                # Always fetch EQ (not just in TUI mode) - needed for state updates
+                # EQ + stereo channel balance on the same timer: both are HTTP-driven here.
+                # Channel balance has no UPnP path — refresh periodically so the monitor stays
+                # accurate when UPnP events are absent (e.g. some dev environments).
                 if (now - self.last_eq_check) > eq_interval:
                     if self.player.client.capabilities.get("supports_eq", False):
                         try:
@@ -506,6 +510,11 @@ class PlayerMonitor:
                             # (EQ changes are reflected in status model's eq_preset field)
                         except Exception:
                             pass  # Don't fail if EQ fetch fails
+                    if self.player.client.capabilities.get("supports_channel_balance", False):
+                        try:
+                            await self.player.get_channel_balance()
+                        except Exception:
+                            pass  # Don't fail if balance fetch fails
                     self.last_eq_check = now
 
                 # Audio output status (every 60s, if supported)
@@ -940,6 +949,13 @@ class PlayerMonitor:
                 eq_str = " ".join(f"{b:+2d}" for b in eq_bands[:5])  # First 5 bands
                 audio_settings.append(f"EQ Bands: [{eq_str} ...]")
 
+        if self.player.supports_channel_balance:
+            bal = self.player.channel_balance
+            if bal is not None:
+                audio_settings.append(f"Balance: {bal:+.2f} (L=-1 R=+1)")
+            else:
+                audio_settings.append("Balance: —")
+
         # Audio Output Mode - show current and available
         output_mode = self.player.audio_output_mode
         available_outputs = self.player.available_outputs
@@ -1270,6 +1286,13 @@ class PlayerMonitor:
             status_parts.append(f"Vol: {volume:.0%}{mute_indicator}")
         else:
             status_parts.append("Vol: ?")
+
+        if self.player.supports_channel_balance:
+            bal = self.player.channel_balance
+            if bal is not None:
+                status_parts.append(f"Bal {bal:+.2f}")
+            else:
+                status_parts.append("Bal —")
 
         # Source (capitalize properly)
         source = self.player.source or "none"

@@ -121,6 +121,10 @@ class PlayerBase:
         self._trigger_out_on: bool | None = None  # 12V trigger state (None = unknown)
         self._last_subwoofer_check: float = 0
 
+        # Stereo channel balance (-1.0 … 1.0); WiiM HTTP only, gated by supports_channel_balance
+        self._channel_balance: float | None = None
+        self._last_channel_balance_check: float = 0
+
         # UPnP health tracking (only if UPnP client is provided)
         self._upnp_health_tracker: UpnpHealthTracker | None = None
         if upnp_client is not None:

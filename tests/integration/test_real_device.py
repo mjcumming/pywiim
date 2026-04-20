@@ -51,11 +51,18 @@ class TestRealDeviceCore:
             "is_wiim_device" in real_device_client._capabilities
             or "is_legacy_device" in real_device_client._capabilities
         )
+        assert "supports_channel_balance" in real_device_client._capabilities
+        caps = real_device_client._capabilities
+        if caps.get("is_wiim_device"):
+            assert caps["supports_channel_balance"] in (True, False)
+        else:
+            assert caps["supports_channel_balance"] is False
 
         print("\nCapabilities:")
         print(f"  Vendor: {real_device_client._capabilities.get('vendor')}")
         print(f"  Is WiiM: {real_device_client._capabilities.get('is_wiim_device')}")
         print(f"  Is Legacy: {real_device_client._capabilities.get('is_legacy_device')}")
+        print(f"  Channel balance: {real_device_client._capabilities.get('supports_channel_balance')}")
 
     async def test_player_initialization(self, real_device_player, integration_test_marker):
         """Test Player initialization and basic properties."""

@@ -16,6 +16,10 @@ source .venv/bin/activate
 
 4. **For HTTPS devices**, use port 443 (most modern devices)
 
+## Manual HTTP probes (`curl`)
+
+To hit **`httpapi.asp` directly** from the shell (read-only checks, firmware diffs, research such as [DLNA output #225](https://github.com/mjcumming/wiim/issues/225)), see **[CURL_HTTPAPI.md](CURL_HTTPAPI.md)** — HTTPS, `-k`, and safe starter commands.
+
 ## Quick Start: Unified Test Runner
 
 The **recommended way** to test pywiim is using the unified test runner:

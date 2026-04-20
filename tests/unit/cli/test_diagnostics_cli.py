@@ -93,3 +93,32 @@ async def test_gather_debug_info_failure_adds_warning(capsys):
     out = capsys.readouterr().out
     assert "getDebugInfo" in out
     assert "optional endpoint" in out
+
+
+@pytest.mark.asyncio
+async def test_channel_balance_feature_supported():
+    """_test_channel_balance reads balance when capability flag is set."""
+    client = DummyClient()
+    client.capabilities = {**client.capabilities, "supports_channel_balance": True}
+    client.get_channel_balance = AsyncMock(return_value=0.1)
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    result = await diagnostics._test_channel_balance()
+
+    assert result["supported"] is True
+    assert result["balance"] == 0.1
+    client.get_channel_balance.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_channel_balance_feature_skipped_without_capability():
+    """_test_channel_balance does not call HTTP when capability is false."""
+    client = DummyClient()
+    client.capabilities = {**client.capabilities, "supports_channel_balance": False}
+    client.get_channel_balance = AsyncMock(return_value=0.0)
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    result = await diagnostics._test_channel_balance()
+
+    assert result["supported"] is False
+    client.get_channel_balance.assert_not_called()

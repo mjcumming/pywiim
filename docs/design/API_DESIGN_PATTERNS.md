@@ -502,12 +502,12 @@ The audio output control API is **WiiM-specific** and not universally supported 
 
 | Vendor | GET Status | SET Mode | Notes |
 |--------|------------|----------|-------|
-| **WiiM** | ✅ | ✅ | Full support (modes 0-7) |
+| **WiiM** | ✅ | ✅ | Prefer **`getNewAudioOutputHardwareMode`**; **`getAudioOutputStatus`** is legacy and often **`unknown command`** on Pro (and some Ultra) firmware. |
 | **Arylic** | ⚠️ | ❌ | Read-only or not supported |
 | **Audio Pro** | ❓ | ❓ | Unknown (needs testing) |
 
 **Tested Devices:**
-- ✅ **WiiM Pro** (firmware 4.8.731953): Full support
+- ✅ **WiiM Pro** (firmware 4.8.731953): Full support (read via **`getNewAudioOutputHardwareMode`**)
 - ⚠️ **Arylic H50** (firmware 4.6.529755): Read-only (GET works, SET returns "unknown command")
 - ❌ **Arylic UP2STREAM_AMP_V4** (firmware 4.6.415145): Not supported (returns "unknown command")
 
@@ -531,23 +531,37 @@ Based on real-world device testing (Issue #160) and official WiiM API documentat
 
 ### HTTP Endpoints
 
-#### Get Current Audio Output Status
+WiiM exposes **two different command names** that sometimes return the **same JSON shape** for “current output.” pywiim **always probes `getNewAudioOutputHardwareMode` first**, then falls back to `getAudioOutputStatus` (see `pywiim/capabilities.py`, [wiim#144](https://github.com/mjcumming/wiim/issues/144)).
+
+**Do not confuse** `audiocast` (or similarly named keys) inside **`getStatusEx`** with `audiocast` in the output-status payload below—they are **different endpoints** and **different semantics**.
+
+#### Get current output (preferred on WiiM): `getNewAudioOutputHardwareMode`
 
 ```bash
-GET https://DEVICE_IP:443/httpapi.asp?command=getAudioOutputStatus
+GET https://DEVICE_IP:443/httpapi.asp?command=getNewAudioOutputHardwareMode
 
-# Example response
+# Example response (same field names as legacy read when supported)
 {
-  "hardware": "2",  # Current hardware mode (1=SPDIF, 2=AUX, 3=COAX)
-  "source": "0",    # BT source (0=disabled, 1=BT output active)
-  "audiocast": "0"  # Audiocast state (0=disabled, 1=active)
+  "hardware": "2",  # Current hardware mode (1=SPDIF, 2=AUX/line, 3=COAX; more modes on Amp/Ultra)
+  "source": "0",    # Bluetooth output path (0=disabled, 1=active)
+  "audiocast": "0"  # Audio cast output (0=disabled, 1=active) — see community doc
 }
 ```
 
-**Field Meanings:**
+**Field meanings (output JSON):**
 - `hardware`: Hardware output mode number (string)
 - `source`: Bluetooth output state (0=disabled, 1=active)
-- `audiocast`: Audiocast/multi-room casting state
+- `audiocast`: Audio cast output state (0=disabled, 1=active), per device firmware
+
+This read is what the unofficial [wiim-httpapi `openapi.md`](https://github.com/cvdlinden/wiim-httpapi/blob/main/openapi.md) documents under **Audio Output Control**.
+
+#### Legacy read: `getAudioOutputStatus`
+
+```bash
+GET https://DEVICE_IP:443/httpapi.asp?command=getAudioOutputStatus
+```
+
+On many current WiiM devices (including **WiiM Pro** on tested firmware), this returns plain text **`unknown command`**. Treat it as a **fallback** only; use **`getNewAudioOutputHardwareMode`** for manual `curl` and for first-probe logic.
 
 #### Set Audio Output Mode
 
@@ -572,26 +586,34 @@ Arylic devices have limited or no support for audio output control:
 $ curl -k "https://192.168.6.50:443/httpapi.asp?command=setAudioOutputHardwareMode:2"
 unknown command
 
-# Empty response
+# Empty response (Arylic example)
 $ curl "http://192.168.6.95:80/httpapi.asp?command=getAudioOutputStatus"
 [empty response]
+
+# WiiM Pro: legacy read often fails; use getNewAudioOutputHardwareMode
+$ curl -k "https://192.168.1.115:443/httpapi.asp?command=getAudioOutputStatus"
+unknown command
 ```
 
 **Why this matters:**
 - Arylic firmware does not implement `setAudioOutputHardwareMode` command
 - Some models support reading status but not changing mode
+- On **WiiM**, the **supported read command name** is usually **`getNewAudioOutputHardwareMode`**, not the legacy string (see probing order in `pywiim/capabilities.py`).
 - Applications should probe for support and hide audio output controls on Arylic devices
 
 ### Testing Device Compatibility
 
 ```bash
-# Test if device supports audio output control
-curl -k "https://DEVICE_IP:443/httpapi.asp?command=getAudioOutputStatus"
+# Preferred on WiiM — same JSON used by pywiim's first probe
+curl -k "https://DEVICE_IP:443/httpapi.asp?command=getNewAudioOutputHardwareMode"
 
 # Expected responses:
-# ✅ WiiM: {"hardware":"2","source":"0","audiocast":"0"}
-# ❌ Arylic: "unknown command" (plain text)
-# ❌ Arylic: "" (empty response)
+# ✅ WiiM: {"hardware":"2","source":"0","audiocast":"0"} (values vary)
+# ❌ Some WiiM: "unknown command" → try legacy read below (rare if new fails)
+# ❌ Arylic: "unknown command" (plain text) or "" (empty)
+
+# Legacy read (may be unknown command on WiiM Pro / some Ultra firmware)
+curl -k "https://DEVICE_IP:443/httpapi.asp?command=getAudioOutputStatus"
 ```
 
 ### WiiM Ultra Mode 4 Behavior

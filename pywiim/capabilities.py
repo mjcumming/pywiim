@@ -29,10 +29,12 @@ import logging
 from typing import Any
 from urllib.parse import quote
 
+from .api.base import ApiResponse
 from .api.constants import (
     API_ENDPOINT_EQ_GET,
     API_ENDPOINT_EQ_LIST,
     API_ENDPOINT_EQ_STATUS,
+    API_ENDPOINT_GET_CHANNEL_BALANCE,
     API_ENDPOINT_PEQ_GET_LIST,
     API_ENDPOINT_SET_LED,
     API_ENDPOINT_TRIGGER_OUT_STATUS,
@@ -45,6 +47,45 @@ from .normalize import normalize_vendor
 from .profiles import detect_audio_pro_generation, detect_vendor, get_device_profile
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _channel_balance_probe_success(response: ApiResponse) -> bool:
+    """True when getChannelBalance returned a numeric balance (not unknown command / empty).
+
+    ``get_channel_balance()`` on the client coerces errors to 0.0; capability probing must
+    use raw ``_request`` results and this helper so unsupported firmware is not misread as
+    "centered balance".
+    """
+    parsed = response.parsed
+    if isinstance(parsed, bool):
+        return False
+    if isinstance(parsed, (int, float)):
+        return True
+    if isinstance(parsed, str):
+        stripped = parsed.strip()
+        if not stripped:
+            return False
+        lowered = stripped.lower()
+        if "unknown" in lowered:
+            return False
+        try:
+            float(stripped)
+        except ValueError:
+            return False
+        else:
+            return True
+    raw = (response.raw or "").strip()
+    if not raw:
+        return False
+    lowered = raw.lower()
+    if "unknown" in lowered:
+        return False
+    try:
+        float(raw)
+    except ValueError:
+        return False
+    return True
+
 
 __all__ = [
     "WiiMCapabilities",
@@ -307,6 +348,22 @@ class WiiMCapabilities:
                 client.host,
             )
 
+        # Channel balance (WiiM unofficial HTTP API only — not on Arylic / generic LinkPlay)
+        capabilities["supports_channel_balance"] = False
+        if capabilities.get("is_wiim_device"):
+            try:
+                balance_result = await client._request(API_ENDPOINT_GET_CHANNEL_BALANCE)
+                if _channel_balance_probe_success(balance_result):
+                    capabilities["supports_channel_balance"] = True
+                    _LOGGER.debug("Device %s supports channel balance (getChannelBalance)", client.host)
+                else:
+                    _LOGGER.debug(
+                        "Device %s does not support channel balance (getChannelBalance non-numeric or error)",
+                        client.host,
+                    )
+            except WiiMError:
+                _LOGGER.debug("Device %s does not support channel balance (getChannelBalance failed)", client.host)
+
         # Probe for WiiM LV2 PEQ support (read-only probe)
         # PEQ is a WiiM-specific feature not available on Audio Pro, Arylic, or generic
         # LinkPlay devices.  We use the preset-list endpoint as a lightweight read probe.
@@ -420,6 +477,7 @@ def detect_device_capabilities(device_info: DeviceInfo) -> dict[str, Any]:
         - supports_player_status_ex: Whether device supports getPlayerStatusEx
         - supports_presets: Whether device supports presets
         - supports_eq: Whether device supports EQ
+        - supports_channel_balance: False until runtime probe (WiiM-only); see WiiMCapabilities
         - supports_metadata: Whether device supports metadata
         - status_endpoint: Preferred status endpoint path
     """
@@ -444,6 +502,8 @@ def detect_device_capabilities(device_info: DeviceInfo) -> dict[str, Any]:
         # Canonical source IDs from Player.source_catalog that should not be treated
         # as directly selectable for this device (device/firmware-specific quirks).
         "non_selectable_source_ids": [],
+        # Runtime detection sets this on WiiM via getChannelBalance probe (WiiMCapabilities).
+        "supports_channel_balance": False,
     }
 
     if capabilities["is_wiim_device"]:

@@ -1425,6 +1425,10 @@ wiim-diagnostics 192.168.1.100 --output device-report.json
 wiim-diagnostics 192.168.1.100 --verbose
 ```
 
+**Raw HTTP with `curl`**
+
+For manual `httpapi.asp` probes on your LAN (read-only checks, firmware diffs, research), see **[docs/testing/CURL_HTTPAPI.md](../testing/CURL_HTTPAPI.md)**.
+
 **Integration Tests**
 
 Run the full integration test suite:

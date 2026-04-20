@@ -12,6 +12,7 @@ import pytest
 from pywiim.api.base import ApiResponse
 from pywiim.capabilities import (
     WiiMCapabilities,
+    _channel_balance_probe_success,
     detect_audio_pro_generation,
     detect_device_capabilities,
     detect_vendor,
@@ -227,6 +228,7 @@ class TestDeviceCapabilitiesDetection:
         assert capabilities["is_wiim_device"] is True
         assert capabilities["is_legacy_device"] is False
         assert capabilities["supports_audio_output"] is True
+        assert capabilities["supports_channel_balance"] is False  # static only; runtime probe sets True
         assert capabilities["response_timeout"] == 2.0
         assert capabilities["retry_count"] == 2
         assert capabilities["protocol_priority"] == ["https", "http"]
@@ -284,6 +286,32 @@ class TestDeviceCapabilitiesDetection:
         assert capabilities["is_legacy_device"] is True
         # Generation will be mkii (default for Audio Pro models)
         assert capabilities["audio_pro_generation"] in ["mkii", "original"]
+
+
+class TestChannelBalanceProbeParsing:
+    """Unit tests for getChannelBalance probe interpretation."""
+
+    def test_channel_balance_probe_numeric_parsed(self):
+        assert _channel_balance_probe_success(ApiResponse(parsed=0.25, raw=None)) is True
+        assert _channel_balance_probe_success(ApiResponse(parsed=0, raw=None)) is True
+        assert _channel_balance_probe_success(ApiResponse(parsed=-1.0, raw=None)) is True
+
+    def test_channel_balance_probe_numeric_string_parsed(self):
+        assert _channel_balance_probe_success(ApiResponse(parsed="0.5", raw=None)) is True
+
+    def test_channel_balance_probe_numeric_raw(self):
+        assert _channel_balance_probe_success(ApiResponse(parsed=None, raw="0")) is True
+        assert _channel_balance_probe_success(ApiResponse(parsed=None, raw="-0.25")) is True
+
+    def test_channel_balance_probe_rejects_unknown_command(self):
+        assert _channel_balance_probe_success(ApiResponse(parsed=None, raw="unknown command")) is False
+        assert _channel_balance_probe_success(ApiResponse(parsed="unknown command", raw=None)) is False
+
+    def test_channel_balance_probe_rejects_empty_and_non_numeric(self):
+        assert _channel_balance_probe_success(ApiResponse(parsed=None, raw="")) is False
+        assert _channel_balance_probe_success(ApiResponse(parsed=None, raw=None)) is False
+        assert _channel_balance_probe_success(ApiResponse(parsed={"status": "ok"}, raw=None)) is False
+        assert _channel_balance_probe_success(ApiResponse(parsed=True, raw=None)) is False
 
 
 class TestWiiMCapabilitiesClass:
@@ -363,6 +391,7 @@ class TestWiiMCapabilitiesClass:
         assert capabilities["supports_presets"] is False
         assert capabilities["presets_full_data"] is False
         assert capabilities["supports_eq"] is False
+        assert capabilities["supports_channel_balance"] is False
 
     @pytest.mark.asyncio
     async def test_detect_capabilities_wiim_keeps_metadata_on_probe_failure(self, mock_client):
@@ -466,6 +495,63 @@ class TestWiiMCapabilitiesClass:
         assert capabilities["supports_trigger_out"] is False
 
     @pytest.mark.asyncio
+    async def test_detect_capabilities_channel_balance_wiim_success(self, mock_client):
+        """WiiM devices get supports_channel_balance when getChannelBalance returns a number."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro", firmware="5.0.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getChannelBalance" in endpoint:
+                return ApiResponse(parsed=0.0, raw=None)
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["is_wiim_device"] is True
+        assert capabilities["supports_channel_balance"] is True
+        calls = [str(c) for c in mock_client._request.call_args_list]
+        assert any("getChannelBalance" in call for call in calls)
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_channel_balance_wiim_unknown_command(self, mock_client):
+        """WiiM devices get supports_channel_balance False when firmware returns unknown command."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Mini", firmware="4.8.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getChannelBalance" in endpoint:
+                return ApiResponse(parsed=None, raw="unknown command")
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["supports_channel_balance"] is False
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_channel_balance_wiim_request_raises(self, mock_client):
+        """WiiM devices get supports_channel_balance False when getChannelBalance raises."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Amp", firmware="5.0.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getChannelBalance" in endpoint:
+                raise WiiMError("not supported")
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["supports_channel_balance"] is False
+
+    @pytest.mark.asyncio
     async def test_detect_capabilities_eq_read_only(self, mock_client):
         """Test EQ capability detection uses read-only probing - if we can read EQ, we assume we can set it."""
         device_info = DeviceInfo(uuid="test-uuid", model="ARYLIC_H50", firmware="4.6.529755")
@@ -488,6 +574,7 @@ class TestWiiMCapabilitiesClass:
 
         # With read-only probing: if we can read EQ, we assume we can set it
         assert capabilities["supports_eq"] is True
+        assert capabilities["supports_channel_balance"] is False
 
     @pytest.mark.asyncio
     async def test_detect_capabilities_eq_read_only_probing(self, mock_client):
@@ -611,6 +698,7 @@ class TestWiiMCapabilitiesClass:
         # Should probe getPlayerStatusEx and use it if supported
         # (probe will override static detection)
         assert capabilities["supports_player_status_ex"] is True
+        assert capabilities["supports_channel_balance"] is False
 
     @pytest.mark.asyncio
     async def test_detect_capabilities_audio_pro_gets_special_settings(self, mock_client):

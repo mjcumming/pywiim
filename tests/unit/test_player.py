@@ -5339,6 +5339,7 @@ class TestPlayerCapabilities:
         client = WiiMClient("192.168.1.100", session=mock_aiohttp_session)
         client._capabilities = {
             "supports_eq": True,
+            "supports_channel_balance": True,
             "supports_presets": True,
             "supports_audio_output": True,
             "supports_metadata": True,
@@ -5357,6 +5358,47 @@ class TestPlayerCapabilities:
 
         mock_client._capabilities["supports_eq"] = False
         assert player.supports_eq is False
+
+    def test_supports_channel_balance(self, mock_client):
+        """Test supports_channel_balance property."""
+        from pywiim.player import Player
+
+        player = Player(mock_client)
+        assert player.supports_channel_balance is True
+
+        mock_client._capabilities["supports_channel_balance"] = False
+        assert player.supports_channel_balance is False
+
+    @pytest.mark.asyncio
+    async def test_get_channel_balance_updates_cache(self, mock_client):
+        """get_channel_balance refreshes _channel_balance and can invoke callback."""
+        from unittest.mock import AsyncMock
+
+        from pywiim.api.base import ApiResponse
+        from pywiim.player import Player
+
+        mock_client._capabilities["supports_channel_balance"] = True
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=0.2, raw=None))
+        cb = MagicMock()
+        player = Player(mock_client, on_state_changed=cb)
+
+        result = await player.get_channel_balance()
+
+        assert result == 0.2
+        assert player.channel_balance == 0.2
+        cb.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_channel_balance_skipped_without_capability(self, mock_client):
+        """get_channel_balance returns None when device does not support balance."""
+        from pywiim.player import Player
+
+        mock_client._capabilities = {**mock_client._capabilities, "supports_channel_balance": False}
+        mock_client._request = AsyncMock()
+        player = Player(mock_client)
+
+        assert await player.get_channel_balance() is None
+        mock_client._request.assert_not_called()
 
     def test_supports_presets(self, mock_client):
         """Test supports_presets property."""

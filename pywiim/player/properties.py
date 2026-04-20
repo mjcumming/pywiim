@@ -136,6 +136,11 @@ class PlayerProperties:
             return False
         return None
 
+    @property
+    def channel_balance(self) -> float | None:
+        """Stereo channel balance from player cache (HTTP API; not from UPnP)."""
+        return self.player._channel_balance
+
     # === Playback State ===
 
     @property
@@ -1609,6 +1614,16 @@ class PlayerProperties:
         if not self.player.client:
             return False
         return bool(self.player.client.capabilities.get("supports_eq", False))
+
+    @property
+    def supports_channel_balance(self) -> bool:
+        """Whether stereo channel balance (getChannelBalance / setChannelBalance) is supported.
+
+        Detected at connect time for WiiM devices only (read-only HTTP probe).
+        """
+        if not self.player.client:
+            return False
+        return bool(self.player.client.capabilities.get("supports_channel_balance", False))
 
     @property
     def supports_presets(self) -> bool:

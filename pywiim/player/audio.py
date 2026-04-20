@@ -7,6 +7,8 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+from ..api.constants import API_ENDPOINT_GET_CHANNEL_BALANCE
+from ..capabilities import _channel_balance_probe_success
 from ..exceptions import WiiMError
 
 if TYPE_CHECKING:
@@ -344,6 +346,32 @@ class AudioConfiguration:
             raise ValueError(f"Brightness must be between 0 and 100, got {brightness}")
         await self.player.client.set_led_brightness(brightness)
 
+    async def get_channel_balance(self) -> float | None:
+        """Read stereo channel balance from the device (HTTP getChannelBalance).
+
+        Returns:
+            Balance -1.0 (left) to 1.0 (right), or None if unsupported or unreadable.
+
+        Does not update the player cache — use ``Player.get_channel_balance()`` for that.
+        """
+        if not self.player.client.capabilities.get("supports_channel_balance", False):
+            return None
+        try:
+            response = await self.player.client._request(API_ENDPOINT_GET_CHANNEL_BALANCE)
+            if not _channel_balance_probe_success(response):
+                return None
+            val = response.parsed if response.parsed is not None else response.raw
+            if isinstance(val, bool):
+                return None
+            if isinstance(val, (int, float)):
+                return float(val)
+            if isinstance(val, str):
+                return float(val.strip())
+            return None
+        except (WiiMError, TypeError, ValueError) as err:
+            _LOGGER.debug("get_channel_balance failed for %s: %s", self.player.host, err)
+            return None
+
     async def set_channel_balance(self, balance: float) -> None:
         """Set channel balance (left/right stereo balance).
 
@@ -353,6 +381,9 @@ class AudioConfiguration:
         if not -1.0 <= balance <= 1.0:
             raise ValueError(f"Balance must be between -1.0 and 1.0, got {balance}")
         await self.player.client.set_channel_balance(balance)
+        self.player._channel_balance = balance
+        if self.player._on_state_changed:
+            self.player._on_state_changed()
 
     async def set_eq_preset(self, preset: str) -> None:
         """Set equalizer preset or disable EQ.

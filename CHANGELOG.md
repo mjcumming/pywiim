@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-04-20
+
+### Added
+- **`supports_channel_balance` capability** — Set at connect time for **WiiM devices only** via a read-only `getChannelBalance` probe (Arylic and other non-WiiM players stay `False` with no extra request). `Player.supports_channel_balance` mirrors `client.capabilities["supports_channel_balance"]` for integrations.
+- **`Player.get_channel_balance()` / `Player.channel_balance`** — Read and cache stereo balance (HTTP only; no UPnP). **`refresh()`** refetches on the same **~60s** cadence as EQ info when supported. **`set_channel_balance`** updates the cache and notifies callbacks.
+- **CLI** — `wiim-diagnostics` / `DeviceDiagnostics`: **Channel Balance** feature test, JSON report field `channel_balance`, and capability banner when supported. `wiim-verify` runs **`test_channel_balance`** (read-only `get_channel_balance`). `wiim-monitor` refreshes balance over HTTP on the same adaptive interval as EQ, shows balance in TUI and single-line status, and documents HTTP-only refresh in the startup banner.
+
+### Documentation
+- **`docs/testing/CURL_HTTPAPI.md`** — How to `curl` local WiiM/LinkPlay devices (HTTPS `-k`, read-only starter commands, pointers to [wiim#225](https://github.com/mjcumming/wiim/issues/225) / [wiim-httpapi](https://github.com/cvdlinden/wiim-httpapi/commits/main/openapi.md)). Linked from `docs/testing/REAL-DEVICE-TESTING.md`, `docs/README.md`, and `docs/development/DEVELOPMENT.md`.
+- **Audio output HTTP reads** — `CURL_HTTPAPI.md` and [API_DESIGN_PATTERNS.md](docs/design/API_DESIGN_PATTERNS.md) now lead with **`getNewAudioOutputHardwareMode`** (WiiM), document **`getAudioOutputStatus`** as legacy (often `unknown command` on WiiM Pro), link [wiim#144](https://github.com/mjcumming/wiim/issues/144), and state that **`audiocast` in `getStatusEx` is not the same field/semantics as `audiocast` in the output-status JSON**.
+
 ## [2.1.98] - 2026-03-30
 
 ### Fixed

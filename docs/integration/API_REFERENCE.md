@@ -814,7 +814,9 @@ await player.set_led_indicator(enabled: bool)     # uses LED_SWITCH_SET
 await player.set_display_enabled(enabled: bool, default_bright: int | None = None)  # on: uses full brightness by default (1–100 scale; 1=min)
 await player.set_display_config(auto_sense_enable=0, default_bright=100, disable=0)  # disable: 0=on, 1=off; see DISPLAY_* in pywiim.api.constants
 
-# Audio settings
+# Audio settings (stereo balance; WiiM when supports_channel_balance)
+bal = await player.get_channel_balance()  # float | None; updates cache, fires callback if changed
+player.channel_balance  # float | None — cached; also updated on refresh() ~60s when supported
 await player.set_channel_balance(balance: float)  # -1.0 to 1.0
 
 # Status and metadata fetchers

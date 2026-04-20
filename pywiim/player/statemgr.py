@@ -860,6 +860,22 @@ class StateManager:
                 _LOGGER.debug("Failed to fetch EQ status for %s: %s", self.player.host, err)
                 # Don't clear - keep previous value if fetch fails
 
+        # Channel balance (WiiM HTTP getChannelBalance only; no UPnP event path)
+        cb_supported = self.player.client.capabilities.get("supports_channel_balance", False)
+        should_fetch_channel_balance = full or (
+            self._polling_strategy
+            and self._polling_strategy.should_fetch_eq_info(
+                self.player._last_channel_balance_check, cb_supported, now=now
+            )
+        )
+        if should_fetch_channel_balance and cb_supported:
+            try:
+                await self.player.get_channel_balance()
+            except Exception as err:
+                _LOGGER.debug("Failed to fetch channel balance for %s: %s", self.player.host, err)
+            finally:
+                self.player._last_channel_balance_check = now
+
         # Preset Stations (playback presets) - Fetch on full refresh, track change, or periodically (every 60s)
         # Track changes may indicate preset changes (user switched to different preset/station)
         # Periodic fetch ensures preset names stay current even without activity (fixes issue #118)
