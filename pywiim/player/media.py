@@ -301,10 +301,14 @@ class MediaControl:
                 Note: Does NOT raise for invalid/unreachable URLs.
         """
         # Call API (raises on failure)
-        if enqueue in ("add", "next"):
+        if enqueue == "add" or enqueue == "next":
             if not self.player._upnp_client:
                 raise WiiMError(f"Queue management (enqueue='{enqueue}') requires UPnP client.")
-            await self._enqueue_via_upnp(url, enqueue)  # type: ignore[arg-type]
+            # Explicit branches so mypy narrows enqueue (no type: ignore; CI uses warn_unused_ignores).
+            if enqueue == "add":
+                await self._enqueue_via_upnp(url, "add")
+            else:
+                await self._enqueue_via_upnp(url, "next")
         else:
             await self.player.client.play_url(url)
             # Track URL for media_title fallback (only for replace/play modes)
