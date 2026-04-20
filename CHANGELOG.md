@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **mypy CI (`warn_unused_ignores`)** — `MediaControl.play_url`: removed dead `# type: ignore[arg-type]` (newer mypy narrows `enqueue` correctly) and replaced the `in ("add", "next")` branch with explicit **`add` / `next`** calls so older mypy still type-checks. Removed unused **`[[tool.mypy.overrides]]`** for `tests.*` (only `pywiim` is checked; that block triggered `warn_unused_configs`).
+
 ## [2.2.0] - 2026-04-20
 
 ### Added
