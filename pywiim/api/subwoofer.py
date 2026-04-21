@@ -42,6 +42,27 @@ from .constants import (
     SUBWOOFER_PHASE_180,
 )
 
+_SUBWOOFER_LPF_KNOWN_KEYS = frozenset(
+    {"cross", "plugged", "sub_delay", "main_filter", "sub_filter", "mix_sub", "output_mode"}
+)
+
+
+def is_valid_subwoofer_lpf_dict(parsed: Any) -> bool:
+    """True when *parsed* is a real getSubLPF status object (not an API error wrapper).
+
+    Some vendors return HTTP 200 with JSON like ``{\"error\": \"unsupported_command\"}``;
+    those must not be treated as subwoofer support or coerced into :class:`SubwooferStatus`.
+    """
+    if not isinstance(parsed, dict):
+        return False
+    if "error" in parsed:
+        return False
+    keys = parsed.keys()
+    if keys & _SUBWOOFER_LPF_KNOWN_KEYS:
+        return True
+    st = parsed.get("status")
+    return isinstance(st, int) and ("level" in parsed or "phase" in parsed)
+
 
 @dataclass
 class SubwooferStatus:
@@ -161,7 +182,7 @@ class SubwooferAPI:
         """
         try:
             response = await self._request(API_ENDPOINT_SUBWOOFER_STATUS)  # type: ignore[attr-defined]
-            if isinstance(response.parsed, dict):
+            if isinstance(response.parsed, dict) and is_valid_subwoofer_lpf_dict(response.parsed):
                 return SubwooferStatus.from_dict(response.parsed)
             return None
         except WiiMError:
@@ -175,7 +196,9 @@ class SubwooferAPI:
         """
         try:
             response = await self._request(API_ENDPOINT_SUBWOOFER_STATUS)  # type: ignore[attr-defined]
-            return response.parsed if isinstance(response.parsed, dict) else None
+            if isinstance(response.parsed, dict) and is_valid_subwoofer_lpf_dict(response.parsed):
+                return response.parsed
+            return None
         except WiiMError:
             return None
 

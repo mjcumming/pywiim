@@ -25,6 +25,7 @@ The capability detection system uses a multi-layer approach:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 from urllib.parse import quote
@@ -37,9 +38,11 @@ from .api.constants import (
     API_ENDPOINT_GET_CHANNEL_BALANCE,
     API_ENDPOINT_PEQ_GET_LIST,
     API_ENDPOINT_SET_LED,
+    API_ENDPOINT_SUBWOOFER_STATUS,
     API_ENDPOINT_TRIGGER_OUT_STATUS,
     PEQ_PLUGIN_URI,
 )
+from .api.subwoofer import is_valid_subwoofer_lpf_dict
 from .exceptions import WiiMError
 from .model_names import is_known_wiim_model, is_wiim_ultra
 from .models import DeviceInfo
@@ -87,6 +90,69 @@ def _channel_balance_probe_success(response: ApiResponse) -> bool:
     return True
 
 
+def _subwoofer_probe_error_definitively_unsupported(err: Exception) -> bool:
+    """True when the error indicates the endpoint/command is not available."""
+    s = str(err).lower()
+    return "unknown command" in s or "404" in s or "not found" in s
+
+
+async def _probe_supports_subwoofer(client: Any, device_info: DeviceInfo, capabilities: dict[str, Any]) -> bool | None:
+    """Runtime probe for getSubLPF (same backing as get_subwoofer_status_raw).
+
+    Returns:
+        True if supported, False if definitively unsupported, None for WiiM when
+        the probe stays inconclusive after retries (transient errors).
+    """
+    if not capabilities.get("is_wiim_device"):
+        return False
+
+    host = getattr(client, "host", "?")
+    model = device_info.model or "unknown"
+    max_attempts = 3
+    last_err: Exception | None = None
+
+    for attempt in range(max_attempts):
+        try:
+            r = await client._request(API_ENDPOINT_SUBWOOFER_STATUS)
+            if is_valid_subwoofer_lpf_dict(r.parsed):
+                if attempt:
+                    _LOGGER.debug("getSubLPF succeeded on retry for host=%s model=%s", host, model)
+                return True
+            raw_preview = (r.raw or "")[:200] if r.raw else None
+            _LOGGER.debug(
+                "Subwoofer probe host=%s model=%s: unsupported or invalid response "
+                "(expected subwoofer dict); parsed_type=%s raw_preview=%r",
+                host,
+                model,
+                type(r.parsed).__name__,
+                raw_preview,
+            )
+            return False
+        except Exception as err:
+            last_err = err
+            if _subwoofer_probe_error_definitively_unsupported(err):
+                _LOGGER.debug(
+                    "Subwoofer probe host=%s model=%s: unsupported (error=%s)",
+                    host,
+                    model,
+                    err,
+                )
+                return False
+            if attempt < max_attempts - 1 and is_legacy_firmware_error(err):
+                await asyncio.sleep(0.15)
+                continue
+            break
+
+    _LOGGER.warning(
+        "Subwoofer probe inconclusive for host=%s model=%s after %d attempts: %s",
+        host,
+        model,
+        max_attempts,
+        last_err,
+    )
+    return None
+
+
 __all__ = [
     "WiiMCapabilities",
     "detect_device_capabilities",
@@ -115,12 +181,17 @@ class WiiMCapabilities:
         self._firmware_versions: dict[str, str] = {}
         self._device_types: dict[str, str] = {}
 
-    async def detect_capabilities(self, client: Any, device_info: DeviceInfo) -> dict[str, Any]:
+    def invalidate_device(self, device_id: str) -> None:
+        """Drop cached capabilities for one device (host:uuid) so the next detect re-probes."""
+        self._capabilities.pop(device_id, None)
+
+    async def detect_capabilities(self, client: Any, device_info: DeviceInfo, *, force: bool = False) -> dict[str, Any]:
         """Probe device capabilities and cache results.
 
         Args:
             client: WiiM API client instance (must have _request method and host attribute)
             device_info: Device information from getStatusEx
+            force: When True, ignore cached capabilities and re-run all probes.
 
         Returns:
             Dictionary of device capabilities with vendor, device type, firmware,
@@ -128,7 +199,7 @@ class WiiMCapabilities:
         """
         device_id = f"{client.host}:{device_info.uuid}"
 
-        if device_id in self._capabilities:
+        if not force and device_id in self._capabilities:
             # Return cached capabilities, but ensure vendor is normalized
             cached = self._capabilities[device_id].copy()
             if "vendor" not in cached or not cached.get("vendor"):
@@ -390,6 +461,9 @@ class WiiMCapabilities:
                 )
         except WiiMError:
             _LOGGER.debug("Device %s does not support 12V trigger (getTriggeroutStatus)", client.host)
+
+        # Subwoofer (getSubLPF) — WiiM-only read probe; same endpoint as get_subwoofer_status_raw()
+        capabilities["supports_subwoofer"] = await _probe_supports_subwoofer(client, device_info, capabilities)
 
         # Probe for Status Light (LED_SWITCH_SET) - "Status Light" in app; some devices use this instead of setLED
         try:

@@ -162,6 +162,32 @@ class TestSubwooferAPIStatus:
         assert status is None
 
     @pytest.mark.asyncio
+    async def test_get_subwoofer_status_error_json_returns_none(self, mock_client):
+        """Some devices return 200 + JSON error object instead of raising."""
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(
+                parsed={"error": "unsupported_command", "raw": "unknown command"},
+                raw=None,
+            )
+        )
+
+        status = await mock_client.get_subwoofer_status()
+        assert status is None
+
+    @pytest.mark.asyncio
+    async def test_get_subwoofer_status_raw_error_json_returns_none(self, mock_client):
+        """Raw helper must not return API error wrappers as status dicts."""
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(
+                parsed={"error": "unsupported_command", "raw": "unknown command"},
+                raw=None,
+            )
+        )
+
+        result = await mock_client.get_subwoofer_status_raw()
+        assert result is None
+
+    @pytest.mark.asyncio
     async def test_get_subwoofer_status_raw(self, mock_client):
         """Test raw status retrieval returns dict directly."""
         raw_response = {"status": 1, "cross": 80, "custom_field": "value"}

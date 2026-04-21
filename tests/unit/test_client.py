@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -213,6 +213,37 @@ class TestWiiMClient:
         assert capabilities["vendor"] == "wiim"
         assert capabilities["is_wiim_device"] is True
         assert "upnp_description_available" not in capabilities
+
+    @pytest.mark.asyncio
+    async def test_refresh_capabilities_invalidates_and_redetects(self, mock_client):
+        """refresh_capabilities clears detector cache (when force) and merges new caps."""
+        from pywiim.api.base import BaseWiiMClient
+        from pywiim.models import DeviceInfo
+
+        mock_device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro", firmware="5.0.1")
+        mock_client._capabilities_detected = True
+        mock_client._capabilities = {"vendor": "wiim"}
+
+        with patch.object(BaseWiiMClient, "get_device_info_model", new_callable=AsyncMock) as mock_base:
+            mock_base.return_value = mock_device_info
+            with patch.object(
+                mock_client._capability_detector, "invalidate_device", new_callable=MagicMock
+            ) as inv_mock:
+                mock_client._capability_detector.detect_capabilities = AsyncMock(
+                    return_value={
+                        "vendor": "wiim",
+                        "is_wiim_device": True,
+                        "supports_subwoofer": True,
+                        "response_timeout": 2.0,
+                    }
+                )
+                mock_client._safe_collect_upnp_description_capabilities = AsyncMock(return_value={})
+
+                await mock_client.refresh_capabilities(force=True)
+
+                inv_mock.assert_called_once_with("192.168.1.100:test-uuid")
+        assert mock_client.capabilities.get("supports_subwoofer") is True
+        assert mock_client._capabilities_detected is True
 
     def test_parse_upnp_description_xml_extracts_service_flags(self):
         """Test UPnP description parser extracts service flags and metadata."""

@@ -183,9 +183,11 @@ If data exceeds its freshness window, it's considered stale and the other source
 - After UPnP events (synced from merged state)
 
 ### 3. `Player._device_info` (Device Info Cache)
-**What:** Device capabilities, firmware, model, etc.
+**What:** Parsed **getStatusEx** / device info (model, firmware, UUID, name, etc.). This is **not** the same structure as runtime **`supports_*`** flags for optional HTTP endpoints.
 **Why:** Rarely changes, expensive to query
 **Updated:** Every HTTP poll (refresh)
+
+**Where optional HTTP features are decided:** **`player.client.capabilities`** (merged after `_detect_capabilities()` / `refresh_capabilities()`). Integrations gate entities on that dict, not on `_device_info.model` alone — see **[ADR 018: Client `capabilities` Dict — Single Source of Truth](adr/018-capabilities-dict-source-of-truth.md)**.
 
 ### 4. Other Caches
 - `_audio_output_status` - Audio output config (rare changes)

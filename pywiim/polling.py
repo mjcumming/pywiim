@@ -315,7 +315,7 @@ class PollingStrategy:
 
         Args:
             last_fetch_time: Timestamp of last subwoofer status fetch
-            subwoofer_supported: Whether device supports subwoofer endpoint
+            subwoofer_supported: True if supported, False if not, None if capability probe was inconclusive
             now: Current time (defaults to time.time())
 
         Returns:

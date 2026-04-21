@@ -718,6 +718,8 @@ player.timeout  # float - Network timeout in seconds
 
 Device capabilities are detected via endpoint probing during initialization and exposed as boolean properties. These allow integrations to check feature support before calling methods, enabling proper UI rendering and avoiding errors.
 
+**Source of truth** — The merged **`player.client.capabilities`** mapping is authoritative for optional HTTP API support (`supports_*` keys and related fields). Integrations must not enable those features from device model alone. See **[ADR 018](../design/adr/018-capabilities-dict-source-of-truth.md)** and [HA_CAPABILITIES.md](HA_CAPABILITIES.md).
+
 **HTTP API Capabilities** (detected via endpoint probing):
 
 ```python

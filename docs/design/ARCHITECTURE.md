@@ -153,7 +153,7 @@ pywiim is a Python library for communicating with WiiM and LinkPlay-based audio 
 
 ### 5. Capability Detection
 
-**Location**: `pywiim/capabilities.py`
+**Location**: `pywiim/capabilities.py` (detection); merged results live on **`WiiMClient.capabilities`**
 
 **Purpose**: Detect device capabilities and handle device variations across multiple LinkPlay vendors.
 
@@ -167,6 +167,8 @@ pywiim is a Python library for communicating with WiiM and LinkPlay-based audio 
 - Apply vendor-specific and device-specific workarounds
 
 **Design Pattern**: Strategy Pattern with Vendor Registry (different strategies based on vendor and capabilities)
+
+**Source of truth (applications and docs)** — For optional HTTP API features (EQ, PEQ, presets, subwoofer, 12V trigger, channel balance, metadata, alarms, etc.), **the merged `player.client.capabilities` dict is authoritative** after detection (and after any documented corrective updates). Integrations such as Home Assistant **must gate** entities and services on these keys (or on `Player` properties explicitly documented as mirroring them), **not** on device model or marketing name alone. Static helpers such as `device_capabilities.py` address **source/input catalog** layout; they do not replace runtime `supports_*` for unrelated endpoints. See **[ADR 018: Client `capabilities` Dict — Single Source of Truth](adr/018-capabilities-dict-source-of-truth.md)**.
 
 ### 6. Data Models
 

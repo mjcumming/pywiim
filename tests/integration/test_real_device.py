@@ -7,10 +7,12 @@ These are fast, safe core tests that validate basic Player functionality.
 For comprehensive testing, see test_prerelease.py or use the `wiim-verify` CLI tool.
 
 Example:
-    WIIM_TEST_DEVICE=192.168.1.100 pytest tests/integration/test_real_device.py -v
+    WIIM_TEST_DEVICE=192.168.1.100 pytest -m integration tests/integration/test_real_device.py -v
 
-For HTTPS devices:
-    WIIM_TEST_DEVICE=192.168.1.100 WIIM_TEST_HTTPS=true pytest tests/integration/test_real_device.py -v
+For HTTPS devices (typical WiiM):
+    WIIM_TEST_DEVICE=192.168.1.100 WIIM_TEST_HTTPS=true pytest -m integration tests/integration/test_real_device.py -v
+
+``pytest.ini`` / ``pyproject.toml`` may exclude ``integration`` by default; pass ``-m integration`` to run these tests.
 """
 
 from __future__ import annotations
@@ -52,17 +54,65 @@ class TestRealDeviceCore:
             or "is_legacy_device" in real_device_client._capabilities
         )
         assert "supports_channel_balance" in real_device_client._capabilities
+        assert "supports_subwoofer" in real_device_client._capabilities
         caps = real_device_client._capabilities
         if caps.get("is_wiim_device"):
             assert caps["supports_channel_balance"] in (True, False)
+            assert caps["supports_subwoofer"] in (True, False, None)
         else:
             assert caps["supports_channel_balance"] is False
+            assert caps["supports_subwoofer"] is False
 
         print("\nCapabilities:")
         print(f"  Vendor: {real_device_client._capabilities.get('vendor')}")
         print(f"  Is WiiM: {real_device_client._capabilities.get('is_wiim_device')}")
         print(f"  Is Legacy: {real_device_client._capabilities.get('is_legacy_device')}")
         print(f"  Channel balance: {real_device_client._capabilities.get('supports_channel_balance')}")
+        print(f"  Subwoofer (getSubLPF): {real_device_client._capabilities.get('supports_subwoofer')}")
+
+    async def test_subwoofer_capability_detection(self, real_device_client, integration_test_marker):
+        """getSubLPF probe sets supports_subwoofer; refresh_capabilities re-runs probe.
+
+        Devices without a subwoofer output path typically get supports_subwoofer False;
+        status raw read stays None. WiiM-only inconclusive probe may leave None.
+        """
+        client = real_device_client
+        client._capabilities_detected = False
+        client._capabilities = {}
+        await client._detect_capabilities()
+
+        caps = client.capabilities
+        assert "supports_subwoofer" in caps
+        sw = caps.get("supports_subwoofer")
+        raw = await client.get_subwoofer_status_raw()
+
+        is_wiim = bool(caps.get("is_wiim_device"))
+        if is_wiim:
+            assert sw in (True, False, None)
+            if sw is False:
+                assert raw is None
+            elif sw is True:
+                assert isinstance(raw, dict)
+        else:
+            assert sw is False
+            assert raw is None
+
+        await client.refresh_capabilities(force=True)
+        sw2 = client.capabilities.get("supports_subwoofer")
+        raw2 = await client.get_subwoofer_status_raw()
+        assert sw2 in (True, False, None)
+        if is_wiim:
+            if sw2 is False:
+                assert raw2 is None
+            elif sw2 is True:
+                assert isinstance(raw2, dict)
+        else:
+            assert sw2 is False
+            assert raw2 is None
+
+        print("\nSubwoofer capability (getSubLPF):")
+        print(f"  supports_subwoofer after detect: {sw!r}")
+        print(f"  supports_subwoofer after refresh_capabilities: {sw2!r}")
 
     async def test_player_initialization(self, real_device_player, integration_test_marker):
         """Test Player initialization and basic properties."""
@@ -360,17 +410,27 @@ class TestRealDeviceCore:
             pytest.fail(f"Error testing presets: {e}")
 
     async def test_player_subwoofer_read(self, real_device_player, integration_test_marker):
-        """Test reading subwoofer status (WiiM devices only)."""
+        """Subwoofer: player.supports_subwoofer matches API; read fields when supported."""
         player = real_device_player
-        # Do full refresh to ensure capabilities are detected
+        # Do full refresh to ensure capabilities are detected and optional status cache updated
         await player.refresh(full=True)
 
         # Try to get subwoofer status
         try:
+            cap_flag = player.client.capabilities.get("supports_subwoofer")
             status = await player.get_subwoofer_status()
 
-            if status is None:
-                pytest.skip("Subwoofer not supported on this device")
+            if not player.supports_subwoofer:
+                assert status is None
+                assert cap_flag is not True
+                print(
+                    "\nSubwoofer: not supported or inconclusive for integrations "
+                    f"(capabilities supports_subwoofer={cap_flag!r}); status API returned None — OK."
+                )
+                return
+
+            assert cap_flag is True
+            assert status is not None
 
             # Validate status fields
             assert hasattr(status, "enabled")
@@ -414,12 +474,15 @@ class TestRealDeviceCore:
         player = real_device_player
         await player.refresh(full=True)
 
+        if not player.supports_subwoofer:
+            pytest.skip("Subwoofer not supported on this device (capability probe)")
+
         # Try to get initial subwoofer status
         try:
             initial_status = await player.get_subwoofer_status()
 
             if initial_status is None:
-                pytest.skip("Subwoofer not supported on this device")
+                pytest.skip("Subwoofer API returned no status despite capability True")
 
             # Save initial values
             initial_crossover = initial_status.crossover

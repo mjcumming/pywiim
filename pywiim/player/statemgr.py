@@ -919,34 +919,25 @@ class StateManager:
                 _LOGGER.debug("Failed to fetch Bluetooth history for %s: %s", self.player.host, err)
                 self.player._bluetooth_history = []
 
-        # Subwoofer Status - Fetch on full refresh or periodically (every 60s)
-        # Only available on WiiM Ultra with firmware 5.2+
-        # Subwoofer settings are "set and forget" config, so infrequent polling is fine
-        subwoofer_supported = self.player.client.capabilities.get("supports_subwoofer", None)
+        # Subwoofer status — supports_subwoofer is set in capabilities detection (getSubLPF probe).
+        # Here we only refresh the cached dict when support is True or still unknown (None).
+        subwoofer_supported = self.player.client.capabilities.get("supports_subwoofer")
         should_fetch_subwoofer = full or (
             self._polling_strategy
             and self._polling_strategy.should_fetch_subwoofer(
                 self.player._last_subwoofer_check, subwoofer_supported, now=now
             )
         )
-        # First time: probe to see if subwoofer is supported (subwoofer_supported is None)
-        if should_fetch_subwoofer or subwoofer_supported is None:
+        if should_fetch_subwoofer and subwoofer_supported is not False:
             try:
                 subwoofer_status = await self.player.client.get_subwoofer_status_raw()
                 if subwoofer_status is not None:
                     self.player._subwoofer_status = subwoofer_status
                     self.player._last_subwoofer_check = now
-                    # Mark as supported if we got a valid response
                     if subwoofer_supported is None:
                         self.player.client._capabilities["supports_subwoofer"] = True
-                else:
-                    # API returned None - not supported
-                    if subwoofer_supported is None:
-                        self.player.client._capabilities["supports_subwoofer"] = False
             except Exception as err:
                 _LOGGER.debug("Failed to fetch subwoofer status for %s: %s", self.player.host, err)
-                if subwoofer_supported is None:
-                    self.player.client._capabilities["supports_subwoofer"] = False
 
     async def _finalize_refresh(self) -> None:
         """Finalize refresh: sync group state, propagate metadata, notify callback."""

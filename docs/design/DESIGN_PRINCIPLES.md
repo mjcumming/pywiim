@@ -13,6 +13,7 @@
 - **Rationale**: Device variations and vendor differences require capability detection, not hardcoded assumptions
 - **Success Metric**: Library works with all known device types, vendors, and firmware versions
 - **Implementation**: Vendor-aware capability detection with multi-layered device registry and strategy pattern
+- **Integrations**: Optional HTTP features are gated only on **`WiiMClient.capabilities`** (and `Player` properties that mirror it), not on model name alone — see **[ADR 018](adr/018-capabilities-dict-source-of-truth.md)**
 
 ### 3. Maintainability
 - **Goal**: Code is easy to understand, modify, and extend
@@ -51,7 +52,7 @@
 
 ### 4. Document Decisions
 - **Principle**: Document why decisions were made, not just what was implemented
-- **Implementation**: Architecture docs, design decisions, trade-offs documented. For significant committed decisions (user-facing stability, API contracts), use [Architecture Decision Records (ADRs)](adr/README.md).
+- **Implementation**: Architecture docs, design decisions, trade-offs documented. For significant committed decisions (user-facing stability, API contracts), use [Architecture Decision Records (ADRs)](adr/README.md) (indexed there; see ADR 001–017).
 - **Example**: Document why capability detection is multi-layered vs single check
 
 ### 5. Framework Agnostic with HA Integration Support

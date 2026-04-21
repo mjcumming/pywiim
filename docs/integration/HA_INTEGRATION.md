@@ -11,6 +11,16 @@ This guide explains how to integrate the `pywiim` library with Home Assistant's 
 
 **Recommended Approach**: Use `Player` class for HA integrations. It provides state caching, HTTP + UPnP event synchronization, convenient properties, and full API access via `player.client`.
 
+## Capabilities: single source of truth (ADR 018)
+
+Optional **HTTP API** features (EQ, PEQ, presets, subwoofer, 12V trigger, channel balance, alarms, sleep timer, metadata, firmware install, LED modes, display, etc.) **must** be gated on **`player.client.capabilities`** (merged result of capability detection) or on **`Player`** properties that are explicitly defined to mirror those keys — see [HA_CAPABILITIES.md](HA_CAPABILITIES.md).
+
+- **Do not** register HA platforms or entities for those features using **model name**, **product line**, or static assumptions alone.
+- Initialize the coordinator with **`await self.player.client._detect_capabilities()`** (or rely on first `Player` / client use, which triggers detection) and store **`self._capabilities = self.player.client.capabilities.copy()`** (or a reference you refresh when capabilities change) for checks in `async_setup_entry` / entity availability.
+- After **firmware OTA** or when probing may have been wrong, call **`await self.player.client.refresh_capabilities(force=True)`** and rebuild or update entity availability from the **same** dict.
+
+Full decision: **[ADR 018: Client `capabilities` Dict — Single Source of Truth](../design/adr/018-capabilities-dict-source-of-truth.md)**.
+
 ## Critical: When to Call `refresh()` vs When NOT To
 
 ### ✅ ONLY Call `refresh()` in the Coordinator
@@ -2086,13 +2096,13 @@ If the select entity shows "Audio Output Mode" instead of the actual selected va
 
 ## Subwoofer Control (WiiM Devices)
 
-WiiM devices (Pro, Ultra, etc.) support external subwoofer configuration. Not supported on Arylic/LinkPlay devices. The library auto-detects support and fetches status every 60 seconds.
+Some WiiM-class devices expose the **getSubLPF** / subwoofer HTTP API (crossover, level, phase, etc.). **Whether that API exists for this unit is determined only at capability detection** (`supports_subwoofer` on **`player.client.capabilities`**, mirrored by **`player.supports_subwoofer`**). A device can report **API support** with no physical subwoofer connected (`plugged` in status). **Do not** show subwoofer entities based on model name alone — use **`player.supports_subwoofer`** (i.e. the capabilities dict). See [ADR 006](../design/adr/006-subwoofer-control-and-caching.md) and [ADR 018](../design/adr/018-capabilities-dict-source-of-truth.md). Not supported on Arylic/LinkPlay (`supports_subwoofer` is false). Status cache is refreshed on the normal polling interval when support is true or still inconclusive (`None`).
 
 ### Available Properties
 
 ```python
-# Check if subwoofer control is supported
-player.supports_subwoofer  # bool
+# Check if subwoofer control is supported (from capabilities probe — source of truth)
+player.supports_subwoofer  # bool — True only when capabilities explicitly True
 
 # Cached subwoofer status (updated every 60s)
 player.subwoofer_status    # dict | None - Full status dict

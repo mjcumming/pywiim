@@ -6,6 +6,14 @@ This document describes how to use pywiim's capability properties in a Home Assi
 
 pywiim exposes device capabilities as **boolean properties** on the `Player` class. This allows integrations to check feature support before calling methods, enabling proper UI rendering and avoiding errors.
 
+### Single source of truth (required)
+
+For **device-level optional HTTP API** features (EQ, PEQ, presets, subwoofer, 12V trigger, alarms, metadata, audio output mode, etc.), **`player.client.capabilities`** — the same mapping returned after `await player.client._detect_capabilities()` / `refresh_capabilities()` — is the **only** authority. Use the **`Player` properties** listed below when they exist (they mirror those keys), or read **`player.client.capabilities.get("supports_…")`** directly.
+
+**Do not** create Home Assistant entities, buttons, or number platforms for those features based only on **model name**, **device class**, or **“WiiM X usually has Y”** heuristics. If a key is `False` (or not `True` where tri-state applies), the feature stays hidden or disabled. After firmware OTA, call **`await player.client.refresh_capabilities(force=True)`** if you need a full re-probe, then re-evaluate the same dict.
+
+This is **[ADR 018: Client `capabilities` Dict — Single Source of Truth](../design/adr/018-capabilities-dict-source-of-truth.md)**. It complements [ADR 003](../design/adr/003-capability-probing-before-endpoints.md) (probe before use) and [ADR 016](../design/adr/016-connect-time-read-only-capability-probes.md) (how connect-time probes work).
+
 ## Available Capability Properties
 
 ### HTTP API Capabilities

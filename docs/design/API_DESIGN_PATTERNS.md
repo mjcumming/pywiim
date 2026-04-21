@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document captures API design patterns, defensive programming strategies, and implementation details learned from the WiiM integration to ensure robust device communication. **Capability probing** (probe before using optional endpoints) is formalized in **[ADR 003: Capability Probing Before Using Endpoints](adr/003-capability-probing-before-endpoints.md)**.
+This document captures API design patterns, defensive programming strategies, and implementation details learned from the WiiM integration to ensure robust device communication. **Capability probing** (probe before using optional endpoints) is formalized in **[ADR 003: Capability Probing Before Using Endpoints](adr/003-capability-probing-before-endpoints.md)**. **Connect-time** read-only probes and retries are formalized in **[ADR 016: Connect-Time Capability Probes](adr/016-connect-time-read-only-capability-probes.md)**. **Which features exist for this device** — for optional HTTP API behavior — is defined only by the merged **`WiiMClient.capabilities`** mapping (and `Player` properties that mirror it); see **[ADR 018: Client `capabilities` Dict — Single Source of Truth](adr/018-capabilities-dict-source-of-truth.md)**. Do not document or recommend gating those features on model name alone.
 
 ## API Reliability Matrix
 

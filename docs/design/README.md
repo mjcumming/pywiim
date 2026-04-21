@@ -11,8 +11,22 @@ Decisions we have explicitly committed to (e.g. user-facing stability, API contr
 - **[002: Trust the API After Success](adr/002-trust-api-after-success.md)** - No polling to confirm operations; update state immediately
 - **[003: Capability Probing Before Endpoints](adr/003-capability-probing-before-endpoints.md)** - Probe optional endpoints at runtime, don't hardcode by device
 - **[004: UPnP for Events, HTTP for Control](adr/004-upnp-events-http-control.md)** - Single control path (HTTP); UPnP for notifications only
+- **[005: LED Indicator and Display APIs](adr/005-led-indicator-and-display-apis.md)** - Separate capabilities and player APIs for status LED vs screen/display
+- **[006: Subwoofer control](adr/006-subwoofer-control-and-caching.md)** - WiiM-only, probing, cache, inverted wire fields
+- **[007: Media position](adr/007-media-position-raw-from-device.md)** - Raw device position/duration; no library-side estimation
+- **[008: Loop mode](adr/008-loop-mode-vendor-specific-mapping.md)** - Vendor-specific shuffle/repeat numeric maps
+- **[009: Group role](adr/009-group-role-and-slave-detection.md)** - Authoritative `group` field; `get_device_group_info` policy
+- **[010: WiFi Direct multiroom](adr/010-wifi-direct-multiroom-player-resolution.md)** - UUID resolution, `all_players_finder`, internal registry
+- **[011: Stable source ids](adr/011-stable-source-ids-and-catalog.md)** - `player.source` ids vs `source_name`; catalog round-trip (complements 001)
+- **[012: Play notification / TTS](adr/012-play-notification-and-tts-fallback.md)** - Prompt vs `play_url`, `force_interrupt`, structured result
+- **[013: ApiResponse](adr/013-http-apiresponse-parsed-and-raw.md)** - `parsed` / `raw` from HTTP `_request`
+- **[014: Audio output probes](adr/014-audio-output-hardware-probe-strategy.md)** - Probe order; `getStatusEx` vs output JSON semantics
+- **[015: HTTPS and fallback](adr/015-https-default-and-protocol-port-fallback.md)** - HTTPS first; full port/protocol probe list on failure
+- **[016: Connect-time probes](adr/016-connect-time-read-only-capability-probes.md)** - Read-only probes, retries; complements 003
+- **[017: EQ Off and presets](adr/017-eq-off-and-dynamic-preset-resolution.md)** - “Off” semantics; resolve preset names from device list
+- **[018: Capabilities dict](adr/018-capabilities-dict-source-of-truth.md)** - `client.capabilities` is the source of truth for optional HTTP features; integrations gate on it, not model alone
 
-When changing behavior that might be covered by an ADR, check the ADR first. When making a significant decision, add a new ADR (see `adr/README.md` for format).
+When changing behavior that might be covered by an ADR, check the ADR first. When making a significant decision, add a new ADR (see `adr/README.md` for format). **Full table:** [adr/README.md](adr/README.md).
 
 ## Core Architecture
 

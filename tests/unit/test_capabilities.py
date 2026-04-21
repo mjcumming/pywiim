@@ -23,7 +23,7 @@ from pywiim.capabilities import (
     is_wiim_device,
     supports_standard_led_control,
 )
-from pywiim.exceptions import WiiMError
+from pywiim.exceptions import WiiMError, WiiMTimeoutError
 from pywiim.models import DeviceInfo
 
 
@@ -786,6 +786,142 @@ class TestWiiMCapabilitiesClass:
 
         assert capabilities["supports_presets"] is False
         assert capabilities["presets_full_data"] is False
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_force_bypasses_cache(self, mock_client):
+        """force=True re-runs detection instead of returning the detector cache."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro", firmware="5.0.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getSubLPF" in endpoint:
+                return ApiResponse(
+                    parsed={"status": 1, "plugged": 0, "cross": 80, "phase": 0, "level": 0},
+                    raw=None,
+                )
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        await detector.detect_capabilities(mock_client, device_info)
+        assert mock_client.get_status.call_count == 1
+        await detector.detect_capabilities(mock_client, device_info, force=True)
+        assert mock_client.get_status.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_subwoofer_supported(self, mock_client):
+        """supports_subwoofer True when getSubLPF returns a valid status dict."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Ultra", firmware="5.2.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getSubLPF" in endpoint:
+                return ApiResponse(
+                    parsed={"status": 1, "plugged": 1, "cross": 100, "phase": 0, "level": 0},
+                    raw=None,
+                )
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+        assert capabilities["supports_subwoofer"] is True
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_subwoofer_unknown_command(self, mock_client):
+        """supports_subwoofer False when getSubLPF fails with unknown command."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Mini", firmware="4.8.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getSubLPF" in endpoint:
+                raise WiiMError("unknown command")
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+        assert capabilities["supports_subwoofer"] is False
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_subwoofer_non_dict_response(self, mock_client):
+        """Invalid JSON shape for getSubLPF yields supports_subwoofer False."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro", firmware="5.0.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getSubLPF" in endpoint:
+                return ApiResponse(parsed="not-a-dict", raw="not-a-dict")
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+        assert capabilities["supports_subwoofer"] is False
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_subwoofer_retries_on_timeout(self, mock_client):
+        """Transient timeout errors retry getSubLPF before succeeding."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro", firmware="5.0.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+        attempts = {"n": 0}
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getSubLPF" in endpoint:
+                attempts["n"] += 1
+                if attempts["n"] < 3:
+                    raise WiiMTimeoutError("timeout", endpoint="x")
+                return ApiResponse(
+                    parsed={"cross": 80, "status": 0, "plugged": 0},
+                    raw=None,
+                )
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+        assert capabilities["supports_subwoofer"] is True
+        assert attempts["n"] == 3
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_subwoofer_inconclusive_non_transient(self, mock_client):
+        """Non-transient errors without unknown command yield None on WiiM (not False)."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro", firmware="5.0.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getSubLPF" in endpoint:
+                raise WiiMError("something permanent but not unknown")
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+        assert capabilities["supports_subwoofer"] is None
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_subwoofer_not_wiim_skips_probe(self, mock_client):
+        """Non-WiiM devices get supports_subwoofer False without calling getSubLPF."""
+        device_info = DeviceInfo(uuid="test-uuid", model="Up2Stream", firmware="4.6.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+        calls: list[str] = []
+
+        def request_side_effect(endpoint, **kwargs):
+            calls.append(endpoint)
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+        assert capabilities["supports_subwoofer"] is False
+        assert not any("getSubLPF" in c for c in calls)
 
 
 class TestPollingInterval:

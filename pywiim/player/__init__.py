@@ -1210,10 +1210,10 @@ class Player(PlayerBase):
 
     @property
     def supports_subwoofer(self) -> bool:
-        """Whether subwoofer control is supported (WiiM Ultra with firmware 5.2+)."""
+        """Whether subwoofer control is supported (probed via getSubLPF at capability detection)."""
         if not self.client:
             return False
-        return bool(self.client.capabilities.get("supports_subwoofer", False))
+        return self.client.capabilities.get("supports_subwoofer") is True
 
     @property
     def supports_trigger_out(self) -> bool:

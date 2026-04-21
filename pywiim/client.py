@@ -140,7 +140,7 @@ class WiiMClient(
         self._capabilities_detected = capabilities is not None
         self._detecting_capabilities = False  # Flag to prevent recursion
 
-    async def _detect_capabilities(self) -> dict[str, Any]:
+    async def _detect_capabilities(self, force: bool = False) -> dict[str, Any]:
         """Detect device capabilities and update client configuration.
 
         This method is called automatically on first use if capabilities were not
@@ -151,13 +151,17 @@ class WiiMClient(
         - Protocol preferences
         - Generation-specific quirks
 
+        Args:
+            force: When True, bypass the early return and re-run probing (used by
+                :meth:`refresh_capabilities` so OTA firmware can change support flags).
+
         Returns:
             Dictionary of detected capabilities.
 
         Raises:
             WiiMError: If capability detection fails.
         """
-        if self._capabilities_detected:
+        if self._capabilities_detected and not force:
             return self._capabilities
 
         try:
@@ -165,7 +169,7 @@ class WiiMClient(
             device_info = await BaseWiiMClient.get_device_info_model(self)
 
             # Detect capabilities using the capability detector
-            capabilities = await self._capability_detector.detect_capabilities(self, device_info)
+            capabilities = await self._capability_detector.detect_capabilities(self, device_info, force=force)
 
             # Ensure vendor is normalized (safety check)
             from .normalize import normalize_vendor
@@ -227,6 +231,7 @@ class WiiMClient(
                 upnp_caps = await self._safe_collect_upnp_description_capabilities()
                 if upnp_caps:
                     capabilities.update(upnp_caps)
+                capabilities.setdefault("supports_subwoofer", False)
                 self._capabilities.update(capabilities)
                 self._capabilities_detected = True
                 return self._capabilities
@@ -234,6 +239,22 @@ class WiiMClient(
                 # If even static detection fails, use empty capabilities
                 self._capabilities_detected = True
                 return self._capabilities
+
+    async def refresh_capabilities(self, force: bool = True) -> dict[str, Any]:
+        """Re-run capability detection including runtime probes (e.g. after firmware OTA).
+
+        Args:
+            force: When True (default), drop the detector cache for this device so
+                probes such as getSubLPF run again.
+
+        Returns:
+            Updated capabilities dict (same object as :attr:`capabilities`).
+        """
+        device_info = await BaseWiiMClient.get_device_info_model(self)
+        if force:
+            self._capability_detector.invalidate_device(f"{self.host}:{device_info.uuid}")
+        self._capabilities_detected = False
+        return await self._detect_capabilities(force=force)
 
     async def _safe_collect_upnp_description_capabilities(self) -> dict[str, Any]:
         """Collect UPnP description.xml metadata without raising on errors."""

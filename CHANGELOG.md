@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-04-20
+
+### Added
+- **`WiiMClient.refresh_capabilities(force=True)`** — Re-runs `WiiMCapabilities.detect_capabilities` (with optional detector cache invalidation) so firmware OTA can refresh `supports_*` flags including subwoofer.
+- **ADR 018** — Client **`capabilities`** dict is the single source of truth for optional HTTP features; Home Assistant and architecture docs updated accordingly. **ADR 006–018** files are now under version control (several were referenced in the ADR index but absent from the tree in this branch).
+- **Integration tests** — `test_subwoofer_capability_detection` and stricter **`test_capability_detection`** / **`test_player_subwoofer_read`** for real devices (unsupported path and `refresh_capabilities`).
+
+### Changed
+- **`supports_subwoofer`** — Set only during **`WiiMCapabilities.detect_capabilities()`** via **getSubLPF** probe (retries; `True` / `False` / `None` for inconclusive WiiM). **`StateManager`** no longer writes the flag on poll failure; it only refreshes cached status when support is not `False`, and may set **`True`** if capability was **`None`** and a valid status dict appears.
+- **`Player.supports_subwoofer`** — **`True`** only when **`client.capabilities["supports_subwoofer"] is True`** (not truthy coercion for **`None`**).
+- **`WiiMClient._detect_capabilities(force=...)`** / **`detect_capabilities(..., force=...)`** — Support forced re-detection.
+
+### Fixed
+- **`get_subwoofer_status` / `get_subwoofer_status_raw`** — Reject JSON **error** bodies (e.g. `{"error": "unsupported_command"}` on Arylic) so they do not become fake **`SubwooferStatus`** instances.
+
+### Documentation
+- **HA_INTEGRATION.md**, **HA_CAPABILITIES.md**, **API_REFERENCE.md**, **ARCHITECTURE.md**, **ARCHITECTURE_DATA_FLOW.md**, **API_DESIGN_PATTERNS.md**, **DESIGN_PRINCIPLES.md**, **design/README.md** — Capabilities-first integration guidance and ADR 018 links.
+
 ## [2.2.1] - 2026-04-20
 
 ### Fixed
