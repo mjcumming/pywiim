@@ -441,6 +441,22 @@ class TestParsePlayerStatus:
         # Should be corrected to "play" due to rich metadata
         assert parsed["play_status"] == "play"
 
+    def test_parse_qobuz_connect_status_none_issue_222(self):
+        """HTTP ``status: none`` with Qobuz stream fields should map to play (mjcumming/wiim#222)."""
+        raw = {
+            "status": "none",
+            "mode": "36",
+            "vendor": "Qobuz",
+            "Title": "5465737420536f6e67",  # "Test Song"
+            "Artist": "5465737420417274697374",  # "Test Artist"
+            "curpos": 0,
+            "totlen": 240000,
+            "cover": "http://example.com/artwork.jpg",
+        }
+        parsed, _ = parse_player_status(raw)
+        assert parsed["play_status"] == "play"
+        assert parsed["source"] == "qobuz"
+
     def test_parse_qobuz_connect_state_no_correction(self):
         """Test Qobuz Connect state not corrected without enough indicators."""
         # Qobuz with stopped status and minimal metadata should not be corrected

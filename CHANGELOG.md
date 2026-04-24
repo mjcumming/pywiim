@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.3] - 2026-04-24
+
+### Fixed
+- **Qobuz Connect / Home Assistant idle state** — `getPlayerStatusEx` may report `status: "none"` while `curpos`, `totlen`, and metadata still describe an active Qobuz session ([mjcumming/wiim#222](https://github.com/mjcumming/wiim/issues/222)). `_handle_qobuz_connect_state_quirks` previously treated `none` as a final transport state and skipped correction; it now only skips when status is already play/pause/buffering-style. Position-at-track-start (`curpos` / `position` **0**) now counts toward playback indicators.
+
 ## [2.2.2] - 2026-04-20
 
 ### Added

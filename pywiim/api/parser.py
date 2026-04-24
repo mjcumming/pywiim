@@ -469,7 +469,7 @@ def _handle_qobuz_connect_state_quirks(data: dict[str, Any], raw: dict[str, Any]
     """Handle Qobuz Connect state detection quirks.
 
     Addresses GitHub issue #35: Qobuz Connect shows playing briefly then switches to idle.
-    This implements the enhanced state detection logic that was added in python-linkplay v0.2.9.
+    Also handles HTTP ``status: "none"`` with live timeline/metadata (mjcumming/wiim#222).
 
     Args:
         data: Parsed data dictionary (modified in place)
@@ -477,16 +477,30 @@ def _handle_qobuz_connect_state_quirks(data: dict[str, Any], raw: dict[str, Any]
     """
     current_status = data.get("play_status", "").lower()
 
-    # Only apply workaround when status appears to be incorrectly reported as stopped/idle
-    if current_status not in {"stop", "stopped", "idle", ""}:
-        return  # Status appears correct, don't interfere
+    # Only skip when the device already reports a normal transport state we should not override.
+    # Qobuz Connect often reports ``status: "none"`` while ``curpos`` / ``totlen`` and metadata
+    # still reflect an active stream (see mjcumming/wiim#222); ``none`` must not bypass this path.
+    if current_status in {
+        "play",
+        "playing",
+        "pause",
+        "paused",
+        "paused playback",
+        "load",
+        "loading",
+        "buffering",
+        "transitioning",
+    }:
+        return
 
     # Enhanced detection: Look for multiple indicators that suggest active playback
     # This mimics the improved logic from python-linkplay v0.2.9
 
     title = data.get("title")
     has_track_info = bool(title and isinstance(title, str) and title.strip() and title != "Unknown")
-    has_position_info = bool(data.get("position") or raw.get("curpos") or raw.get("offset_pts"))
+    has_position_info = (
+        data.get("position") is not None or raw.get("curpos") is not None or raw.get("offset_pts") is not None
+    )
     has_duration_info = bool(data.get("duration") or raw.get("totlen"))
     has_artwork = bool(data.get("entity_picture") or raw.get("cover") or raw.get("albumArtURI"))
 
