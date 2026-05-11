@@ -1,16 +1,22 @@
 """Loop mode mappings for different device vendors.
 
-WiiM and Arylic devices use different loop mode value schemes. This module
-provides vendor-specific mappings to handle both correctly.
+WiiM and Arylic devices use different ``loop_mode`` integer schemes. Prefer
+:func:`resolve_loop_mode_mapping` with ``loop_mode_scheme`` from
+:class:`pywiim.profiles.DeviceProfile` — some WiiM firmware (e.g. Ultra 5.2+)
+uses LinkPlay/Arylic numbering while ``vendor`` remains ``wiim``.
+See https://github.com/mjcumming/pywiim/issues/17
 """
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 __all__ = [
     "LoopModeMapping",
     "get_loop_mode_mapping",
+    "get_loop_mode_mapping_for_scheme",
+    "resolve_loop_mode_mapping",
+    "resolve_loop_mode_mapping_for_player",
     "WIIM_LOOP_MODE",
     "ARYLIC_LOOP_MODE",
 ]
@@ -72,11 +78,6 @@ class LoopModeMapping(NamedTuple):
         if loop_mode == self.normal:
             return (False, False, False)
 
-        # Special case: loop_mode=5 is used by some sources (e.g., Spotify Connect)
-        # when they control playback externally. Treat as normal/unknown state.
-        if loop_mode == 5:
-            return (False, False, False)
-
         # Unknown value - log and return safe default
         import logging
 
@@ -134,8 +135,55 @@ LEGACY_BITFIELD_LOOP_MODE = LoopModeMapping(
 )
 
 
+def get_loop_mode_mapping_for_scheme(scheme: str) -> LoopModeMapping:
+    """Return the mapping table for a profile ``loop_mode_scheme`` value.
+
+    Args:
+        scheme: ``"wiim"``, ``"arylic"``, or ``"legacy"`` (case-insensitive).
+
+    Returns:
+        The corresponding :class:`LoopModeMapping`.
+    """
+    key = (scheme or "wiim").strip().lower()
+    if key == "arylic":
+        return ARYLIC_LOOP_MODE
+    if key == "legacy":
+        return LEGACY_BITFIELD_LOOP_MODE
+    return WIIM_LOOP_MODE
+
+
+def resolve_loop_mode_mapping(
+    *,
+    loop_mode_scheme: str | None = None,
+    vendor: str | None = None,
+) -> LoopModeMapping:
+    """Pick the correct mapping: prefer explicit scheme, then infer from vendor.
+
+    Use this (with ``loop_mode_scheme`` from :func:`pywiim.profiles.get_device_profile`)
+    anywhere shuffle/repeat is translated to or from ``loop_mode`` integers.
+    """
+    if loop_mode_scheme is not None and str(loop_mode_scheme).strip() != "":
+        return get_loop_mode_mapping_for_scheme(loop_mode_scheme)
+    return get_loop_mode_mapping(vendor)
+
+
+def resolve_loop_mode_mapping_for_player(player: Any) -> LoopModeMapping:
+    """Resolve mapping from a :class:`pywiim.player.Player` (profile + client capabilities)."""
+    scheme: str | None = None
+    prof = getattr(player, "profile", None)
+    if prof is not None:
+        scheme = getattr(prof, "loop_mode_scheme", None)
+    if scheme is None:
+        scheme = player.client._capabilities.get("loop_mode_scheme")
+    vendor = player.client._capabilities.get("vendor")
+    return resolve_loop_mode_mapping(loop_mode_scheme=scheme, vendor=vendor)
+
+
 def get_loop_mode_mapping(vendor: str | None) -> LoopModeMapping:
-    """Get the loop mode mapping for a specific vendor.
+    """Infer loop mode mapping from vendor string only (legacy helper).
+
+    Prefer :func:`resolve_loop_mode_mapping` with ``loop_mode_scheme`` from the
+    device profile when model/firmware uses a non-default scheme for this vendor.
 
     Args:
         vendor: Device vendor ("wiim", "arylic", "audio_pro", "linkplay_generic", or None)
@@ -144,7 +192,7 @@ def get_loop_mode_mapping(vendor: str | None) -> LoopModeMapping:
         LoopModeMapping for the vendor
 
     Note:
-        - WiiM devices use sequential values (0,1,2,3,4)
+        - WiiM devices use sequential values (0,1,2,3,4) in the *documented* WiiM scheme
         - Arylic devices use a different sequential scheme (0,1,2,3,4,5)
         - Audio Pro and generic LinkPlay devices default to Arylic mapping
         - Unknown/None vendors default to WiiM mapping (most common)

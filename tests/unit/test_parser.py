@@ -5,6 +5,7 @@ Tests response parsing, field mapping, time unit conversion, and normalization.
 
 from __future__ import annotations
 
+from pywiim.api.constants import PLAY_MODE_SHUFFLE
 from pywiim.api.parser import _decode_text, _hex_to_str, _normalize_time_value, parse_player_status
 
 
@@ -225,6 +226,12 @@ class TestParsePlayerStatus:
         raw4 = {"loop_mode": 2}
         parsed4, _ = parse_player_status(raw4, vendor="wiim")
         assert parsed4["play_mode"] == "shuffle_repeat_all"
+
+    def test_parse_loop_mode_arylic_scheme_value_5(self):
+        """loop_mode 5 is shuffle+repeat_one under Arylic scheme (WiiM Ultra 5.2+ pywiim#17)."""
+        raw = {"loop_mode": 5}
+        parsed, _ = parse_player_status(raw, vendor="wiim", loop_mode_scheme="arylic")
+        assert parsed["play_mode"] == PLAY_MODE_SHUFFLE
 
     def test_parse_source_from_mode(self):
         """Test source mapping from mode field."""

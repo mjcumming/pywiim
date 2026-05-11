@@ -435,7 +435,9 @@ API_ENDPOINT_TRIGGER_OUT_STATUS = "/httpapi.asp?command=getTriggeroutStatus"
 API_ENDPOINT_TRIGGER_OUT_SET = "/httpapi.asp?command=setTriggeroutStatus:"
 
 # PEQ (Parametric Equalizer) endpoints - official WiiM LV2 PEQ API
-# pluginURI: http://moddevices.com/plugins/caps/EqNp
+# pluginURI (implemented in pywiim): http://moddevices.com/plugins/caps/EqNp
+# Same endpoints also accept other LV2 plugins (e.g. graphic 10-band Eq10HP);
+# pywiim does not implement Eq10HP — see docs/integration/API_REFERENCE.md (PEQ section).
 API_ENDPOINT_PEQ_GET_BAND = "/httpapi.asp?command=EQGetLV2BandEx:"
 API_ENDPOINT_PEQ_GET_SOURCE_BAND = "/httpapi.asp?command=EQGetLV2SourceBandEx:"
 API_ENDPOINT_PEQ_SET_BAND = "/httpapi.asp?command=EQSetLV2Band:"

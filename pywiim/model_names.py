@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-__all__ = ["is_known_wiim_model", "is_wiim_ultra", "to_friendly_model_name"]
+__all__ = ["is_known_wiim_model", "is_wiim_ultra", "is_wiim_12v_trigger_model", "to_friendly_model_name"]
 
 # Raw `project` aliases seen on WiiM firmware variants.
 # Keep this list conservative and add entries when confirmed by real devices.
@@ -67,6 +67,36 @@ def is_wiim_ultra(model: str | None) -> bool:
     if not key:
         return False
     return key == "wiim_ultra" or (key.startswith("wiim_") and "ultra" in key)
+
+
+# Models known to ship a 12V trigger output (hardware). Do not infer from HTTP at connect:
+# some stacks answer getTriggeroutStatus or accept setTriggeroutStatus without real hardware.
+_WIIM_12V_TRIGGER_EXACT: frozenset[str] = frozenset(
+    {
+        "wiim_ultra",
+        "wiim_pro",
+        "wiim_pro_plus",
+        "wiim_pro_with_gc4a",
+    }
+)
+
+
+def is_wiim_12v_trigger_model(model: str | None) -> bool:
+    """Return True if this WiiM model is expected to have 12V trigger hardware.
+
+    Ultra, Pro, and Pro Plus lines ship the jack. We avoid runtime probing so we
+    never toggle trigger output during capability detection or verification.
+    """
+    key = _normalize_model_key(model)
+    if not key:
+        return False
+    if key in _WIIM_12V_TRIGGER_EXACT:
+        return True
+    if key.startswith("wiim_") and "ultra" in key:
+        return True
+    if key.startswith("wiim_") and "pro_plus" in key:
+        return True
+    return False
 
 
 def to_friendly_model_name(model: str | None) -> str | None:

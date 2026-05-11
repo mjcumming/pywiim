@@ -32,7 +32,7 @@ class PlaybackControl:
         """
         import time
 
-        from ..api.loop_mode import get_loop_mode_mapping
+        from ..api.loop_mode import resolve_loop_mode_mapping_for_player
         from .properties import PlayerProperties
 
         props = PlayerProperties(self.player)
@@ -46,9 +46,7 @@ class PlaybackControl:
                 f"Supported sources: USB, Line In, Optical, Coaxial, Playlist, Preset."
             )
 
-        # Get vendor-specific loop mode mapping
-        vendor = self.player.client._capabilities.get("vendor")
-        mapping = get_loop_mode_mapping(vendor)
+        mapping = resolve_loop_mode_mapping_for_player(self.player)
 
         # Get current repeat state
         repeat_mode = props.repeat_mode
@@ -88,7 +86,7 @@ class PlaybackControl:
         if mode_lower not in ("off", "one", "all"):
             raise ValueError(f"Invalid repeat mode: {mode}. Valid values: 'off', 'one', 'all'")
 
-        from ..api.loop_mode import get_loop_mode_mapping
+        from ..api.loop_mode import resolve_loop_mode_mapping_for_player
         from .properties import PlayerProperties
 
         props = PlayerProperties(self.player)
@@ -102,9 +100,7 @@ class PlaybackControl:
                 f"Supported sources: USB, Line In, Optical, Coaxial, Playlist, Preset."
             )
 
-        # Get vendor-specific loop mode mapping
-        vendor = self.player.client._capabilities.get("vendor")
-        mapping = get_loop_mode_mapping(vendor)
+        mapping = resolve_loop_mode_mapping_for_player(self.player)
 
         # Get current shuffle state
         shuffle_enabled = props.shuffle_state or False

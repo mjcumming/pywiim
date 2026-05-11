@@ -1088,45 +1088,23 @@ class FeatureTester:
                 print(f"   ✗ Error: {e}")
 
     async def test_trigger_out(self) -> None:
-        """Test 12V trigger output (WiiM Ultra / Pro / Pro Plus)."""
+        """Test 12V trigger read path only (no set/toggle — would disturb connected gear)."""
         print("\n⚡ Testing 12V Trigger...")
 
         try:
             if not self.client.capabilities.get("supports_trigger_out", False):
                 self.results["skipped"].append("trigger_out: Not supported")
-                print("   ⊘ 12V trigger not supported (WiiM Ultra/Pro/Pro Plus only)")
+                print("   ⊘ 12V trigger not supported (model class: Ultra / Pro / Pro Plus only)")
                 return
 
             status = await self.client.get_trigger_out_status()
             if status is None:
                 self.results["not_supported"].append("trigger_out: get_trigger_out_status")
-                print("   ⊘ 12V trigger not supported (no response)")
+                print("   ⊘ 12V trigger: get_trigger_out_status returned no value")
                 return
 
-            self.results["passed"].append("trigger_out: get_trigger_out_status")
-            print(f"   ✓ get_trigger_out_status: {'ON' if status else 'OFF'}")
-
-            original_on = status
-            try:
-                await self.client.set_trigger_out(not original_on)
-                await asyncio.sleep(0.3)
-                check = await self.client.get_trigger_out_status()
-                if check is not None and check == (not original_on):
-                    self.results["passed"].append("trigger_out: set_trigger_out")
-                    print(f"   ✓ set_trigger_out({not original_on})")
-                else:
-                    self.results["warnings"].append("trigger_out: set_trigger_out - value not verified")
-                    print("   ⚠️  set_trigger_out - readback not verified")
-                await self.client.set_trigger_out(original_on)
-                await asyncio.sleep(0.2)
-                print(f"   ✓ Restored trigger to {'ON' if original_on else 'OFF'}")
-            except Exception as e:
-                self.results["warnings"].append(f"trigger_out: set_trigger_out - {e}")
-                print(f"   ⚠️  set_trigger_out: {e}")
-                try:
-                    await self.client.set_trigger_out(original_on)
-                except Exception:
-                    pass
+            self.results["passed"].append("trigger_out: get_trigger_out_status (read-only)")
+            print(f"   ✓ get_trigger_out_status: {'ON' if status else 'OFF'} (read-only; set not tested)")
 
         except Exception as e:
             error_str = str(e).lower()

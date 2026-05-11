@@ -30,10 +30,11 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal
 
-from .model_names import is_known_wiim_model
+from .api.firmware import compare_firmware_versions
+from .model_names import is_known_wiim_model, is_wiim_ultra
 from .normalize import normalize_vendor
 
 # Firmware version patterns for Audio Pro generation detection.
@@ -470,6 +471,16 @@ def _is_gen1_device(device_info: DeviceInfo) -> bool:
     return False
 
 
+def _wiim_ultra_uses_arylic_loop_mode_scheme(device_info: DeviceInfo) -> bool:
+    """WiiM Ultra on firmware 5.2+ reports LinkPlay/Arylic ``loop_mode`` values (pywiim#17)."""
+    if not is_wiim_ultra(device_info.model):
+        return False
+    fw = device_info.firmware
+    if not fw or not str(fw).strip():
+        return False
+    return compare_firmware_versions(str(fw).strip(), "5.2.0") >= 0
+
+
 def get_device_profile(device_info: DeviceInfo) -> DeviceProfile:
     """Get the appropriate profile for a device.
 
@@ -522,6 +533,13 @@ def get_device_profile(device_info: DeviceInfo) -> DeviceProfile:
 
     # Other vendors - direct lookup
     profile = PROFILES.get(vendor, PROFILES["linkplay_generic"])
+
+    if vendor == "wiim" and _wiim_ultra_uses_arylic_loop_mode_scheme(device_info):
+        profile = replace(profile, loop_mode_scheme="arylic")
+        _LOGGER.debug(
+            "Device %s: WiiM Ultra firmware uses Arylic loop_mode scheme (pywiim#17)",
+            device_info.name or device_info.model or "?",
+        )
 
     # Check for Gen1 on any device type
     if _is_gen1_device(device_info) and not profile.grouping.uses_wifi_direct:

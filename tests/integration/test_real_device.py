@@ -55,6 +55,7 @@ class TestRealDeviceCore:
         )
         assert "supports_channel_balance" in real_device_client._capabilities
         assert "supports_subwoofer" in real_device_client._capabilities
+        assert "loop_mode_scheme" in real_device_client._capabilities
         caps = real_device_client._capabilities
         if caps.get("is_wiim_device"):
             assert caps["supports_channel_balance"] in (True, False)
@@ -65,6 +66,7 @@ class TestRealDeviceCore:
 
         print("\nCapabilities:")
         print(f"  Vendor: {real_device_client._capabilities.get('vendor')}")
+        print(f"  loop_mode_scheme: {real_device_client._capabilities.get('loop_mode_scheme')}")
         print(f"  Is WiiM: {real_device_client._capabilities.get('is_wiim_device')}")
         print(f"  Is Legacy: {real_device_client._capabilities.get('is_legacy_device')}")
         print(f"  Channel balance: {real_device_client._capabilities.get('supports_channel_balance')}")

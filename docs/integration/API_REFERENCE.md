@@ -286,6 +286,12 @@ await player.client.load_peq("My Preset", source_name="wifi")
 
 **Data models** (from `pywiim.api.peq`): `PEQBand`, `PEQSettings`, `PEQPresetInfo`. Constants: `PEQ_MODE_OFF`, `PEQ_MODE_LOW_SHELF`, `PEQ_MODE_PEAK`, `PEQ_MODE_HIGH_SHELF`, `PEQ_CHANNEL_MODE_STEREO`, `PEQ_CHANNEL_MODE_LR`.
 
+##### LV2 graphic 10-band EQ (`Eq10HP`) — documented only
+
+WiiM firmware can also load a **10-band graphic** LV2 plugin (**`http://moddevices.com/plugins/caps/Eq10HP`**) for per-source EQ. Reports indicate the **same HTTP command family** as above (`EQGetLV2SourceBandEx`, `EQSetLV2SourceBand`, `EQChangeSourceFX`, etc.), but with **`pluginURI`** set to **`http://moddevices.com/plugins/caps/Eq10HP`** and band parameters such as `band31hz`, `band63hz`, … instead of the parametric `a_mode` / `a_freq` / … shape used by **`EqNp`**.
+
+**pywiim does not implement `Eq10HP`:** there are no client helpers or parsers for that plugin; `PEQAPI` is built exclusively around **`EqNp`**. Integrators who need graphic LV2 EQ must call the device with the **Eq10HP** `pluginURI` and payload layout themselves. Community field note: [GitHub issue #16](https://github.com/mjcumming/pywiim/issues/16).
+
 #### Playback Presets (Radio Stations / Saved Favorites)
 
 ```python

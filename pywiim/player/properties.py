@@ -687,12 +687,10 @@ class PlayerProperties:
         loop_mode = getattr(self.player._status_model, "loop_mode", None)
         if loop_mode is not None:
             try:
-                from ..api.loop_mode import get_loop_mode_mapping
+                from ..api.loop_mode import resolve_loop_mode_mapping_for_player
 
                 loop_val = int(loop_mode)
-                # Use vendor-specific mapping to interpret loop_mode
-                vendor = self.player.client._capabilities.get("vendor")
-                mapping = get_loop_mode_mapping(vendor)
+                mapping = resolve_loop_mode_mapping_for_player(self.player)
                 shuffle, _, _ = mapping.from_loop_mode(loop_val)
                 return shuffle
             except (TypeError, ValueError):
@@ -731,12 +729,10 @@ class PlayerProperties:
         loop_mode = getattr(self.player._status_model, "loop_mode", None)
         if loop_mode is not None:
             try:
-                from ..api.loop_mode import get_loop_mode_mapping
+                from ..api.loop_mode import resolve_loop_mode_mapping_for_player
 
                 loop_val = int(loop_mode)
-                # Use vendor-specific mapping to interpret loop_mode
-                vendor = self.player.client._capabilities.get("vendor")
-                mapping = get_loop_mode_mapping(vendor)
+                mapping = resolve_loop_mode_mapping_for_player(self.player)
                 _, is_repeat_one, is_repeat_all = mapping.from_loop_mode(loop_val)
 
                 if is_repeat_one:

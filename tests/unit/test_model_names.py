@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from pywiim.model_names import is_known_wiim_model, is_wiim_ultra, to_friendly_model_name
+from pywiim.model_names import (
+    is_known_wiim_model,
+    is_wiim_12v_trigger_model,
+    is_wiim_ultra,
+    to_friendly_model_name,
+)
 
 
 class TestIsKnownWiiMModel:
@@ -45,6 +50,27 @@ class TestIsWiiMUltra:
     def test_none_returns_false(self):
         """None model should return False."""
         assert is_wiim_ultra(None) is False
+
+
+class TestIsWiiM12VTriggerModel:
+    """12V trigger is inferred from known hardware models only (no HTTP probe)."""
+
+    def test_ultra_and_pro_variants(self):
+        assert is_wiim_12v_trigger_model("wiim_ultra") is True
+        assert is_wiim_12v_trigger_model("WiiM Pro") is True
+        assert is_wiim_12v_trigger_model("wiim_pro_plus") is True
+        assert is_wiim_12v_trigger_model("wiim_pro_with_gc4a") is True
+
+    def test_mini_and_amp_not_trigger_models(self):
+        assert is_wiim_12v_trigger_model("wiim_mini") is False
+        assert is_wiim_12v_trigger_model("wiim_amp") is False
+        assert is_wiim_12v_trigger_model("Muzo_Mini") is False
+
+    def test_non_wiim_false(self):
+        assert is_wiim_12v_trigger_model("Audio Pro C10 MkII") is False
+
+    def test_none_false(self):
+        assert is_wiim_12v_trigger_model(None) is False
 
 
 class TestFriendlyModelName:

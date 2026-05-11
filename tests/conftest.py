@@ -163,6 +163,7 @@ def mock_capabilities():
         "is_wiim_device": True,
         "is_legacy_device": False,
         "vendor": "wiim",
+        "loop_mode_scheme": "wiim",
         "supports_audio_output": True,
         "supports_metadata": True,
         "supports_presets": True,

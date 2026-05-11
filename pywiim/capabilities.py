@@ -9,7 +9,7 @@ The capability detection system uses a multi-layer approach:
 2. Device Type Detection (WiiM vs Legacy)
 3. Firmware Version Detection
 4. Generation Detection (Audio Pro: mkii, w_generation, original)
-5. Endpoint Probing (runtime capability testing)
+5. Endpoint Probing (runtime tests; LED/12V trigger from static model hints, no mutating HTTP at connect)
 6. Protocol Detection (HTTP/HTTPS, ports, client certs)
 
 # pragma: allow-long-file capabilities-cohesive
@@ -37,14 +37,12 @@ from .api.constants import (
     API_ENDPOINT_EQ_STATUS,
     API_ENDPOINT_GET_CHANNEL_BALANCE,
     API_ENDPOINT_PEQ_GET_LIST,
-    API_ENDPOINT_SET_LED,
     API_ENDPOINT_SUBWOOFER_STATUS,
-    API_ENDPOINT_TRIGGER_OUT_STATUS,
     PEQ_PLUGIN_URI,
 )
 from .api.subwoofer import is_valid_subwoofer_lpf_dict
 from .exceptions import WiiMError
-from .model_names import is_known_wiim_model, is_wiim_ultra
+from .model_names import is_known_wiim_model, is_wiim_12v_trigger_model, is_wiim_ultra
 from .models import DeviceInfo
 from .normalize import normalize_vendor
 from .profiles import detect_audio_pro_generation, detect_vendor, get_device_profile
@@ -448,36 +446,15 @@ class WiiMCapabilities:
 
         capabilities["supports_peq"] = peq_supported
 
-        # Probe for 12V trigger support (WiiM Ultra / Pro / Pro Plus)
-        # getTriggeroutStatus returns {"status":0|1}; only some WiiM models have the hardware
-        try:
-            result = await client._request(API_ENDPOINT_TRIGGER_OUT_STATUS)
-            if isinstance(result.parsed, dict) and "status" in result.parsed:
-                capabilities["supports_trigger_out"] = True
-                _LOGGER.debug(
-                    "Device %s supports 12V trigger (getTriggeroutStatus), result: %s",
-                    client.host,
-                    result.parsed,
-                )
-        except WiiMError:
-            _LOGGER.debug("Device %s does not support 12V trigger (getTriggeroutStatus)", client.host)
-
         # Subwoofer (getSubLPF) — WiiM-only read probe; same endpoint as get_subwoofer_status_raw()
         capabilities["supports_subwoofer"] = await _probe_supports_subwoofer(client, device_info, capabilities)
-
-        # Probe for Status Light (LED_SWITCH_SET) - "Status Light" in app; some devices use this instead of setLED
-        try:
-            await client._request(f"{API_ENDPOINT_SET_LED}0")
-            capabilities["supports_led_switch"] = True
-            _LOGGER.debug("Device %s supports Status Light (LED_SWITCH_SET)", client.host)
-        except WiiMError:
-            _LOGGER.debug("Device %s does not support Status Light (LED_SWITCH_SET)", client.host)
 
         # Get device profile for profile-specific settings (like reboot command)
         # Profile provides device-specific command variations
         # See: https://github.com/mjcumming/wiim/issues/177
         profile = get_device_profile(device_info)
         capabilities["reboot_command"] = profile.endpoints.reboot_command
+        capabilities["loop_mode_scheme"] = profile.loop_mode_scheme
         _LOGGER.debug(
             "Device %s reboot command: %s (from profile %s)",
             client.host,
@@ -554,6 +531,9 @@ def detect_device_capabilities(device_info: DeviceInfo) -> dict[str, Any]:
         - supports_channel_balance: False until runtime probe (WiiM-only); see WiiMCapabilities
         - supports_metadata: Whether device supports metadata
         - status_endpoint: Preferred status endpoint path
+        - supports_led_switch: True for WiiM class (no HTTP probe); absent for non-WiiM until merge defaults
+        - supports_trigger_out: True only for WiiM models with known 12V hardware (Ultra/Pro/Pro Plus)
+        - loop_mode_scheme: Set during runtime ``detect_capabilities`` from ``get_device_profile`` merge
     """
     # Detect and normalize vendor first
     vendor = detect_vendor(device_info)
@@ -593,6 +573,11 @@ def detect_device_capabilities(device_info: DeviceInfo) -> dict[str, Any]:
         capabilities["supports_sleep_timer"] = True  # WiiM devices support sleep timer
         capabilities["max_alarm_slots"] = 3  # WiiM supports 3 independent alarms
         capabilities["supports_firmware_install"] = True  # WiiM devices support firmware update installation via API
+        # Status LED (LED_SWITCH_SET): enable by device class only. Never probe with LED_SWITCH_SET:0
+        # at connect — it turns the LED off (user-visible mutation). See ADR 005 / ADR 016.
+        capabilities["supports_led_switch"] = True
+        # 12V trigger: known hardware (Ultra / Pro / Pro Plus) only — no HTTP probe/toggle at connect.
+        capabilities["supports_trigger_out"] = is_wiim_12v_trigger_model(device_info.model)
         # Display/LCD on/off and brightness (setLightOperationBrightConfig) - WiiM Ultra only
         if is_wiim_ultra(device_info.model):
             capabilities["supports_display_config"] = True

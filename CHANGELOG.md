@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.4] - 2026-05-11
+
+### Added
+- **`get_loop_mode_mapping_for_scheme`**, **`resolve_loop_mode_mapping`**, **`resolve_loop_mode_mapping_for_player`** (`pywiim.api.loop_mode`) — scheme-first shuffle/repeat ↔ `loop_mode` mapping.
+- **`is_wiim_12v_trigger_model()`** (`pywiim.model_names`) — known 12V trigger hardware models.
+- **`client.capabilities["loop_mode_scheme"]`** — merged after capability detection from **`get_device_profile`**. Integration test asserts presence (**`test_capability_detection`**).
+
+### Fixed
+- **Status LED stuck off after connect or `wiim-verify`** ([#18](https://github.com/mjcumming/pywiim/issues/18)) — Connect-time **`LED_SWITCH_SET:0`** “probe” turned the LED off on stacks that accept the command. **Removed** that probe; **`supports_led_switch`** for **WiiM** comes from device class; **Arylic** unchanged (vendor + try-and-ignore on write).
+- **WiiM Ultra `loop_mode` vs documented WiiM table** ([#17](https://github.com/mjcumming/pywiim/issues/17)) — Ultra firmware **≥ 5.2.0** uses LinkPlay/**Arylic**-style values; mapping now follows **`DeviceProfile.loop_mode_scheme`** (`arylic` for that case) through **`parse_player_status`**, **`WiiMClient`**, and **`Player`** shuffle/repeat.
+
+### Changed
+- **`supports_trigger_out`** — From **`getTriggeroutStatus`** probe to **`is_wiim_12v_trigger_model()`** only (no connect-time HTTP); avoids false positives on OEM hardware. **`wiim-verify`** trigger check is **read-only** (no toggle).
+- **Design / integration docs** — ADR 005, 008, 016, 018; **API_REFERENCE**, **API_DESIGN_PATTERNS**, **DEVICE_PROFILES**, **HA_INTEGRATION**, **HA_CAPABILITIES** (LED, trigger, `loop_mode_scheme`, PEQ vs Eq10HP note for [#16](https://github.com/mjcumming/pywiim/issues/16)).
+
 ## [2.2.3] - 2026-04-24
 
 ### Fixed

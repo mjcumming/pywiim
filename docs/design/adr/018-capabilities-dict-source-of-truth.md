@@ -8,7 +8,7 @@ Accepted - 2026-04-20
 
 pywiim learns what a device can do in two related ways:
 
-1. **Runtime capability detection** — `WiiMClient._detect_capabilities()` / `WiiMClient.refresh_capabilities()` merges static hints with **probed** results into the **`WiiMClient.capabilities`** mapping (`supports_eq`, `supports_subwoofer`, `supports_peq`, `supports_presets`, `supports_trigger_out`, etc.). [ADR 003](003-capability-probing-before-endpoints.md) requires probing before relying on optional endpoints; [ADR 016](016-connect-time-read-only-capability-probes.md) defines connect-time probe behavior.
+1. **Runtime capability detection** — `WiiMClient._detect_capabilities()` / `WiiMClient.refresh_capabilities()` merges static hints with **probed** results into the **`WiiMClient.capabilities`** mapping (`supports_eq`, `supports_subwoofer`, `supports_peq`, `supports_presets`, etc.). **`supports_led_switch`** (WiiM class + Arylic vendor) and **`supports_trigger_out`** (known WiiM Ultra/Pro/Pro Plus models) come from **static hints** only — no mutating probe at connect. [ADR 003](003-capability-probing-before-endpoints.md) requires probing before relying on optional endpoints where safe; [ADR 016](016-connect-time-read-only-capability-probes.md) defines connect-time probe behavior.
 
 2. **Other registries** — e.g. `device_capabilities.py` and `source_catalog` constrain **which physical inputs / source ids exist** for a model. That is layout and selection policy, not a replacement for per-device, per-firmware **HTTP endpoint** support.
 

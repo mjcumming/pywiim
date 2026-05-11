@@ -233,6 +233,8 @@ class TestDeviceCapabilitiesDetection:
         assert capabilities["retry_count"] == 2
         assert capabilities["protocol_priority"] == ["https", "http"]
         assert capabilities.get("supports_display_config") is not True  # Pro is not Ultra
+        assert capabilities.get("supports_led_switch") is True
+        assert capabilities.get("supports_trigger_out") is True
 
     def test_detect_device_capabilities_wiim_ultra_has_display_config(self):
         """Test WiiM Ultra gets supports_display_config in static capabilities."""
@@ -241,6 +243,8 @@ class TestDeviceCapabilitiesDetection:
 
         assert capabilities["is_wiim_device"] is True
         assert capabilities.get("supports_display_config") is True
+        assert capabilities.get("supports_led_switch") is True
+        assert capabilities.get("supports_trigger_out") is True
 
     def test_detect_device_capabilities_audio_pro_mkii(self):
         """Test detecting capabilities for Audio Pro MkII."""
@@ -256,6 +260,8 @@ class TestDeviceCapabilitiesDetection:
         assert capabilities["supports_presets"] is False
         assert capabilities["supports_eq"] is False
         assert capabilities["non_selectable_source_ids"] == ["line_in", "aux", "rca"]
+        assert capabilities.get("supports_led_switch") is None
+        assert capabilities.get("supports_trigger_out") is None
 
     def test_detect_device_capabilities_audio_pro_w_generation(self):
         """Test detecting capabilities for Audio Pro W-generation."""
@@ -459,40 +465,57 @@ class TestWiiMCapabilitiesClass:
         assert any("getAudioOutputStatus" in str(call) for call in calls)
 
     @pytest.mark.asyncio
-    async def test_detect_capabilities_trigger_out_supported(self, mock_client):
-        """Test 12V trigger capability is set when getTriggeroutStatus succeeds."""
+    async def test_detect_capabilities_trigger_out_supported_by_model(self, mock_client):
+        """12V trigger is True for Ultra/Pro class from model only (no getTriggeroutStatus probe)."""
         device_info = DeviceInfo(uuid="test-uuid", model="WiiM Ultra", firmware="5.2.704452")
         mock_client.get_status = AsyncMock(return_value={"status": "ok"})
-
-        def request_side_effect(endpoint, **kwargs):
-            if "getTriggeroutStatus" in endpoint:
-                return ApiResponse(parsed={"status": 0}, raw=None)
-            return ApiResponse(parsed={"status": "ok"}, raw=None)
-
-        mock_client._request = AsyncMock(side_effect=request_side_effect)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok"}, raw=None))
 
         detector = WiiMCapabilities()
         capabilities = await detector.detect_capabilities(mock_client, device_info)
 
         assert capabilities["supports_trigger_out"] is True
+        calls = [str(c) for c in mock_client._request.call_args_list]
+        assert not any("getTriggeroutStatus" in c for c in calls)
 
     @pytest.mark.asyncio
-    async def test_detect_capabilities_trigger_out_not_supported(self, mock_client):
-        """Test 12V trigger capability is False when getTriggeroutStatus fails."""
+    async def test_detect_capabilities_trigger_out_false_for_mini(self, mock_client):
+        """WiiM Mini has no 12V trigger hardware — capability False without HTTP probe."""
         device_info = DeviceInfo(uuid="test-uuid", model="WiiM Mini", firmware="4.8.1")
         mock_client.get_status = AsyncMock(return_value={"status": "ok"})
-
-        def request_side_effect(endpoint, **kwargs):
-            if "getTriggeroutStatus" in endpoint:
-                raise WiiMError("unknown command")
-            return ApiResponse(parsed={"status": "ok"}, raw=None)
-
-        mock_client._request = AsyncMock(side_effect=request_side_effect)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok"}, raw=None))
 
         detector = WiiMCapabilities()
         capabilities = await detector.detect_capabilities(mock_client, device_info)
 
         assert capabilities["supports_trigger_out"] is False
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_wiim_led_switch_no_led_probe(self, mock_client):
+        """WiiM devices get supports_led_switch from device class; never LED_SWITCH_SET at connect."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro", firmware="5.0.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok"}, raw=None))
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["supports_led_switch"] is True
+        calls = [str(c) for c in mock_client._request.call_args_list]
+        assert not any("LED_SWITCH_SET" in c for c in calls)
+        assert capabilities.get("loop_mode_scheme") == "wiim"
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_wiim_ultra_fw52_loop_mode_scheme_arylic(self, mock_client):
+        """Merged capabilities include profile loop_mode_scheme (Ultra 5.2+ → arylic, pywiim#17)."""
+        device_info = DeviceInfo(uuid="test-uuid", model="wiim_ultra", firmware="5.2.813259")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok"}, raw=None))
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["loop_mode_scheme"] == "arylic"
 
     @pytest.mark.asyncio
     async def test_detect_capabilities_channel_balance_wiim_success(self, mock_client):

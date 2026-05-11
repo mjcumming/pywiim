@@ -7,8 +7,8 @@ Accepted - 2026-04-20
 WiiM and Arylic devices use **different numeric schemes** for the same HTTP `loop_mode` field. A single global or bitfield interpretation produced **invalid** interpretations (e.g. treating valid WiiM `loop_mode=3` as an error) and **broke shuffle/repeat** in integrations.
 
 ## Decision
-- **Vendor-specific mapping** is required for both **parsing** device status and **sending** shuffle/repeat commands.
-- Implementation lives in dedicated mapping logic (e.g. `pywiim/api/loop_mode.py` and call sites): use **`get_loop_mode_mapping(vendor)`** (or equivalent) so WiiM vs Arylic (and future vendors) do not share one numeric table.
+- **Scheme-specific mapping** is required for both **parsing** device status and **sending** shuffle/repeat commands. The scheme comes from **`DeviceProfile.loop_mode_scheme`** (see **`get_device_profile`**) and is mirrored in **`client.capabilities["loop_mode_scheme"]`** — not from **`vendor`** alone, because some **WiiM** firmware uses the LinkPlay/Arylic numbering while **`vendor`** remains **`wiim`** ([pywiim#17](https://github.com/mjcumming/pywiim/issues/17)).
+- Implementation lives in **`pywiim/api/loop_mode.py`**: use **`resolve_loop_mode_mapping`** / **`resolve_loop_mode_mapping_for_player`** (or **`get_loop_mode_mapping_for_scheme`**) at call sites; **`get_loop_mode_mapping(vendor)`** remains as a vendor-only fallback when no scheme is set.
 - **Do not** “unify” vendors by collapsing to one scheme without an explicit ADR and migration plan.
 
 ## Consequences

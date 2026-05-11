@@ -736,7 +736,7 @@ The 12V trigger output allows controlling external amplifiers (e.g. turn on/off 
 | **WiiM Mini** | ❌ (no hardware) |
 | **Arylic / Audio Pro** | ❌ |
 
-Support is detected at runtime via `getTriggeroutStatus`; `capabilities["supports_trigger_out"]` is set accordingly.
+`capabilities["supports_trigger_out"]` is set from **known hardware models** (WiiM Ultra / Pro / Pro Plus and close variants via `is_wiim_12v_trigger_model`) — not via `getTriggeroutStatus` at connect, so we never infer support from OEM stacks that answer the API without real trigger hardware, and verify tools stay read-only for trigger.
 
 ### HTTP Endpoints
 

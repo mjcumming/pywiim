@@ -201,6 +201,22 @@ class TestWiiMProfile:
         profile = PROFILES["wiim"]
         assert profile.loop_mode_scheme == "wiim"
 
+    def test_wiim_ultra_fw_52_gets_arylic_loop_mode_scheme(self):
+        """WiiM Ultra 5.2+ uses LinkPlay/Arylic loop_mode numbering (pywiim#17)."""
+        device_info = DeviceInfo(uuid="t", model="wiim_ultra", firmware="5.2.813259")
+        profile = get_device_profile(device_info)
+        assert profile.loop_mode_scheme == "arylic"
+
+    def test_wiim_ultra_fw_51_keeps_wiim_loop_mode_scheme(self):
+        device_info = DeviceInfo(uuid="t", model="wiim_ultra", firmware="5.1.999999")
+        profile = get_device_profile(device_info)
+        assert profile.loop_mode_scheme == "wiim"
+
+    def test_wiim_pro_fw_52_keeps_wiim_loop_mode_scheme(self):
+        device_info = DeviceInfo(uuid="t", model="wiim_pro", firmware="5.2.813259")
+        profile = get_device_profile(device_info)
+        assert profile.loop_mode_scheme == "wiim"
+
 
 class TestArylicProfile:
     """Test Arylic specific profile settings."""

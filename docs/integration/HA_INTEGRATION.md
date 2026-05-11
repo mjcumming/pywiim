@@ -799,7 +799,7 @@ async def _async_update_data(self):
   
 - **`eq_preset`**: Current EQ preset name, or "Off" if EQ is disabled. Normalized to Title Case to match the format from `eq_presets`. When EQ is off (disabled/bypassed), this returns "Off" instead of the last-used preset, ensuring accurate UI representation. This ensures consistency - if `eq_presets` returns `["Off", "Flat", "Acoustic", ...]`, then `eq_preset` will return `"Off"` or `"Flat"` etc., making comparisons straightforward.
 
-- **Parametric EQ (PEQ)** – On WiiM devices, the full LV2 PEQ API is available via `player.client` when `player.client.capabilities.get("supports_peq")` is True. This provides 10-band parametric EQ per source, stereo/L-R modes, and custom preset save/load. See [API_REFERENCE.md – Parametric EQ (PEQ)](API_REFERENCE.md#parametric-eq-peq--wiim-only). (Contribution: [jeromeof](https://github.com/jeromeof), [PR #12](https://github.com/mjcumming/pywiim/pull/12).)
+- **Parametric EQ (PEQ)** – On WiiM devices, the full LV2 **parametric** EQ API (`EqNp`) is available via `player.client` when `player.client.capabilities.get("supports_peq")` is True. This provides 10-band parametric EQ per source, stereo/L-R modes, and custom preset save/load. The device can also run a separate **graphic** 10-band LV2 plugin (`Eq10HP`) over the same command family with a different `pluginURI`; pywiim does **not** implement that plugin. See [API_REFERENCE.md – Parametric EQ (PEQ)](API_REFERENCE.md#parametric-eq-peq--wiim-only). (Contribution: [jeromeof](https://github.com/jeromeof), [PR #12](https://github.com/mjcumming/pywiim/pull/12). Field note on `Eq10HP`: [issue #16](https://github.com/mjcumming/pywiim/issues/16).)
 
 ## Advanced Patterns
 
@@ -2190,7 +2190,7 @@ pywiim exposes two distinct capabilities: **LED Indicator** (on/off) and **Displ
 
 | Concept | Capability | Player API | Use |
 |--------|------------|------------|-----|
-| **LED Indicator** | `supports_led_indicator` | `get_led_indicator()`, `set_led_indicator(enabled)` | Small status light; Arylic + WiiM (probe). Read assumes **on** if device has no read API. |
+| **LED Indicator** | `supports_led_indicator` | `get_led_indicator()`, `set_led_indicator(enabled)` | Small status light; Arylic + WiiM (device class / vendor in `capabilities`, no mutating connect probe). Read assumes **on** if device has no read API. |
 | **Display** | `supports_display_config` | `set_display_enabled(enabled)`, `set_display_config(...)` | WiiM Ultra LCD on/off and brightness; **not** the status LED. |
 
 - **LED Indicator**: We try to read from the device; if read fails or no API exists, we return **on** and log a warning. No persistent state between restarts.
@@ -2303,7 +2303,7 @@ class WiiMTriggerSwitch(SwitchEntity):
 
 ### Notes
 
-- **Capability**: Support is probed at device init via `getTriggeroutStatus`; only models with the physical jack report support.
+- **Capability**: Support follows **model class** (WiiM Ultra / Pro / Pro Plus); we do not probe with `getTriggeroutStatus` at init or toggle output in `wiim-verify` (read-only check there).
 - **State**: Call `get_trigger_out_status()` when needed (e.g. on entity update) to refresh `trigger_out_on`; the library does not poll trigger state automatically.
 
 ## Group Join/Unjoin Operations

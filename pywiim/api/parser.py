@@ -82,7 +82,10 @@ def _normalize_time_value(value: int, field_name: str, source: str | None = None
 
 
 def parse_player_status(
-    raw: dict[str, Any], last_track: str | None = None, vendor: str | None = None
+    raw: dict[str, Any],
+    last_track: str | None = None,
+    vendor: str | None = None,
+    loop_mode_scheme: str | None = None,
 ) -> tuple[dict[str, Any], str | None]:
     """Normalise *getPlayerStatusEx* / *getStatusEx* responses.
 
@@ -92,7 +95,9 @@ def parse_player_status(
     Args:
         raw: Raw API response dictionary
         last_track: Previous track identifier for change detection
-        vendor: Device vendor for vendor-specific loop mode parsing
+        vendor: Device vendor (fallback when ``loop_mode_scheme`` is not set)
+        loop_mode_scheme: Profile scheme ``wiim`` / ``arylic`` / ``legacy`` for ``loop_mode``
+            decode (preferred over vendor alone; see ``get_device_profile``).
 
     Returns:
         Tuple of (parsed_data, new_last_track)
@@ -265,10 +270,9 @@ def parse_player_status(
 
         # Only process play_mode if not already set
         if "play_mode" not in data:
-            # Use vendor-specific loop mode mapping
-            from .loop_mode import get_loop_mode_mapping
+            from .loop_mode import resolve_loop_mode_mapping
 
-            mapping = get_loop_mode_mapping(vendor)
+            mapping = resolve_loop_mode_mapping(loop_mode_scheme=loop_mode_scheme, vendor=vendor)
             is_shuffle, is_repeat_one, is_repeat_all = mapping.from_loop_mode(loop_val)
 
             # Map to play modes

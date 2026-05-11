@@ -4,7 +4,7 @@
 Accepted - 2026-04-20
 
 ## Context
-Features such as **subwoofer**, **PEQ**, **12V trigger**, **channel balance**, and **LED indicator** (where probed) cannot be inferred reliably from static device info alone. Once populated, the merged **`client.capabilities`** dict is the **single source of truth** for what to expose in apps; see **[ADR 018](018-capabilities-dict-source-of-truth.md)**. Probes must **not brick** startup, must avoid **mutating** device state, and must behave predictably under **transient** network or firmware errors. [ADR 003](003-capability-probing-before-endpoints.md) covers **using** probed capabilities when **calling** endpoints during operation; this ADR covers **how** we populate capabilities at **connect** (and **`refresh_capabilities`**).
+Features such as **subwoofer**, **PEQ**, and **channel balance** often cannot be inferred reliably from static device info alone. **LED indicator** (`supports_led_switch`) and **12V trigger** (`supports_trigger_out`) are set from **vendor / WiiM model class** (no connect-time HTTP that toggles user-visible hardware); incorrect OEM behavior should be fixed with explicit model/profile data rather than mutating probes. Once populated, the merged **`client.capabilities`** dict is the **single source of truth** for what to expose in apps; see **[ADR 018](018-capabilities-dict-source-of-truth.md)**. Probes must **not brick** startup, must avoid **mutating** device state, and must behave predictably under **transient** network or firmware errors. [ADR 003](003-capability-probing-before-endpoints.md) covers **using** probed capabilities when **calling** endpoints during operation; this ADR covers **how** we populate capabilities at **connect** (and **`refresh_capabilities`**).
 
 ## Decision
 

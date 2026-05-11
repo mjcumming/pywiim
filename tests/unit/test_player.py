@@ -1956,6 +1956,24 @@ class TestPlayerSourceConflicts:
         mock_client.set_loop_mode.assert_called_once_with(3)
 
     @pytest.mark.asyncio
+    async def test_set_shuffle_uses_arylic_loop_values_when_scheme_in_capabilities(self, mock_client):
+        """loop_mode_scheme arylic sends distinct shuffle+repeat_one value (pywiim#17)."""
+        from pywiim.models import DeviceInfo, PlayerStatus
+        from pywiim.player import Player
+
+        mock_client.capabilities["loop_mode_scheme"] = "arylic"
+        mock_client.set_loop_mode = AsyncMock()
+        status = PlayerStatus(play_state="play", repeat="one", source="usb")
+        mock_client.get_player_status_model = AsyncMock(return_value=status)
+        mock_client.get_device_info_model = AsyncMock(return_value=DeviceInfo(uuid="test"))
+
+        player = Player(mock_client)
+        player._status_model = status
+        await player.set_shuffle(True)
+
+        mock_client.set_loop_mode.assert_called_once_with(5)
+
+    @pytest.mark.asyncio
     async def test_set_repeat_invalid(self, mock_client):
         """Test set repeat with invalid mode raises ValueError."""
         from pywiim.models import DeviceInfo, PlayerStatus
@@ -2819,6 +2837,17 @@ class TestPlayerMediaMetadata:
         player._status_model = status
 
         # Should decode loop_mode normally for USB source
+        assert player.shuffle_state is True
+
+    @pytest.mark.asyncio
+    async def test_shuffle_state_loop_mode_5_with_arylic_scheme(self, mock_client):
+        """loop_mode 5 is shuffle+repeat_one under Arylic scheme (WiiM Ultra 5.2+ pywiim#17)."""
+        from pywiim.player import Player
+
+        mock_client.capabilities["loop_mode_scheme"] = "arylic"
+        player = Player(mock_client)
+        status = PlayerStatus(source="usb", play_state="play", loop_mode=5)
+        player._status_model = status
         assert player.shuffle_state is True
 
     @pytest.mark.asyncio

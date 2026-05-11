@@ -5,11 +5,16 @@ Tests LoopModeMapping class and vendor-specific mappings.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from pywiim.api.loop_mode import (
     ARYLIC_LOOP_MODE,
     LEGACY_BITFIELD_LOOP_MODE,
     WIIM_LOOP_MODE,
     get_loop_mode_mapping,
+    get_loop_mode_mapping_for_scheme,
+    resolve_loop_mode_mapping,
+    resolve_loop_mode_mapping_for_player,
 )
 
 
@@ -109,8 +114,8 @@ class TestLoopModeMapping:
         assert repeat_one is False
         assert repeat_all is True
 
-    def test_from_loop_mode_special_case_5(self):
-        """Test from_loop_mode with special case loop_mode=5."""
+    def test_from_loop_mode_value_5_invalid_for_wiim_scheme(self):
+        """loop_mode 5 is not in the documented WiiM table — treated as unknown."""
         mapping = WIIM_LOOP_MODE
         shuffle, repeat_one, repeat_all = mapping.from_loop_mode(5)
         assert shuffle is False
@@ -209,6 +214,34 @@ class TestLegacyBitfieldLoopMode:
         assert LEGACY_BITFIELD_LOOP_MODE.shuffle == 4
         assert LEGACY_BITFIELD_LOOP_MODE.shuffle_repeat_one == 5
         assert LEGACY_BITFIELD_LOOP_MODE.shuffle_repeat_all == 6
+
+
+class TestGetLoopModeMappingForScheme:
+    """Test scheme-based mapping selection."""
+
+    def test_scheme_wiim(self):
+        assert get_loop_mode_mapping_for_scheme("wiim") is WIIM_LOOP_MODE
+
+    def test_scheme_arylic(self):
+        assert get_loop_mode_mapping_for_scheme("arylic") is ARYLIC_LOOP_MODE
+
+    def test_scheme_legacy(self):
+        assert get_loop_mode_mapping_for_scheme("legacy") is LEGACY_BITFIELD_LOOP_MODE
+
+    def test_resolve_prefers_scheme(self):
+        assert resolve_loop_mode_mapping(loop_mode_scheme="arylic", vendor="wiim") is ARYLIC_LOOP_MODE
+
+    def test_resolve_loop_mode_mapping_for_player_uses_capabilities_scheme(self):
+        player = MagicMock()
+        player.profile = None
+        player.client._capabilities = {"vendor": "wiim", "loop_mode_scheme": "arylic"}
+        assert resolve_loop_mode_mapping_for_player(player) is ARYLIC_LOOP_MODE
+
+    def test_resolve_loop_mode_mapping_for_player_profile_overrides_caps(self):
+        player = MagicMock()
+        player.profile = MagicMock(loop_mode_scheme="arylic")
+        player.client._capabilities = {"vendor": "wiim", "loop_mode_scheme": "wiim"}
+        assert resolve_loop_mode_mapping_for_player(player) is ARYLIC_LOOP_MODE
 
 
 class TestGetLoopModeMapping:

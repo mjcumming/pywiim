@@ -126,7 +126,7 @@ These areas still use scattered conditionals. They work correctly but are harder
 | Area | File | Current Approach | Notes |
 |------|------|------------------|-------|
 | Connection config | `pywiim/capabilities.py` | `detect_device_capabilities()` returns dict | Could use `profile.connection` |
-| Loop mode interpretation | `pywiim/api/loop_mode.py` | `get_loop_mode_mapping(vendor)` | Could use `profile.loop_mode_scheme` |
+| Loop mode interpretation | `pywiim/api/loop_mode.py` + `get_device_profile` | **`profile.loop_mode_scheme`** merged to `capabilities["loop_mode_scheme"]`; **`resolve_loop_mode_mapping_for_player`** at encode/decode | Done (pywiim#17: Ultra 5.2+ → `arylic`) |
 | WiFi Direct detection | `pywiim/api/group.py` | `_needs_wifi_direct_mode()` function | Could use `profile.grouping.uses_wifi_direct` |
 | Endpoint probing | `pywiim/capabilities.py` | Runtime probing | Could use `profile.endpoints` as hints |
 
@@ -172,8 +172,9 @@ if profile.grouping.uses_wifi_direct:
     ...
 
 # Loop mode
-from pywiim.api.loop_mode import get_loop_mode_mapping
-mapping = get_loop_mode_mapping(profile.loop_mode_scheme)
+from pywiim.api.loop_mode import get_loop_mode_mapping_for_scheme
+
+mapping = get_loop_mode_mapping_for_scheme(profile.loop_mode_scheme)
 ```
 
 ### In StateSynchronizer
@@ -282,15 +283,13 @@ def get_loop_mode_mapping(vendor: str | None) -> LoopModeMapping:
     return WIIM_LOOP_MODE
 ```
 
-**After (using profile):**
+**After (using profile / capabilities):**
 ```python
-def get_loop_mode_mapping(profile: DeviceProfile) -> LoopModeMapping:
-    scheme = profile.loop_mode_scheme
-    if scheme == "wiim":
-        return WIIM_LOOP_MODE
-    elif scheme == "arylic":
-        return ARYLIC_LOOP_MODE
-    return WIIM_LOOP_MODE
+from pywiim.api.loop_mode import get_loop_mode_mapping_for_scheme, resolve_loop_mode_mapping_for_player
+
+mapping = get_loop_mode_mapping_for_scheme(profile.loop_mode_scheme)
+# Or from a Player (profile overrides capabilities when set):
+mapping = resolve_loop_mode_mapping_for_player(player)
 ```
 
 **Caller change:**
@@ -299,7 +298,8 @@ def get_loop_mode_mapping(profile: DeviceProfile) -> LoopModeMapping:
 mapping = get_loop_mode_mapping(vendor)
 
 # After
-mapping = get_loop_mode_mapping(player.profile)
+mapping = resolve_loop_mode_mapping_for_player(player)
+# Or: resolve_loop_mode_mapping(loop_mode_scheme=client.capabilities.get("loop_mode_scheme"), vendor=...)
 ```
 
 ---

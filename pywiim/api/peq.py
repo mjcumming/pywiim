@@ -8,6 +8,11 @@ equalization. Each band has four adjustable parameters:
   - gain:      -12–12 dB
 
 The PEQ is identified by pluginURI ``http://moddevices.com/plugins/caps/EqNp``.
+The same HTTP command family can target other LV2 plugins on the device (for
+example the 10-band graphic plugin ``http://moddevices.com/plugins/caps/Eq10HP``);
+this module implements **only** ``EqNp``.  See ``docs/integration/API_REFERENCE.md``
+(PEQ section) for integrators who need ``Eq10HP``.
+
 All commands operate on a per-source basis (wifi, bluetooth, line-in, etc.).
 
 It assumes the base client provides the ``_request`` coroutine.  No state is
