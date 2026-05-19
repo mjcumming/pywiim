@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.5] - 2026-05-19
+
+### Added
+- **ADR 019** — 12V trigger cache and configuration-tier refresh (`PollingStrategy.should_fetch_trigger_out`, `statemgr` slow poll). Fixes external trigger changes (e.g. WiiM Home app) not reaching integrations that read `player.trigger_out_on` ([mjcumming/wiim#240](https://github.com/mjcumming/wiim/issues/240)).
+- **`PollingStrategy.should_fetch_led_indicator()`** and **`statemgr`** configuration-tier refresh for status LED; **`player.led_indicator_on`** cache.
+- **`scripts/manual/watch_trigger_out.py`** — Manual watch script for 12V trigger testing.
+
+### Fixed
+- **Status LED read always “on” on WiiM** — `get_led_indicator()` now uses read-only **`LED_SWITCH_GET`** (plain `0`/`1`) before falling back to getStatusEx / assume-on.
+
+### Changed
+- **`wiim-monitor`** — Uses `should_fetch_trigger_out()` instead of misusing `should_fetch_audio_output()` for 12V trigger polling.
+- **`wiim-monitor`** — Polls 12V trigger, subwoofer, and **status LED** on a **monitor-local** interval (default **10s**, `--hardware-poll N`); library/HA refresh stays ~60s.
+
 ## [2.2.4] - 2026-05-11
 
 ### Added

@@ -22,6 +22,7 @@ from ..exceptions import WiiMError
 from .constants import (
     API_ENDPOINT_DISPLAY_CONFIG,
     API_ENDPOINT_GET_LED_MCU,
+    API_ENDPOINT_GET_LED_SWITCH,
     API_ENDPOINT_SET_BUTTONS,
     API_ENDPOINT_SET_LED,
     API_ENDPOINT_TRIGGER_OUT_SET,
@@ -126,11 +127,21 @@ class MiscAPI:
     # LED Indicator (ADR 005: on/off; read assumes on if unavailable)
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _parse_led_switch_get_response(raw: str | None, parsed: Any) -> bool | None:
+        """Parse LED_SWITCH_GET (plain 0/1) or similar short text responses."""
+        text = (raw or "").strip()
+        if not text and parsed is not None and not isinstance(parsed, dict):
+            text = str(parsed).strip()
+        if text in ("0", "1"):
+            return text == "1"
+        return None
+
     async def get_led_indicator(self) -> bool:
         """Read LED indicator state from the device.
 
-        Tries getStatusEx (led/LED/led_switch fields) and, for Arylic,
-        getMCUASCIICmd:LED. If read fails or no API exists, returns True
+        Tries LED_SWITCH_GET (read-only on WiiM), getStatusEx led fields, and
+        for Arylic getMCUASCIICmd:LED. If read fails or no API exists, returns True
         (assume on) and logs a warning. No persistent state between sessions.
 
         Returns:
@@ -139,7 +150,20 @@ class MiscAPI:
         caps = getattr(self, "_capabilities", {}) or {}
         vendor = caps.get("vendor", "")
 
-        # 1. Try getStatusEx / get_device_info for led/LED/led_switch
+        # 1. LED_SWITCH_GET — read-only; does not mutate hardware (WiiM Pro/Ultra class)
+        if caps.get("supports_led_switch") or caps.get("is_wiim_device"):
+            try:
+                result = await self._request(API_ENDPOINT_GET_LED_SWITCH)  # type: ignore[attr-defined]
+                state = self._parse_led_switch_get_response(
+                    getattr(result, "raw", None),
+                    getattr(result, "parsed", None),
+                )
+                if state is not None:
+                    return state
+            except WiiMError:
+                pass
+
+        # 2. Try getStatusEx / get_device_info for led/LED/led_switch
         try:
             info = await self.get_device_info()  # type: ignore[attr-defined]
             if isinstance(info, dict):
@@ -157,7 +181,7 @@ class MiscAPI:
         except WiiMError:
             pass
 
-        # 2. Arylic: try getMCUASCIICmd:LED (e.g. response "LED:1" or "LED:0")
+        # 3. Arylic: try getMCUASCIICmd:LED (e.g. response "LED:1" or "LED:0")
         if vendor == "arylic":
             try:
                 result = await self._request(API_ENDPOINT_GET_LED_MCU)  # type: ignore[attr-defined]

@@ -119,6 +119,9 @@ class PlayerBase:
         # Only available on WiiM Ultra with firmware 5.2+
         self._subwoofer_status: dict[str, Any] | None = None
         self._trigger_out_on: bool | None = None  # 12V trigger state (None = unknown)
+        self._last_trigger_out_check: float = 0
+        self._led_indicator_on: bool | None = None  # Status LED (None = unknown)
+        self._last_led_indicator_check: float = 0
         self._last_subwoofer_check: float = 0
 
         # Stereo channel balance (-1.0 … 1.0); WiiM HTTP only, gated by supports_channel_balance

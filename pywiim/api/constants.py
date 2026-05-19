@@ -385,6 +385,8 @@ API_ENDPOINT_SET_CHANNEL_BALANCE = "/httpapi.asp?command=setChannelBalance:"
 
 # Miscellaneous endpoints
 API_ENDPOINT_SET_LED = "/httpapi.asp?command=LED_SWITCH_SET:"
+# Read-only status LED state (plain text 0|1 on many WiiM devices; safe at connect — no mutation)
+API_ENDPOINT_GET_LED_SWITCH = "/httpapi.asp?command=LED_SWITCH_GET"
 # Arylic: query LED state via MCU ASCII (getMCUASCIICmd:LED); may not be on all devices
 API_ENDPOINT_GET_LED_MCU = "/httpapi.asp?command=getMCUASCIICmd:LED"
 API_ENDPOINT_SET_BUTTONS = "/httpapi.asp?command=Button_Enable_SET:"

@@ -371,12 +371,17 @@ class Player(PlayerBase):
     # === LED Indicator (ADR 005) ===
 
     async def get_led_indicator(self) -> bool:
-        """Read LED indicator state (on/off). Assumes on if device has no read API."""
-        return await self.client.get_led_indicator()
+        """Read LED indicator state (on/off). Updates ``led_indicator_on`` cache."""
+        state = await self.client.get_led_indicator()
+        self._led_indicator_on = state
+        return state
 
     async def set_led_indicator(self, enabled: bool) -> None:
         """Set LED indicator on or off (LED_SWITCH_SET)."""
         await self.client.set_led_switch(enabled)
+        self._led_indicator_on = enabled
+        if self._on_state_changed:
+            self._on_state_changed()
 
     async def get_channel_balance(self) -> float | None:
         """Read stereo channel balance from the device and refresh the player cache.
@@ -1226,9 +1231,19 @@ class Player(PlayerBase):
     def trigger_out_on(self) -> bool | None:
         """Cached 12V trigger state (True=on, False=off, None=unknown).
 
-        Updated when get_trigger_out_status() or set_trigger_out() is called.
+        Updated when get_trigger_out_status() or set_trigger_out() is called, and on
+        configuration-tier refresh during player.refresh() (ADR 019).
         """
         return self._trigger_out_on
+
+    @property
+    def led_indicator_on(self) -> bool | None:
+        """Cached status LED state (True=on, False=off, None=unknown).
+
+        Updated when get_led_indicator() or set_led_indicator() is called, and on
+        configuration-tier refresh when LED_SWITCH_GET is supported.
+        """
+        return self._led_indicator_on
 
     def upnp_health_status(self) -> dict[str, Any] | None:
         """UPnP event health statistics.

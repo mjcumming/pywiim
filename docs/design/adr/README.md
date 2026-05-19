@@ -49,5 +49,6 @@ File naming: `NNN-short-slug.md` (e.g. `002-trust-api-after-success.md`). Number
 | [016](016-connect-time-read-only-capability-probes.md) | Connect-Time Capability Probes — Read-Only, Retries, Caching | Accepted |
 | [017](017-eq-off-and-dynamic-preset-resolution.md) | EQ Presets — “Off” Semantics and Device-Native Preset Names | Accepted |
 | [018](018-capabilities-dict-source-of-truth.md) | Client `capabilities` Dict — Single Source of Truth for Optional HTTP Features | Accepted |
+| [019](019-12v-trigger-cache-and-configuration-tier-refresh.md) | 12V Trigger — Static Capability, Cache, Configuration-Tier Refresh | Accepted |
 
 When adding a new ADR, add a row to this table.

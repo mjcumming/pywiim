@@ -746,12 +746,19 @@ The 12V trigger output allows controlling external amplifiers (e.g. turn on/off 
 ### Library API
 
 - **Client**: `get_trigger_out_status()` → `bool | None`; `set_trigger_out(on: bool)`; `set_trigger_out_on()`; `set_trigger_out_off()`
-- **Player**: Same methods; `supports_trigger_out` property; `trigger_out_on` cached state (updated after get/set)
+- **Player**: Same methods; `supports_trigger_out` property; `trigger_out_on` cached state (updated after get/set and on configuration-tier refresh in `player.refresh()`)
+
+### Refresh cadence
+
+- **`supports_trigger_out`**: static model class at connect ([ADR 016](adr/016-connect-time-read-only-capability-probes.md)) — no connect-time HTTP probe.
+- **`statemgr`** refreshes trigger state on **full refresh** or **`PollingStrategy.should_fetch_trigger_out()`** (~60s), same tier as subwoofer ([ADR 019](adr/019-12v-trigger-cache-and-configuration-tier-refresh.md)).
+- After **`set_trigger_out()`**, cache updates from the known outcome — no post-set GET ([ADR 002](adr/002-trust-api-after-success.md)).
 
 ### Best Practices
 
 - ✅ Check `player.supports_trigger_out` before exposing trigger switch in UI
 - ✅ Use `get_trigger_out_status()` to read state; returns `None` if unsupported
+- ✅ Integrations read cached `player.trigger_out_on` on coordinator updates; rely on pywiim refresh for external changes
 - ❌ Don't assume trigger is available on all WiiM devices (Mini has no jack)
 
 ## API Documentation Sources

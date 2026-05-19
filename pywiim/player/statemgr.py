@@ -939,6 +939,37 @@ class StateManager:
             except Exception as err:
                 _LOGGER.debug("Failed to fetch subwoofer status for %s: %s", self.player.host, err)
 
+        # 12V trigger — supports_trigger_out from static model (ADR 016/019); configuration-tier read.
+        trigger_out_supported = bool(self.player.client.capabilities.get("supports_trigger_out", False))
+        should_fetch_trigger_out = full or (
+            self._polling_strategy
+            and self._polling_strategy.should_fetch_trigger_out(
+                self.player._last_trigger_out_check, trigger_out_supported, now=now
+            )
+        )
+        if should_fetch_trigger_out and trigger_out_supported:
+            try:
+                trigger_on = await self.player.get_trigger_out_status()
+                if trigger_on is not None:
+                    self.player._last_trigger_out_check = now
+            except Exception as err:
+                _LOGGER.debug("Failed to fetch 12V trigger status for %s: %s", self.player.host, err)
+
+        # Status LED — supports_led_switch from device class (ADR 005); read via LED_SWITCH_GET when available
+        led_supported = bool(self.player.client.capabilities.get("supports_led_switch", False))
+        should_fetch_led = full or (
+            self._polling_strategy
+            and self._polling_strategy.should_fetch_led_indicator(
+                self.player._last_led_indicator_check, led_supported, now=now
+            )
+        )
+        if should_fetch_led and led_supported:
+            try:
+                await self.player.get_led_indicator()
+                self.player._last_led_indicator_check = now
+            except Exception as err:
+                _LOGGER.debug("Failed to fetch LED indicator status for %s: %s", self.player.host, err)
+
     async def _finalize_refresh(self) -> None:
         """Finalize refresh: sync group state, propagate metadata, notify callback."""
         # Synchronize group state from device state

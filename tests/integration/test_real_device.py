@@ -525,3 +525,23 @@ class TestRealDeviceCore:
             if "unknown command" in error_str:
                 pytest.skip("Subwoofer not supported (WiiM devices only)")
             pytest.fail(f"Error testing subwoofer controls: {e}")
+
+    async def test_trigger_out_refresh_updates_cache(self, real_device_player, integration_test_marker):
+        """Configuration-tier refresh populates trigger_out_on (ADR 019)."""
+        player = real_device_player
+        await player.client._detect_capabilities()
+
+        if not player.supports_trigger_out:
+            pytest.skip("12V trigger not supported on this device")
+
+        player._trigger_out_on = None
+        player._last_trigger_out_check = 0
+
+        status = await player.get_trigger_out_status()
+        assert status is not None
+        assert player.trigger_out_on == status
+
+        player._trigger_out_on = None
+        await player.refresh(full=True)
+        assert player.trigger_out_on is not None
+        print(f"\n✓ trigger_out_on after full refresh: {player.trigger_out_on}")

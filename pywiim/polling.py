@@ -63,7 +63,9 @@ class PollingStrategy:
     # Polling interval constants (in seconds)
     FAST_POLL_INTERVAL = 1.0  # Active Playback / UI Responsiveness
     NORMAL_POLL_INTERVAL = 5.0  # Idle / Background
-    CONFIGURATION_INTERVAL = 60.0  # Bluetooth, EQ, Device Info
+    CONFIGURATION_INTERVAL = 60.0  # Bluetooth, EQ presets, device info
+    # Faster tier for user-toggled hardware (12V trigger, subwoofer) — light GETs, visible in HA/monitor
+    HARDWARE_STATUS_INTERVAL = 15.0
     METADATA_CHECK_INTERVAL = 1.0  # Check for track changes
 
     # Legacy device intervals (longer for older devices)
@@ -332,6 +334,59 @@ class PollingStrategy:
             return True
 
         # Fetch every 60s
+        return (now - last_fetch_time) >= self.CONFIGURATION_INTERVAL
+
+    def should_fetch_trigger_out(
+        self,
+        last_fetch_time: float,
+        trigger_out_supported: bool,
+        now: float | None = None,
+    ) -> bool:
+        """Check if 12V trigger status should be fetched.
+
+        Fetch logic:
+        1. On startup (last_fetch_time == 0)
+        2. Every 60s (background consistency)
+        3. Only if device supports 12V trigger (static model class)
+
+        Args:
+            last_fetch_time: Timestamp of last trigger status fetch
+            trigger_out_supported: From capabilities["supports_trigger_out"]
+            now: Current time (defaults to time.time())
+
+        Returns:
+            True if trigger status should be fetched
+        """
+        if not trigger_out_supported:
+            return False
+
+        if now is None:
+            now = time.time()
+
+        if last_fetch_time is None or last_fetch_time == 0:
+            return True
+
+        return (now - last_fetch_time) >= self.CONFIGURATION_INTERVAL
+
+    def should_fetch_led_indicator(
+        self,
+        last_fetch_time: float,
+        led_supported: bool,
+        now: float | None = None,
+    ) -> bool:
+        """Check if status LED (LED indicator) state should be fetched.
+
+        Same cadence as other configuration-tier hardware reads (~60s).
+        """
+        if not led_supported:
+            return False
+
+        if now is None:
+            now = time.time()
+
+        if last_fetch_time is None or last_fetch_time == 0:
+            return True
+
         return (now - last_fetch_time) >= self.CONFIGURATION_INTERVAL
 
     def should_fetch_device_info(

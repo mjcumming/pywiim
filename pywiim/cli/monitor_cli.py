@@ -66,6 +66,18 @@ class PlayerMonitor:
         self.last_preset_check = 0.0
         self.last_audio_output_check = 0.0  # Track when to fetch audio output status
         self.last_trigger_out_check = 0.0  # Track when to fetch 12V trigger status
+        self.last_subwoofer_check = 0.0  # Monitor-local subwoofer poll (faster than library tier)
+        self.last_led_indicator_check = 0.0  # Monitor-local status LED poll
+        # Faster than PollingStrategy.CONFIGURATION_INTERVAL (60s) for live testing in this CLI only.
+        self.hardware_poll_interval = 10.0
+
+    def _should_fetch_hardware_status(self, last_fetch_time: float, supported: bool, now: float) -> bool:
+        """Whether to poll trigger/subwoofer/LED (monitor uses shorter interval than player.refresh)."""
+        if not supported:
+            return False
+        if last_fetch_time is None or last_fetch_time == 0:
+            return True
+        return (now - last_fetch_time) >= self.hardware_poll_interval
 
     def _format_source_name(self, source: str) -> str:
         """Format source name for display, handling acronyms correctly.
@@ -97,6 +109,38 @@ class PlayerMonitor:
                 formatted_words.append(word.capitalize())
 
         return " ".join(formatted_words)
+
+    def _format_trigger_out_display(self) -> str | None:
+        """Format 12V trigger line for monitor output, or None if unsupported."""
+        if not self.player.supports_trigger_out:
+            return None
+        trigger_on = self.player.trigger_out_on
+        if trigger_on is True:
+            state_str = "ON"
+        elif trigger_on is False:
+            state_str = "OFF"
+        else:
+            state_str = "unknown"
+        if self.last_trigger_out_check:
+            age = int(time.time() - self.last_trigger_out_check)
+            return f"12V Trigger: {state_str} (read {age}s ago)"
+        return f"12V Trigger: {state_str}"
+
+    def _format_led_indicator_display(self) -> str | None:
+        """Format status LED line for monitor output, or None if unsupported."""
+        if not self.player.supports_led_indicator:
+            return None
+        led_on = self.player.led_indicator_on
+        if led_on is True:
+            state_str = "ON"
+        elif led_on is False:
+            state_str = "OFF"
+        else:
+            state_str = "unknown"
+        if self.last_led_indicator_check:
+            age = int(time.time() - self.last_led_indicator_check)
+            return f"Status LED: {state_str} (read {age}s ago)"
+        return f"Status LED: {state_str}"
 
     def _detect_callback_host(self) -> str | None:
         """Detect the local network IP address for UPnP callback URL.
@@ -146,6 +190,12 @@ class PlayerMonitor:
             "shuffle": self.player.shuffle_state,
             "repeat": self.player.repeat_mode,
         }
+        if self.player.supports_trigger_out:
+            current_state["trigger_out"] = self.player.trigger_out_on
+        if self.player.supports_subwoofer:
+            current_state["subwoofer"] = self.player.subwoofer_enabled
+        if self.player.supports_led_indicator:
+            current_state["led_indicator"] = self.player.led_indicator_on
 
         # Track state changes
         if current_state != self.last_state:
@@ -324,6 +374,27 @@ class PlayerMonitor:
         except WiiMError:
             self.last_multiroom = {}  # Request failed, will retry in monitoring loop
 
+        # Initial hardware reads (player.refresh uses ~60s tier; monitor polls faster for testing)
+        now = time.time()
+        if self.player.supports_trigger_out:
+            try:
+                await self.player.get_trigger_out_status()
+                self.last_trigger_out_check = now
+            except Exception:
+                pass
+        if self.player.supports_subwoofer:
+            try:
+                await self.player.get_subwoofer_status()
+                self.last_subwoofer_check = now
+            except Exception:
+                pass
+        if self.player.supports_led_indicator:
+            try:
+                await self.player.get_led_indicator()
+                self.last_led_indicator_check = now
+            except Exception:
+                pass
+
         # Use player.role as source of truth (updated by refresh() via _synchronize_group_state())
         self.previous_role = self.player.role  # Initialize previous_role to avoid false positives
         self.last_group_info_check = time.time()  # Initialize check time
@@ -343,6 +414,19 @@ class PlayerMonitor:
                 print(f"   Vendor: {self.player.client.capabilities.get('vendor', 'unknown')}")
                 if self.player.client.capabilities.get("supports_channel_balance"):
                     print("   Channel balance: HTTP get (refreshed with EQ interval in monitor; no UPnP)")
+                if (
+                    self.player.supports_trigger_out
+                    or self.player.supports_subwoofer
+                    or self.player.supports_led_indicator
+                ):
+                    print(
+                        f"   Hardware poll: trigger/subwoofer/status LED every "
+                        f"{self.hardware_poll_interval:.0f}s (library refresh ~60s)"
+                    )
+                if self.player.supports_trigger_out:
+                    trigger_line = self._format_trigger_out_display()
+                    if trigger_line:
+                        print(f"   {trigger_line}")
                 print(f"   Role: {self.player.role}")
                 print(f"   pywiim: v{__version__}")
 
@@ -534,19 +618,41 @@ class PlayerMonitor:
                             pass  # Don't fail if audio output fetch fails
                     self.last_audio_output_check = now
 
-                # 12V trigger status (same interval as audio output when supported)
-                if self.strategy and self.strategy.should_fetch_audio_output(
+                # 12V trigger + subwoofer (monitor-local fast poll for testing; not library CONFIGURATION_INTERVAL)
+                if self._should_fetch_hardware_status(
                     self.last_trigger_out_check,
-                    False,
-                    self.player.client.capabilities.get("supports_trigger_out", False),
+                    bool(self.player.supports_trigger_out),
                     now,
                 ):
-                    if self.player.client.capabilities.get("supports_trigger_out", False):
-                        try:
-                            await self.player.get_trigger_out_status()
-                        except Exception:
-                            pass
-                    self.last_trigger_out_check = now
+                    try:
+                        status = await self.player.get_trigger_out_status()
+                        if status is not None:
+                            self.last_trigger_out_check = now
+                    except Exception:
+                        pass
+
+                if self._should_fetch_hardware_status(
+                    self.last_subwoofer_check,
+                    bool(self.player.supports_subwoofer),
+                    now,
+                ):
+                    try:
+                        sub = await self.player.get_subwoofer_status()
+                        if sub is not None:
+                            self.last_subwoofer_check = now
+                    except Exception:
+                        pass
+
+                if self._should_fetch_hardware_status(
+                    self.last_led_indicator_check,
+                    bool(self.player.supports_led_indicator),
+                    now,
+                ):
+                    try:
+                        await self.player.get_led_indicator()
+                        self.last_led_indicator_check = now
+                    except Exception:
+                        pass
 
                 # Check for role changes (player.role is updated by refresh() via _synchronize_group_state())
                 role_changed = current_role != old_role
@@ -998,10 +1104,12 @@ class PlayerMonitor:
 
         # ===== HARDWARE (12V TRIGGER / SUBWOOFER) =====
         hardware_parts = []
-        if self.player.supports_trigger_out:
-            trigger_on = self.player.trigger_out_on
-            trigger_str = "ON" if trigger_on else "OFF" if trigger_on is False else "—"
-            hardware_parts.append(f"12V Trigger: {trigger_str}")
+        trigger_line = self._format_trigger_out_display()
+        if trigger_line:
+            hardware_parts.append(trigger_line)
+        led_line = self._format_led_indicator_display()
+        if led_line:
+            hardware_parts.append(led_line)
         if self.player.supports_subwoofer and self.player.subwoofer_status:
             sub = self.player.subwoofer_status
             enabled = sub.get("status", 0) == 1
@@ -1294,6 +1402,17 @@ class PlayerMonitor:
             else:
                 status_parts.append("Bal —")
 
+        trigger_line = self._format_trigger_out_display()
+        if trigger_line:
+            # Compact for single-line mode: "Trigger ON" / "Trigger OFF"
+            compact = trigger_line.replace("12V Trigger: ", "Trigger ").split(" (read")[0]
+            status_parts.append(compact)
+
+        led_line = self._format_led_indicator_display()
+        if led_line:
+            compact_led = led_line.replace("Status LED: ", "LED ").split(" (read")[0]
+            status_parts.append(compact_led)
+
         # Source (capitalize properly)
         source = self.player.source or "none"
         if source != "none":
@@ -1438,6 +1557,12 @@ class PlayerMonitor:
 
         # Device Status
         print("\n📱 Device Status:")
+        trigger_line = self._format_trigger_out_display()
+        if trigger_line:
+            print(f"   • {trigger_line}")
+        led_line = self._format_led_indicator_display()
+        if led_line:
+            print(f"   • {led_line}")
         print(f"   • Available: {'✅' if self.player.available else '❌'}")
         if self.player.device_info:
             print(f"   • Name: {self.player.device_info.name}")
@@ -1470,6 +1595,9 @@ Examples:
 
   # Enable verbose UPnP event logging (shows full event JSON/XML)
   wiim-monitor 192.168.1.68 --upnp-verbose
+
+  # Faster trigger/subwoofer polling while testing against the WiiM app (default 10s)
+  wiim-monitor 192.168.1.68 --hardware-poll 5
         """,
     )
     parser.add_argument(
@@ -1502,6 +1630,14 @@ Examples:
         action="store_true",
         help="Enable verbose UPnP event logging (shows full event JSON/XML data)",
     )
+    parser.add_argument(
+        "--hardware-poll",
+        type=float,
+        default=10.0,
+        metavar="SECONDS",
+        help="Poll 12V trigger, subwoofer, and status LED every N seconds in this CLI (default: 10). "
+        "Does not change library/HA refresh (~60s).",
+    )
 
     args = parser.parse_args()
     device_ip = args.device_ip
@@ -1526,6 +1662,7 @@ Examples:
     monitor.player._on_state_changed = monitor.on_state_changed  # Set callback
     monitor.use_tui = use_tui  # Set TUI mode preference
     monitor.upnp_verbose = args.upnp_verbose  # Set UPnP verbose logging flag
+    monitor.hardware_poll_interval = max(1.0, float(args.hardware_poll))
 
     # Store callback host override for use in setup
     if callback_host_override:

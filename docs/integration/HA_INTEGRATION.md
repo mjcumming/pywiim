@@ -2304,7 +2304,7 @@ class WiiMTriggerSwitch(SwitchEntity):
 ### Notes
 
 - **Capability**: Support follows **model class** (WiiM Ultra / Pro / Pro Plus); we do not probe with `getTriggeroutStatus` at init or toggle output in `wiim-verify` (read-only check there).
-- **State**: Call `get_trigger_out_status()` when needed (e.g. on entity update) to refresh `trigger_out_on`; the library does not poll trigger state automatically.
+- **State**: Read cached `player.trigger_out_on` on coordinator updates. pywiim refreshes trigger state on the **configuration tier** (~60s) during `player.refresh()` ([ADR 019](../design/adr/019-12v-trigger-cache-and-configuration-tier-refresh.md)); call `get_trigger_out_status()` only for explicit one-off reads (e.g. entity `async_added_to_hass`).
 
 ## Group Join/Unjoin Operations
 

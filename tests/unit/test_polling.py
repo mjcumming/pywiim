@@ -279,6 +279,40 @@ class TestPollingStrategy:
 
         assert strategy.should_fetch_multiroom(last_fetch, now=now) is False
 
+    def test_should_fetch_trigger_out_first_time(self):
+        """Test trigger fetch on first check when supported."""
+        strategy = PollingStrategy({})
+        assert strategy.should_fetch_trigger_out(0, trigger_out_supported=True) is True
+
+    def test_should_fetch_trigger_out_not_supported(self):
+        """Test trigger fetch skipped when capability false."""
+        strategy = PollingStrategy({})
+        assert strategy.should_fetch_trigger_out(0, trigger_out_supported=False) is False
+
+    def test_should_fetch_trigger_out_interval(self):
+        """Test trigger fetch after configuration interval."""
+        strategy = PollingStrategy({})
+        now = time.time()
+        last_fetch = now - 61.0
+        assert strategy.should_fetch_trigger_out(last_fetch, trigger_out_supported=True, now=now) is True
+
+    def test_should_fetch_trigger_out_too_soon(self):
+        """Test trigger fetch before configuration interval."""
+        strategy = PollingStrategy({})
+        now = time.time()
+        last_fetch = now - 30.0
+        assert strategy.should_fetch_trigger_out(last_fetch, trigger_out_supported=True, now=now) is False
+
+    def test_should_fetch_led_indicator_first_time(self):
+        """Test LED indicator fetch on first check when supported."""
+        strategy = PollingStrategy({})
+        assert strategy.should_fetch_led_indicator(0, led_supported=True) is True
+
+    def test_should_fetch_led_indicator_not_supported(self):
+        """Test LED indicator fetch skipped when unsupported."""
+        strategy = PollingStrategy({})
+        assert strategy.should_fetch_led_indicator(0, led_supported=False) is False
+
 
 class TestTrackChangeDetector:
     """Test TrackChangeDetector class."""

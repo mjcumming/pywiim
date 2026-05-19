@@ -463,6 +463,58 @@ class TestStateManager:
         mock_player.client.get_bluetooth_history.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_refresh_fetches_trigger_out_on_full(self, state_manager, mock_player):
+        """Test full refresh fetches 12V trigger when supports_trigger_out (ADR 019)."""
+        mock_status = PlayerStatus(play_state="pause")
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_trigger_out": True})
+        mock_player.get_trigger_out_status = AsyncMock(return_value=True)
+        mock_player._last_trigger_out_check = 0
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+
+            await state_manager.refresh(full=True)
+
+        mock_player.get_trigger_out_status.assert_called_once()
+        assert mock_player._last_trigger_out_check != 0
+
+    @pytest.mark.asyncio
+    async def test_refresh_skips_trigger_out_when_unsupported(self, state_manager, mock_player):
+        """Test refresh does not fetch trigger when supports_trigger_out is false."""
+        mock_status = PlayerStatus(play_state="pause")
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_trigger_out": False})
+        mock_player.get_trigger_out_status = AsyncMock()
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+
+            await state_manager.refresh(full=True)
+
+        mock_player.get_trigger_out_status.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_refresh_fetches_led_indicator_on_full(self, state_manager, mock_player):
+        """Test full refresh fetches status LED when supports_led_switch."""
+        mock_status = PlayerStatus(play_state="pause")
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_led_switch": True})
+        mock_player.get_led_indicator = AsyncMock(return_value=True)
+        mock_player._last_led_indicator_check = 0
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+
+            await state_manager.refresh(full=True)
+
+        mock_player.get_led_indicator.assert_called_once()
+        assert mock_player._last_led_indicator_check != 0
+
+    @pytest.mark.asyncio
     async def test_refresh_error_handling(self, state_manager, mock_player):
         """Test refresh error handling."""
         mock_player.client.get_player_status_model = AsyncMock(side_effect=RuntimeError("Network error"))
