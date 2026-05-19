@@ -313,6 +313,25 @@ class TestPollingStrategy:
         strategy = PollingStrategy({})
         assert strategy.should_fetch_led_indicator(0, led_supported=False) is False
 
+    def test_should_fetch_led_indicator_interval(self):
+        """Test LED indicator fetch after configuration interval."""
+        strategy = PollingStrategy({})
+        now = time.time()
+        last_fetch = now - 61.0
+        assert strategy.should_fetch_led_indicator(last_fetch, led_supported=True, now=now) is True
+
+    def test_should_fetch_led_indicator_too_soon(self):
+        """Test LED indicator fetch before configuration interval."""
+        strategy = PollingStrategy({})
+        now = time.time()
+        last_fetch = now - 30.0
+        assert strategy.should_fetch_led_indicator(last_fetch, led_supported=True, now=now) is False
+
+    def test_should_fetch_trigger_out_none_last_fetch(self):
+        """Test trigger fetch when last_fetch_time is None."""
+        strategy = PollingStrategy({})
+        assert strategy.should_fetch_trigger_out(None, trigger_out_supported=True) is True
+
 
 class TestTrackChangeDetector:
     """Test TrackChangeDetector class."""

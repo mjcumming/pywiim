@@ -515,6 +515,39 @@ class TestStateManager:
         assert mock_player._last_led_indicator_check != 0
 
     @pytest.mark.asyncio
+    async def test_refresh_skips_led_when_unsupported(self, state_manager, mock_player):
+        """Test refresh does not fetch LED when supports_led_switch is false."""
+        mock_status = PlayerStatus(play_state="pause")
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_led_switch": False})
+        mock_player.get_led_indicator = AsyncMock()
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+
+            await state_manager.refresh(full=True)
+
+        mock_player.get_led_indicator.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_refresh_fetches_trigger_on_interval(self, state_manager, mock_player):
+        """Test configuration-tier trigger fetch when interval elapsed."""
+        mock_status = PlayerStatus(play_state="pause")
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_trigger_out": True})
+        mock_player.get_trigger_out_status = AsyncMock(return_value=False)
+        mock_player._last_trigger_out_check = time.time() - 61.0
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+
+            await state_manager.refresh(full=False)
+
+        mock_player.get_trigger_out_status.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_refresh_error_handling(self, state_manager, mock_player):
         """Test refresh error handling."""
         mock_player.client.get_player_status_model = AsyncMock(side_effect=RuntimeError("Network error"))

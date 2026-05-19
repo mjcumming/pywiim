@@ -62,6 +62,34 @@ class TestMiscAPI:
         await client.set_led_switch(True)
         await client.set_led_switch(False)
 
+    def test_parse_led_switch_get_response_from_raw(self):
+        from pywiim.api.misc import MiscAPI
+
+        assert MiscAPI._parse_led_switch_get_response("1", None) is True
+        assert MiscAPI._parse_led_switch_get_response("0", None) is False
+        assert MiscAPI._parse_led_switch_get_response(" 1 ", None) is True
+        assert MiscAPI._parse_led_switch_get_response(None, 0) is False
+        assert MiscAPI._parse_led_switch_get_response(None, None) is None
+
+    @pytest.mark.asyncio
+    async def test_get_led_indicator_from_led_switch_get_on(self, mock_client):
+        """LED_SWITCH_GET returning 1 maps to True."""
+        from pywiim.api.constants import API_ENDPOINT_GET_LED_SWITCH
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def get_device_info(self):
+                return {}
+
+            async def _request(self, endpoint):
+                if endpoint == API_ENDPOINT_GET_LED_SWITCH:
+                    return ApiResponse(parsed=None, raw="1")
+                return ApiResponse(parsed=None, raw="")
+
+        client = TestClient()
+        client._capabilities = {"supports_led_switch": True}
+        assert await client.get_led_indicator() is True
+
     @pytest.mark.asyncio
     async def test_get_led_indicator_from_led_switch_get(self, mock_client):
         """Test get_led_indicator uses LED_SWITCH_GET on WiiM (plain 0/1)."""

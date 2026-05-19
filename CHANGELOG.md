@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **CI codecov patch** — Unit tests for monitor hardware helpers, LED `LED_SWITCH_GET` parsing, and configuration-tier refresh paths (patch coverage ≥ 55%).
+
 ## [2.2.5] - 2026-05-19
 
 ### Added

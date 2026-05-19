@@ -5091,7 +5091,7 @@ class TestPlayerLEDIndicatorAndDisplay:
 
     @pytest.mark.asyncio
     async def test_get_led_indicator_delegates_to_client(self, mock_client):
-        """Test get_led_indicator delegates to client.get_led_indicator."""
+        """Test get_led_indicator delegates to client and updates cache."""
         from pywiim.player import Player
 
         mock_client.get_led_indicator = AsyncMock(return_value=True)
@@ -5099,20 +5099,23 @@ class TestPlayerLEDIndicatorAndDisplay:
         player = Player(mock_client)
         result = await player.get_led_indicator()
         assert result is True
+        assert player.led_indicator_on is True
         mock_client.get_led_indicator.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_set_led_indicator_delegates_to_client(self, mock_client):
-        """Test set_led_indicator delegates to client.set_led_switch."""
+    async def test_set_led_indicator_updates_cache_and_callback(self, mock_client):
+        """Test set_led_indicator updates cache and invokes state callback."""
         from pywiim.player import Player
 
         mock_client.set_led_switch = AsyncMock()
         type(mock_client).capabilities = PropertyMock(return_value={})
         player = Player(mock_client)
-        await player.set_led_indicator(True)
-        mock_client.set_led_switch.assert_called_once_with(True)
+        callback = MagicMock()
+        player._on_state_changed = callback
         await player.set_led_indicator(False)
-        mock_client.set_led_switch.assert_called_with(False)
+        assert player.led_indicator_on is False
+        mock_client.set_led_switch.assert_called_once_with(False)
+        callback.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_supports_led_indicator_reads_from_capabilities(self, mock_client):
