@@ -9,8 +9,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import ssl
+from collections.abc import Callable
 from datetime import timedelta
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 from aiohttp import ClientError, ClientSession, TCPConnector
 from async_upnp_client.aiohttp import AiohttpNotifyServer, AiohttpSessionRequester
