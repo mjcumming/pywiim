@@ -10,7 +10,7 @@ import asyncio
 import logging
 import ssl
 from datetime import timedelta
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 from aiohttp import ClientError, ClientSession, TCPConnector
 from async_upnp_client.aiohttp import AiohttpNotifyServer, AiohttpSessionRequester
@@ -829,7 +829,7 @@ class UpnpClient:
     async def _get_info_ex_raw(
         self,
         service_type: str,
-        parse_response: Any,
+        parse_response: Callable[[str], dict[str, Any]],
     ) -> dict[str, Any]:
         """Call LinkPlay GetInfoEx via raw SOAP when SCPD does not advertise it."""
         control_url = getattr(self._av_transport_service, "control_url", None)
