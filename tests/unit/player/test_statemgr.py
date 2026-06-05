@@ -60,8 +60,9 @@ class TestStateManager:
 
         if manager._play_state_debouncer:
             manager._play_state_debouncer.cancel_pending()
-            if manager._play_state_debouncer._pending_task is not None:
-                pending_tasks.append(manager._play_state_debouncer._pending_task)
+            pending_task = manager._play_state_debouncer._pending_task
+            if pending_task is not None and not pending_task.done():
+                pending_tasks.append(pending_task)
 
         coverart_task = getattr(mock_player._coverart_mgr, "_artwork_fetch_task", None)
         if coverart_task and not coverart_task.done():
