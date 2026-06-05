@@ -17,8 +17,9 @@ from pywiim.discovery import (
     is_likely_non_linkplay,
     is_linkplay_device,
     validate_device,
+    validate_device_strict,
 )
-from pywiim.exceptions import WiiMError
+from pywiim.exceptions import WiiMConnectionError, WiiMError
 from pywiim.models import DeviceInfo
 
 
@@ -261,6 +262,26 @@ class TestValidateDevice:
 
             # Should return immediately without attempting full validation
             assert validated.validated is False
+
+    @pytest.mark.asyncio
+    async def test_validate_device_strict_success(self):
+        """Test strict validation returns validated devices."""
+        device = DiscoveredDevice(ip="192.168.1.100", validated=True)
+
+        with patch("pywiim.discovery.validate_device", return_value=device):
+            validated = await validate_device_strict(device)
+
+        assert validated is device
+        assert validated.validated is True
+
+    @pytest.mark.asyncio
+    async def test_validate_device_strict_raises_for_unvalidated_device(self):
+        """Test strict validation rejects soft validation failures."""
+        device = DiscoveredDevice(ip="192.168.1.100", validated=False)
+
+        with patch("pywiim.discovery.validate_device", return_value=device):
+            with pytest.raises(WiiMConnectionError, match="did not validate"):
+                await validate_device_strict(device)
 
     @pytest.mark.asyncio
     async def test_validate_device_http_probe_always_called(self):

@@ -278,6 +278,21 @@ validated_device = await validate_device(device)
 # - validated = True
 ```
 
+`validate_device()` is a soft validation helper for discovery scans. If the
+host does not validate as a LinkPlay/WiiM device, it returns the device with
+`validated = False` instead of raising. Callers must check `validated` before
+creating persistent config entries or clients from user-supplied hosts.
+
+For manual setup flows where an unvalidated host should be an error, use
+`validate_device_strict()`:
+
+```python
+from pywiim import DiscoveredDevice, validate_device_strict
+
+device = await validate_device_strict(DiscoveredDevice(ip="192.168.1.100"))
+# Raises WiiMConnectionError if the host is not a valid LinkPlay/WiiM device.
+```
+
 ## Examples
 
 ### Discover and List All Devices
@@ -555,4 +570,3 @@ For best performance:
 - Limit network scan range
 - Validate devices in parallel
 - Cache discovery results
-

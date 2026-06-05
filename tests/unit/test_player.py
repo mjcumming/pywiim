@@ -256,6 +256,7 @@ class TestPlayerRefresh:
         mock_client.get_player_status_model = AsyncMock(side_effect=WiiMError("Failed"))
 
         player = Player(mock_client)
+        player._ensure_upnp_client = AsyncMock(return_value=False)
         with pytest.raises(WiiMError):
             await player.refresh()
 
@@ -3965,6 +3966,7 @@ class TestPlayerMediaMetadata:
         mock_client.get_device_info_model = AsyncMock(return_value=DeviceInfo(uuid="test"))
 
         player = Player(mock_client)
+        player._ensure_upnp_client = AsyncMock(return_value=False)
         # refresh() catches, logs, and re-raises the original exception
         with pytest.raises(Exception, match="Network error"):
             await player.refresh()
@@ -3979,6 +3981,7 @@ class TestPlayerMediaMetadata:
         mock_client.get_device_info_model = AsyncMock(side_effect=Exception("Device info error"))
 
         player = Player(mock_client)
+        player._ensure_upnp_client = AsyncMock(return_value=False)
         # refresh() catches, logs, and re-raises the original exception
         with pytest.raises(Exception, match="Device info error"):
             await player.refresh()
@@ -4047,6 +4050,7 @@ class TestPlayerUPnPIntegration:
         from pywiim.player import Player
 
         player = Player(mock_client)
+        player._coverart_mgr.enrich_metadata_on_track_change = AsyncMock()
         status = PlayerStatus(play_state="pause", volume=50, mute=False)
         player._status_model = status
 
@@ -4062,6 +4066,7 @@ class TestPlayerUPnPIntegration:
         from pywiim.player import Player
 
         player = Player(mock_client)
+        player._coverart_mgr.enrich_metadata_on_track_change = AsyncMock()
         status = PlayerStatus(play_state="play", volume=50, mute=False)
         player._status_model = status
 
@@ -4079,6 +4084,7 @@ class TestPlayerUPnPIntegration:
         status = PlayerStatus(play_state="pause", volume=50, mute=False)
         player._status_model = status
 
+        player._coverart_mgr.enrich_metadata_on_track_change = AsyncMock()
         upnp_data = {"play_state": "play", "volume": 0.75, "muted": False}
         player.update_from_upnp(upnp_data)
 
@@ -5663,6 +5669,7 @@ class TestPlayerNetworkErrors:
         mock_client.get_player_status_model = AsyncMock(side_effect=TimeoutError("Request timeout"))
 
         player = Player(mock_client)
+        player._ensure_upnp_client = AsyncMock(return_value=False)
         with pytest.raises(asyncio.TimeoutError):
             await player.refresh()
 
@@ -5682,6 +5689,7 @@ class TestPlayerNetworkErrors:
         mock_client.get_device_info_model = AsyncMock(side_effect=WiiMError("Device info failed"))
 
         player = Player(mock_client)
+        player._ensure_upnp_client = AsyncMock(return_value=False)
         with pytest.raises(WiiMError):
             await player.refresh()
 
@@ -5737,6 +5745,7 @@ class TestPlayerNetworkErrors:
         mock_client.get_player_status_model = AsyncMock(side_effect=WiiMConnectionError("Connection refused"))
 
         player = Player(mock_client)
+        player._ensure_upnp_client = AsyncMock(return_value=False)
         with pytest.raises(WiiMConnectionError):
             await player.refresh()
 

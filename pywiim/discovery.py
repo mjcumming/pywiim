@@ -22,6 +22,7 @@ except ImportError:
     async_search = None  # type: ignore[assignment]
 
 from .client import WiiMClient
+from .exceptions import WiiMConnectionError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ __all__ = [
     "is_known_linkplay",
     "is_linkplay_device",
     "validate_device",
+    "validate_device_strict",
 ]
 
 # Known LinkPlay/WiiM server patterns (devices we're CERTAIN are LinkPlay)
@@ -483,6 +485,32 @@ async def validate_device(device: DiscoveredDevice) -> DiscoveredDevice:
         _LOGGER.debug("Could not validate device %s: %s", device.ip, e)
 
     return device
+
+
+async def validate_device_strict(device: DiscoveredDevice) -> DiscoveredDevice:
+    """Validate a discovered device and raise if it is not usable.
+
+    ``validate_device()`` is intentionally soft-fail for bulk discovery: it
+    returns the input device with ``validated=False`` when the host does not
+    pass the LinkPlay/WiiM probe. Use this helper for manual setup flows or
+    other code paths where an unvalidated device is an error.
+
+    Args:
+        device: Device to validate.
+
+    Returns:
+        Updated device with full information.
+
+    Raises:
+        WiiMConnectionError: If the host cannot be validated as LinkPlay/WiiM.
+    """
+    validated_device = await validate_device(device)
+    if not validated_device.validated:
+        raise WiiMConnectionError(
+            f"Device at {device.ip} did not validate as a LinkPlay/WiiM device",
+            operation_context="device_validation",
+        )
+    return validated_device
 
 
 async def discover_devices(

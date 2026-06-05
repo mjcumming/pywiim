@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.8] - 2026-06-05
+
+### Added
+- **Strict discovery validation helper** — `validate_device_strict()` wraps the existing soft
+  `validate_device()` contract and raises `WiiMConnectionError` when a host does not validate as
+  LinkPlay/WiiM. This gives integrations and manual setup flows an exception-style API without
+  breaking bulk discovery scans that rely on `validated=False`.
+
 ## [2.2.7] - 2026-06-05
 
 ### Added
