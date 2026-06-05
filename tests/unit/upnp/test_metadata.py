@@ -44,7 +44,7 @@ class TestUpnpMetadataHelpers:
 
     def test_parse_didl_metadata_invalid_artwork(self):
         didl = (
-            "<DIDL-Lite xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">"
+            '<DIDL-Lite xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">'
             "<item><upnp:albumArtURI>un_known</upnp:albumArtURI></item></DIDL-Lite>"
         )
         result = parse_didl_metadata(didl)

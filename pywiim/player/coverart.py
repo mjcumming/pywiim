@@ -270,9 +270,7 @@ class CoverArtManager:
         has_track_metadata = bool(title or artist or album)
         needs_artwork_enrichment = not has_valid_artwork and has_track_metadata
         should_fetch_metadata = (
-            (track_changed and not has_valid_artwork)
-            or needs_metadata_enrichment
-            or needs_artwork_enrichment
+            (track_changed and not has_valid_artwork) or needs_metadata_enrichment or needs_artwork_enrichment
         )
 
         if should_fetch_metadata:

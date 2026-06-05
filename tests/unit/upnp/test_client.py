@@ -694,8 +694,8 @@ class TestGetInfoEx:
         client.async_call_action = AsyncMock(
             return_value={
                 "TrackMetaData": (
-                    "<DIDL-Lite xmlns:dc=\"http://purl.org/dc/elements/1.1/\" "
-                    "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">"
+                    '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" '
+                    'xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">'
                     "<item><dc:title>Track</dc:title>"
                     "<upnp:albumArtURI>https://example.com/art.jpg</upnp:albumArtURI>"
                     "</item></DIDL-Lite>"
@@ -726,8 +726,8 @@ class TestGetInfoEx:
 
         soap_response = (
             '<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">'
-            "<s:Body><u:GetInfoExResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">"
-            "<TrackMetaData>&lt;DIDL-Lite xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"&gt;"
+            '<s:Body><u:GetInfoExResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">'
+            '<TrackMetaData>&lt;DIDL-Lite xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"&gt;'
             "&lt;item&gt;&lt;upnp:albumArtURI&gt;https://example.com/raw.jpg&lt;/upnp:albumArtURI&gt;"
             "&lt;/item&gt;&lt;/DIDL-Lite&gt;</TrackMetaData>"
             "</u:GetInfoExResponse></s:Body></s:Envelope>"
