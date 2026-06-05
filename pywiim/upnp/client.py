@@ -819,9 +819,9 @@ class UpnpClient:
 
                     parsed.update(parse_didl_metadata(track_metadata))
                 _LOGGER.debug("GetInfoEx result for %s: has_artwork=%s", self.host, bool(parsed.get("image_url")))
-                return parsed
-        except UpnpError:
-            raise
+                if parsed.get("image_url"):
+                    return parsed
+                _LOGGER.debug("GetInfoEx action for %s returned no artwork; trying raw SOAP", self.host)
         except Exception as err:
             _LOGGER.debug("GetInfoEx via async_upnp_client failed for %s: %s", self.host, err)
 

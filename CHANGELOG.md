@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.7] - 2026-06-05
+
 ### Added
 - **LinkPlay GetInfoEx artwork fallback** — Arylic and other generic LinkPlay devices can expose
   `upnp:albumArtURI` via the vendor `GetInfoEx` UPnP action when HTTP `getMetaInfo` lacks artwork
@@ -16,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - UPnP description probing now also tries port `59152`
 
 ### Fixed
+- **GetInfoEx artwork propagation** — The 2.2.6 fallback could parse Arylic/generic LinkPlay artwork
+  but fail to expose it through `Player.media_image_url` because enrichment updated `entity_picture`
+  without the canonical `image_url` state field. `GetInfoEx` now also tries raw SOAP when the
+  advertised UPnP action returns no usable artwork, and DIDL parsing tolerates bare `&` characters
+  in titles or artwork URLs.
 - **CI codecov patch** — Unit tests for monitor hardware helpers, LED `LED_SWITCH_GET` parsing, and configuration-tier refresh paths (patch coverage ≥ 55%).
 
 ## [2.2.6] - 2026-06-05

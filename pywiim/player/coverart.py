@@ -352,6 +352,7 @@ class CoverArtManager:
                     encoded = quote(cache_key)
                     sep = "&" if "?" in str(artwork_url) else "?"
                     artwork_url = f"{artwork_url}{sep}cache={encoded}"
+                update["image_url"] = artwork_url
                 update["entity_picture"] = artwork_url
 
         if update:
@@ -372,7 +373,7 @@ class CoverArtManager:
                 self.player._status_model.artist = merged.get("artist")
             if "album" in update:
                 self.player._status_model.album = merged.get("album")
-            if "entity_picture" in update:
+            if "image_url" in update or "entity_picture" in update:
                 image_url = merged.get("image_url")
                 self.player._status_model.entity_picture = image_url
                 self.player._status_model.cover_url = image_url
@@ -432,7 +433,7 @@ class CoverArtManager:
                     if update:
                         self._apply_metadata_update(update, source_name="getMetaInfo")
 
-            if not update.get("entity_picture"):
+            if not (update.get("image_url") or update.get("entity_picture")):
                 await self._fetch_artwork_from_getinfoex(merged_state)
         except asyncio.CancelledError:
             # Task was cancelled (new track change detected)

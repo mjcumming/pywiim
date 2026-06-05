@@ -42,6 +42,20 @@ class TestUpnpMetadataHelpers:
         assert result["album"] == "Revolution"
         assert result["image_url"].startswith("https://i.scdn.co/image/")
 
+    def test_parse_didl_metadata_sanitizes_bare_ampersands(self):
+        didl = (
+            '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" '
+            'xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">'
+            "<item><dc:title>A & B</dc:title>"
+            "<upnp:albumArtURI>https://example.com/a.jpg?x=1&y=2</upnp:albumArtURI>"
+            "</item></DIDL-Lite>"
+        )
+
+        result = parse_didl_metadata(didl)
+
+        assert result["title"] == "A & B"
+        assert result["image_url"] == "https://example.com/a.jpg?x=1&y=2"
+
     def test_parse_didl_metadata_invalid_artwork(self):
         didl = (
             '<DIDL-Lite xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">'

@@ -749,6 +749,42 @@ class TestGetInfoEx:
         assert result["image_url"] == "https://example.com/raw.jpg"
 
     @pytest.mark.asyncio
+    async def test_get_info_ex_raw_soap_when_action_has_no_artwork(self):
+        """Falls back to raw SOAP when advertised GetInfoEx omits usable artwork."""
+        from pywiim.upnp.client import UpnpClient
+
+        client = UpnpClient("192.168.1.100", "http://192.168.1.100/description.xml", None)
+        mock_service = MagicMock()
+        mock_service.has_action = MagicMock(return_value=True)
+        mock_service.control_url = "http://192.168.1.100:59152/upnp/control/rendertransport1"
+        client._av_transport_service = mock_service
+        client.async_call_action = AsyncMock(return_value={"TrackMetaData": object()})
+
+        soap_response = (
+            '<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">'
+            '<s:Body><u:GetInfoExResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">'
+            '<TrackMetaData>&lt;DIDL-Lite xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"&gt;'
+            "&lt;item&gt;&lt;upnp:albumArtURI&gt;https://example.com/raw-action.jpg&lt;/upnp:albumArtURI&gt;"
+            "&lt;/item&gt;&lt;/DIDL-Lite&gt;</TrackMetaData>"
+            "</u:GetInfoExResponse></s:Body></s:Envelope>"
+        )
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.text = AsyncMock(return_value=soap_response)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.closed = False
+        mock_session.post = MagicMock(return_value=mock_response)
+        client.session = mock_session
+
+        result = await client.get_info_ex()
+
+        assert result["image_url"] == "https://example.com/raw-action.jpg"
+
+    @pytest.mark.asyncio
     async def test_get_info_ex_no_service(self):
         """Raises UpnpError when AVTransport is unavailable."""
         from async_upnp_client.exceptions import UpnpError

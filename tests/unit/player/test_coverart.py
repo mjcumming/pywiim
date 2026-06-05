@@ -451,6 +451,8 @@ class TestCoverArtManager:
 
         mock_upnp.get_info_ex.assert_called_once()
         mock_player._state_synchronizer.update_from_http.assert_called()
+        update = mock_player._state_synchronizer.update_from_http.call_args.args[0]
+        assert update["image_url"].startswith("https://example.com/getinfoex.jpg")
         assert mock_player._getinfoex_supported is True
 
     @pytest.mark.asyncio

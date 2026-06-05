@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+import re
 from html import unescape
 from typing import Any
 from urllib.parse import urlparse
 from xml.etree import ElementTree as ET
 
 _LOGGER = logging.getLogger(__name__)
+
+_BARE_AMPERSAND_RE = re.compile(r"&(?!#\d+;|#x[0-9a-fA-F]+;|[A-Za-z][A-Za-z0-9]+;)")
 
 
 def is_valid_image_url(url: str | None) -> bool:
@@ -39,7 +42,7 @@ def parse_didl_metadata(didl_xml: str, *, allow_clear: bool = False) -> dict[str
         return changes
 
     try:
-        didl_xml = unescape(didl_xml)
+        didl_xml = _BARE_AMPERSAND_RE.sub("&amp;", unescape(didl_xml))
         root = ET.fromstring(didl_xml)
 
         namespaces = {
