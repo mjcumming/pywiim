@@ -7,8 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **LinkPlay GetInfoEx artwork fallback** — Arylic and other generic LinkPlay devices can expose
+  `upnp:albumArtURI` via the vendor `GetInfoEx` UPnP action when HTTP `getMetaInfo` lacks artwork
+  ([mjcumming/wiim#244](https://github.com/mjcumming/wiim/issues/244)).
+  - `UpnpClient.get_info_ex()` with raw SOAP fallback when SCPD does not advertise the action
+  - Cover art enrichment now tries GetInfoEx after `getMetaInfo`
+  - UPnP description probing now also tries port `59152`
+
 ### Fixed
 - **CI codecov patch** — Unit tests for monitor hardware helpers, LED `LED_SWITCH_GET` parsing, and configuration-tier refresh paths (patch coverage ≥ 55%).
+
+## [2.2.6] - 2026-06-05
+
+### Added
+- **LinkPlay GetInfoEx artwork fallback** for Arylic/generic LinkPlay devices ([mjcumming/wiim#244](https://github.com/mjcumming/wiim/issues/244)).
+
+### Fixed
+- **Chromecast source on WiiM Amp** — `vendor="CAST"` with `mode=5` now maps to network (`wifi`) instead of incorrectly reporting `bluetooth` ([#19](https://github.com/mjcumming/pywiim/issues/19)).
 
 ## [2.2.5] - 2026-05-19
 

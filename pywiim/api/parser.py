@@ -422,6 +422,7 @@ def parse_player_status(
             "google cast": "wifi",
             "googlecast": "wifi",
             "chromecast built-in": "wifi",
+            "cast": "wifi",  # WiiM Amp reports vendor="CAST" during Cast sessions (pywiim #19)
             # Apps that cast via Chromecast may report app name instead of "Chromecast".
             "bbc sounds": "wifi",
             "bbc iplayer": "wifi",

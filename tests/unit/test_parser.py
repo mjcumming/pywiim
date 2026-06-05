@@ -420,6 +420,18 @@ class TestParsePlayerStatus:
         assert parsed["source"] == "wifi"
         assert parsed["vendor"] == "BBC Sounds"
 
+    def test_parse_cast_vendor_overrides_mode_5_bluetooth(self):
+        """Test WiiM Amp vendor=CAST overrides mode=5 bluetooth to wifi (pywiim #19)."""
+        raw = {
+            "mode": "5",
+            "vendor": "CAST",
+            "status": "play",
+        }
+        parsed, _ = parse_player_status(raw)
+
+        assert parsed["source"] == "wifi"
+        assert parsed["vendor"] == "CAST"
+
     def test_parse_chromecast_artwork_fallback_when_vendor_missing(self):
         """Test artwork URL fallback overrides bluetooth to wifi when vendor not reported (Issue #6)."""
         raw = {

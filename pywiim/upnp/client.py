@@ -783,6 +783,104 @@ class UpnpClient:
             _LOGGER.warning("GetPositionInfo failed for %s: %s", self.host, err)
             raise UpnpError(f"GetPositionInfo failed: {err}") from err
 
+    async def get_info_ex(self) -> dict[str, Any]:
+        """Fetch extended transport/metadata via LinkPlay GetInfoEx UPnP action.
+
+        Arylic and some generic LinkPlay devices expose rich playback metadata
+        (including ``upnp:albumArtURI``) through this vendor extension instead of
+        the HTTP ``getMetaInfo`` endpoint.
+
+        Returns:
+            Parsed response with transport fields and normalized metadata keys
+            (``title``, ``artist``, ``album``, ``image_url``) when available.
+
+        Raises:
+            UpnpError: If AVTransport is unavailable or the action fails.
+        """
+        if not self._av_transport_service:
+            raise UpnpError("AVTransport service not available")
+
+        from .metadata import parse_getinfoex_response
+
+        service_type = "urn:schemas-upnp-org:service:AVTransport:1"
+
+        try:
+            if self._av_transport_service.has_action("GetInfoEx"):
+                result = await self.async_call_action(
+                    "av_transport",
+                    "GetInfoEx",
+                    {"InstanceID": 0},
+                )
+                parsed = dict(result)
+                track_metadata = parsed.get("TrackMetaData")
+                if isinstance(track_metadata, str) and track_metadata.strip():
+                    from .metadata import parse_didl_metadata
+
+                    parsed.update(parse_didl_metadata(track_metadata))
+                _LOGGER.debug("GetInfoEx result for %s: has_artwork=%s", self.host, bool(parsed.get("image_url")))
+                return parsed
+        except UpnpError:
+            raise
+        except Exception as err:
+            _LOGGER.debug("GetInfoEx via async_upnp_client failed for %s: %s", self.host, err)
+
+        return await self._get_info_ex_raw(service_type, parse_getinfoex_response)
+
+    async def _get_info_ex_raw(
+        self,
+        service_type: str,
+        parse_response: Any,
+    ) -> dict[str, Any]:
+        """Call LinkPlay GetInfoEx via raw SOAP when SCPD does not advertise it."""
+        control_url = getattr(self._av_transport_service, "control_url", None)
+        if not control_url:
+            raise UpnpError("AVTransport control URL not available")
+
+        body = (
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" '
+            's:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">'
+            "<s:Body>"
+            f'<u:GetInfoEx xmlns:u="{service_type}">'
+            "<InstanceID>0</InstanceID>"
+            "</u:GetInfoEx>"
+            "</s:Body></s:Envelope>"
+        )
+        headers = {
+            "Content-Type": 'text/xml; charset="utf-8"',
+            "SOAPAction": f'"{service_type}#GetInfoEx"',
+        }
+
+        session = self.session
+        if session is None or session.closed:
+            connector = TCPConnector(ssl=False)
+            session = ClientSession(connector=connector)
+            close_session = True
+        else:
+            close_session = False
+
+        try:
+            async with session.post(control_url, data=body, headers=headers, ssl=False) as response:
+                text = await response.text()
+                if response.status != 200:
+                    raise UpnpError(f"GetInfoEx failed with HTTP {response.status}")
+                parsed = parse_response(text)
+                if not parsed:
+                    raise UpnpError("GetInfoEx returned empty response")
+                _LOGGER.debug(
+                    "GetInfoEx raw SOAP result for %s: has_artwork=%s",
+                    self.host,
+                    bool(parsed.get("image_url")),
+                )
+                return parsed
+        except UpnpError:
+            raise
+        except Exception as err:
+            raise UpnpError(f"GetInfoEx failed: {err}") from err
+        finally:
+            if close_session:
+                await session.close()
+
     async def get_volume(self, channel: str = "Master") -> int:
         """Fetch current volume via GetVolume UPnP action.
 

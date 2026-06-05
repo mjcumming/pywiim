@@ -283,7 +283,8 @@ class WiiMClient(
         host_url = self._host_url
         preferred_scheme = "https" if self.is_https else "http"
         schemes = [preferred_scheme, "https" if preferred_scheme == "http" else "http"]
-        urls = [f"{scheme}://{host_url}:49152/description.xml" for scheme in schemes]
+        ports = (49152, 59152)
+        urls = [f"{scheme}://{host_url}:{port}/description.xml" for scheme in schemes for port in ports]
 
         for url in urls:
             try:

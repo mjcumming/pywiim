@@ -434,3 +434,47 @@ class TestCoverArtManager:
         await cover_art_manager._fetch_artwork_from_metainfo(merged)
 
         # Should not crash
+
+    @pytest.mark.asyncio
+    async def test_fetch_artwork_falls_back_to_getinfoex(self, cover_art_manager, mock_player):
+        """Test GetInfoEx fallback when getMetaInfo has no artwork."""
+        from pywiim.models import PlayerStatus
+
+        merged = {"title": "Song", "artist": "Artist", "album": "Album"}
+        mock_player.client.get_meta_info = AsyncMock(return_value={"metaData": {"title": "Song", "artist": "Artist"}})
+        mock_player._state_synchronizer.update_from_http = MagicMock()
+        mock_player._state_synchronizer.get_merged_state = MagicMock(return_value=merged)
+        mock_player._status_model = PlayerStatus(title="Song", artist="Artist")
+        mock_player._on_state_changed = MagicMock()
+        mock_player._ensure_upnp_client = AsyncMock(return_value=True)
+
+        mock_upnp = MagicMock()
+        mock_upnp.av_transport = MagicMock()
+        mock_upnp.get_info_ex = AsyncMock(
+            return_value={
+                "title": "Song",
+                "artist": "Artist",
+                "image_url": "https://example.com/getinfoex.jpg",
+            }
+        )
+        mock_player._upnp_client = mock_upnp
+
+        await cover_art_manager._fetch_artwork_from_metainfo(merged)
+
+        mock_upnp.get_info_ex.assert_called_once()
+        mock_player._state_synchronizer.update_from_http.assert_called()
+        assert mock_player._getinfoex_supported is True
+
+    @pytest.mark.asyncio
+    async def test_enrich_metadata_when_artwork_missing(self, cover_art_manager, mock_player):
+        """Schedule enrichment when artwork is missing but metadata exists."""
+        merged = {"title": "Song", "artist": "Artist", "album": "Album", "image_url": None}
+        cover_art_manager._last_track_signature = "Song|Artist|Album"
+
+        with patch("asyncio.get_event_loop") as mock_loop:
+            mock_task = MagicMock()
+            mock_loop.return_value.create_task = MagicMock(return_value=mock_task)
+
+            await cover_art_manager.enrich_metadata_on_track_change(merged)
+
+            assert cover_art_manager._artwork_fetch_task == mock_task

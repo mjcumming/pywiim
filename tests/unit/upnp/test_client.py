@@ -679,6 +679,89 @@ class TestUpnpClient:
         assert "available_actions" in snapshot
 
 
+class TestGetInfoEx:
+    """Tests for UpnpClient.get_info_ex (LinkPlay/Arylic extension)."""
+
+    @pytest.mark.asyncio
+    async def test_get_info_ex_via_action(self):
+        """Uses async_upnp_client action when GetInfoEx is advertised."""
+        from pywiim.upnp.client import UpnpClient
+
+        client = UpnpClient("192.168.1.100", "http://192.168.1.100/description.xml", None)
+        mock_service = MagicMock()
+        mock_service.has_action = MagicMock(return_value=True)
+        client._av_transport_service = mock_service
+        client.async_call_action = AsyncMock(
+            return_value={
+                "TrackMetaData": (
+                    "<DIDL-Lite xmlns:dc=\"http://purl.org/dc/elements/1.1/\" "
+                    "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">"
+                    "<item><dc:title>Track</dc:title>"
+                    "<upnp:albumArtURI>https://example.com/art.jpg</upnp:albumArtURI>"
+                    "</item></DIDL-Lite>"
+                )
+            }
+        )
+
+        result = await client.get_info_ex()
+
+        client.async_call_action.assert_called_once_with(
+            "av_transport",
+            "GetInfoEx",
+            {"InstanceID": 0},
+        )
+        assert result["title"] == "Track"
+        assert result["image_url"] == "https://example.com/art.jpg"
+
+    @pytest.mark.asyncio
+    async def test_get_info_ex_raw_soap_fallback(self):
+        """Falls back to raw SOAP when GetInfoEx is not advertised."""
+        from pywiim.upnp.client import UpnpClient
+
+        client = UpnpClient("192.168.1.100", "http://192.168.1.100/description.xml", None)
+        mock_service = MagicMock()
+        mock_service.has_action = MagicMock(return_value=False)
+        mock_service.control_url = "http://192.168.1.100:59152/upnp/control/rendertransport1"
+        client._av_transport_service = mock_service
+
+        soap_response = (
+            '<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">'
+            "<s:Body><u:GetInfoExResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">"
+            "<TrackMetaData>&lt;DIDL-Lite xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\"&gt;"
+            "&lt;item&gt;&lt;upnp:albumArtURI&gt;https://example.com/raw.jpg&lt;/upnp:albumArtURI&gt;"
+            "&lt;/item&gt;&lt;/DIDL-Lite&gt;</TrackMetaData>"
+            "</u:GetInfoExResponse></s:Body></s:Envelope>"
+        )
+
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.text = AsyncMock(return_value=soap_response)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.closed = False
+        mock_session.post = MagicMock(return_value=mock_response)
+        client.session = mock_session
+
+        result = await client.get_info_ex()
+
+        assert result["image_url"] == "https://example.com/raw.jpg"
+
+    @pytest.mark.asyncio
+    async def test_get_info_ex_no_service(self):
+        """Raises UpnpError when AVTransport is unavailable."""
+        from async_upnp_client.exceptions import UpnpError
+
+        from pywiim.upnp.client import UpnpClient
+
+        client = UpnpClient("192.168.1.100", "http://192.168.1.100/description.xml", None)
+        client._av_transport_service = None
+
+        with pytest.raises(UpnpError, match="AVTransport service not available"):
+            await client.get_info_ex()
+
+
 class TestGetControlDeviceInfo:
     """Tests for UpnpClient.get_control_device_info (Audio Pro-specific action)."""
 

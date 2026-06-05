@@ -139,6 +139,9 @@ class PlayerBase:
         # 0 = never attempted, >0 = timestamp of last attempt
         self._last_upnp_attempt: float = 0
 
+        # LinkPlay GetInfoEx probe cache (None = unknown, True/False = probed)
+        self._getinfoex_supported: bool | None = None
+
         # Availability tracking
         self._available: bool = True  # Assume available until proven otherwise
 
@@ -367,19 +370,38 @@ class PlayerBase:
         try:
             from ..upnp.client import UpnpClient
 
-            # UPnP description URL is typically on port 49152
-            description_url = f"http://{self.client.host}:49152/description.xml"
+            description_urls = [
+                f"http://{self.client.host}:49152/description.xml",
+                f"http://{self.client.host}:59152/description.xml",
+            ]
 
             _LOGGER.debug("Creating UPnP client for %s", self.client.host)
             # Pass client's session to UPnP client for connection pooling
             # Ensure session exists (client may create it lazily)
             await self.client._ensure_session()
             client_session = getattr(self.client, "_session", None)
-            self._upnp_client = await UpnpClient.create(
-                self.client.host,
-                description_url,
-                session=client_session,
-            )
+
+            last_error: Exception | None = None
+            self._upnp_client = None
+            for description_url in description_urls:
+                try:
+                    self._upnp_client = await UpnpClient.create(
+                        self.client.host,
+                        description_url,
+                        session=client_session,
+                    )
+                    break
+                except Exception as err:  # noqa: BLE001
+                    last_error = err
+                    _LOGGER.debug(
+                        "UPnP description fetch failed for %s at %s: %s",
+                        self.client.host,
+                        description_url,
+                        err,
+                    )
+
+            if self._upnp_client is None:
+                raise last_error or RuntimeError("UPnP client creation failed")
 
             # Initialize UPnP health tracker if not already present
             if self._upnp_health_tracker is None:
