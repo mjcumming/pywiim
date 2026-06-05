@@ -62,6 +62,7 @@ from .discovery import (
     discover_devices,
     discover_via_ssdp,
     validate_device,
+    validate_device_strict,
 )
 from .exceptions import (
     WiiMConnectionError,
@@ -87,7 +88,7 @@ from .profiles import (
 from .role import RoleDetectionResult, detect_role
 from .state import GroupStateSynchronizer, StateSynchronizer
 
-__version__ = "2.2.7"
+__version__ = "2.2.8"
 __all__ = [
     # Main client
     "WiiMClient",
@@ -111,6 +112,7 @@ __all__ = [
     "discover_devices",
     "discover_via_ssdp",
     "validate_device",
+    "validate_device_strict",
     # Backoff
     "BackoffController",
     # Normalization
