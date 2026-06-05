@@ -983,11 +983,7 @@ class StateManager:
 
         # HTTP polling path: enrich artwork/metadata when missing (e.g. Arylic GetInfoEx)
         merged = self.player._state_synchronizer.get_merged_state()
-        try:
-            loop = asyncio.get_event_loop()
-            loop.create_task(self.player._coverart_mgr.enrich_metadata_on_track_change(merged))
-        except RuntimeError:
-            _LOGGER.debug("No event loop available for metadata enrichment after refresh")
+        await self.player._coverart_mgr.enrich_metadata_on_track_change(merged)
 
         # Notify callback
         if self.player._on_state_changed:

@@ -313,15 +313,11 @@ class TestCoverArtManager:
         cover_art_manager._last_track_signature = "Old Track|Old Artist|Old Album"
         mock_player.client._capabilities = {"supports_metadata": True}
         mock_player.client.get_meta_info = MagicMock()
+        cover_art_manager._fetch_artwork_from_metainfo = AsyncMock()
 
-        with patch("asyncio.get_event_loop") as mock_loop:
-            mock_task = MagicMock()
-            mock_loop.return_value.create_task = MagicMock(return_value=mock_task)
+        await cover_art_manager.enrich_metadata_on_track_change(merged)
 
-            await cover_art_manager.enrich_metadata_on_track_change(merged)
-
-            # Should schedule artwork fetch
-            assert cover_art_manager._artwork_fetch_task == mock_task
+        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged)
 
     @pytest.mark.asyncio
     async def test_enrich_metadata_on_track_change_unknown_metadata(self, cover_art_manager, mock_player):
@@ -330,15 +326,11 @@ class TestCoverArtManager:
         cover_art_manager._last_track_signature = None
         mock_player.client._capabilities = {"supports_metadata": True}
         mock_player.client.get_meta_info = MagicMock()
+        cover_art_manager._fetch_artwork_from_metainfo = AsyncMock()
 
-        with patch("asyncio.get_event_loop") as mock_loop:
-            mock_task = MagicMock()
-            mock_loop.return_value.create_task = MagicMock(return_value=mock_task)
+        await cover_art_manager.enrich_metadata_on_track_change(merged)
 
-            await cover_art_manager.enrich_metadata_on_track_change(merged)
-
-            # Should schedule metadata fetch
-            assert cover_art_manager._artwork_fetch_task == mock_task
+        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged)
 
     @pytest.mark.asyncio
     async def test_enrich_metadata_on_track_change_best_effort_when_capability_false(
@@ -349,15 +341,11 @@ class TestCoverArtManager:
         cover_art_manager._last_track_signature = "Old Track|Old Artist|Old Album"
         mock_player.client._capabilities = {"supports_metadata": False}
         mock_player.client.get_meta_info = MagicMock()
+        cover_art_manager._fetch_artwork_from_metainfo = AsyncMock()
 
-        with patch("asyncio.get_event_loop") as mock_loop:
-            mock_task = MagicMock()
-            mock_loop.return_value.create_task = MagicMock(side_effect=lambda coro: (coro.close(), mock_task)[1])
+        await cover_art_manager.enrich_metadata_on_track_change(merged)
 
-            await cover_art_manager.enrich_metadata_on_track_change(merged)
-
-            # Should still schedule metadata fetch (best-effort path)
-            assert cover_art_manager._artwork_fetch_task == mock_task
+        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged)
 
     @pytest.mark.asyncio
     async def test_enrich_metadata_on_track_change_valid_artwork(self, cover_art_manager, mock_player):
@@ -470,11 +458,8 @@ class TestCoverArtManager:
         """Schedule enrichment when artwork is missing but metadata exists."""
         merged = {"title": "Song", "artist": "Artist", "album": "Album", "image_url": None}
         cover_art_manager._last_track_signature = "Song|Artist|Album"
+        cover_art_manager._fetch_artwork_from_metainfo = AsyncMock()
 
-        with patch("asyncio.get_event_loop") as mock_loop:
-            mock_task = MagicMock()
-            mock_loop.return_value.create_task = MagicMock(return_value=mock_task)
+        await cover_art_manager.enrich_metadata_on_track_change(merged)
 
-            await cover_art_manager.enrich_metadata_on_track_change(merged)
-
-            assert cover_art_manager._artwork_fetch_task == mock_task
+        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged)

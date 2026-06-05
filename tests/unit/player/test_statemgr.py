@@ -164,7 +164,8 @@ class TestStateManager:
 
         mock_player._state_synchronizer.update_from_upnp.assert_called_once()
 
-    def test_update_from_upnp_play_state_debounce(self, state_manager, mock_player):
+    @pytest.mark.asyncio
+    async def test_update_from_upnp_play_state_debounce(self, state_manager, mock_player):
         """Test update_from_upnp with play_state debouncing."""
         type(mock_player).play_state = PropertyMock(return_value="play")
         mock_player._state_synchronizer.get_merged_state.return_value = {"play_state": "pause"}
@@ -172,7 +173,10 @@ class TestStateManager:
         state_manager.update_from_upnp({"play_state": "pause"})
 
         # Should schedule delayed update via debouncer
-        assert state_manager._play_state_debouncer._pending_task is not None
+        pending_task = state_manager._play_state_debouncer._pending_task
+        assert pending_task is not None
+        pending_task.cancel()
+        await asyncio.gather(pending_task, return_exceptions=True)
 
     def test_update_from_upnp_play_state_immediate(self, state_manager, mock_player):
         """Test update_from_upnp with immediate play state."""

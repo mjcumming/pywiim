@@ -244,10 +244,14 @@ class CoverArtManager:
             current_signature and self._last_track_signature and current_signature != self._last_track_signature
         )
 
-        # Check if metadata needs enrichment (title/artist/album are Unknown)
+        # Check if metadata needs enrichment (title/artist/album are present but Unknown)
         # This is common with Bluetooth AVRCP where getPlayerStatusEx returns "Unknown"
         # but getMetaInfo has the actual track info
-        needs_metadata_enrichment = is_invalid_metadata(title) or is_invalid_metadata(artist)
+        needs_metadata_enrichment = (
+            ("title" in merged_state and is_invalid_metadata(title))
+            or ("artist" in merged_state and is_invalid_metadata(artist))
+            or ("album" in merged_state and is_invalid_metadata(album))
+        )
 
         if track_changed:
             self._last_track_signature = current_signature
@@ -275,22 +279,25 @@ class CoverArtManager:
 
         if should_fetch_metadata:
             # Cancel any existing fetch task
-            if self._artwork_fetch_task and not self._artwork_fetch_task.done():
+            current_task = asyncio.current_task()
+            if (
+                self._artwork_fetch_task
+                and not self._artwork_fetch_task.done()
+                and self._artwork_fetch_task is not current_task
+            ):
                 self._artwork_fetch_task.cancel()
 
-            # Start background task to fetch metadata/artwork
-            try:
-                loop = asyncio.get_event_loop()
-                self._artwork_fetch_task = loop.create_task(self._fetch_artwork_from_metainfo(merged_state))
-                if needs_metadata_enrichment:
-                    _LOGGER.debug("Metadata is Unknown, fetching enrichment sources")
-                elif needs_artwork_enrichment:
-                    _LOGGER.debug("Artwork missing with track metadata, fetching enrichment sources")
-                else:
-                    _LOGGER.debug("Track changed, fetching enrichment sources")
-            except RuntimeError:
-                # No event loop available (sync context) - will fetch on next poll
-                _LOGGER.debug("No event loop available, metadata will be fetched on next poll")
+            if current_task:
+                self._artwork_fetch_task = current_task
+
+            if needs_metadata_enrichment:
+                _LOGGER.debug("Metadata is Unknown, fetching enrichment sources")
+            elif needs_artwork_enrichment:
+                _LOGGER.debug("Artwork missing with track metadata, fetching enrichment sources")
+            else:
+                _LOGGER.debug("Track changed, fetching enrichment sources")
+
+            await self._fetch_artwork_from_metainfo(merged_state)
 
         if not self._last_track_signature and current_signature:
             # First track detected
