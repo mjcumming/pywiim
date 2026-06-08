@@ -259,6 +259,30 @@ class TestStateManager:
 
         assert result == "play"
 
+    @pytest.mark.asyncio
+    async def test_finalize_refresh_enriches_before_propagating_to_slaves(self, state_manager, mock_player):
+        """Test master metadata is enriched before being copied to slaves."""
+        from pywiim.group import Group
+
+        order = []
+        slave = MagicMock()
+        group = Group(mock_player)
+        group.add_slave(slave)
+        mock_player._group = group
+        type(mock_player).is_master = PropertyMock(return_value=True)
+        mock_player._state_synchronizer.get_merged_state.return_value = {"title": "Master Track"}
+        mock_player._coverart_mgr.enrich_metadata_on_track_change = AsyncMock(
+            side_effect=lambda merged: order.append("enrich")
+        )
+        mock_player._group_ops.propagate_metadata_to_slaves = MagicMock(side_effect=lambda: order.append("propagate"))
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock(side_effect=lambda: order.append("sync"))
+
+            await state_manager._finalize_refresh()
+
+        assert order == ["sync", "enrich", "propagate"]
+
     # === Comprehensive refresh() tests ===
 
     @pytest.mark.asyncio
@@ -661,16 +685,19 @@ class TestStateManager:
         # (may be called multiple times, but should include the metadata call)
         calls = slave._state_synchronizer.update_from_http.call_args_list
         metadata_call = None
+        metadata_call_kwargs = None
         for call in calls:
             args = call[0][0] if call[0] else {}
             if "title" in args and args["title"] == "Master Track":
                 metadata_call = args
+                metadata_call_kwargs = call[1]
                 break
 
         assert metadata_call is not None, "update_from_http should have been called with metadata"
         assert metadata_call["title"] == "Master Track"
         assert metadata_call["artist"] == "Master Artist"
         assert metadata_call["album"] == "Master Album"
+        assert metadata_call_kwargs["force_metadata_update"] is True
 
     def test_update_from_upnp_with_upnp_health_tracker(self, state_manager, mock_player):
         """Test update_from_upnp updates UPnP health tracker."""

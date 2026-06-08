@@ -971,19 +971,19 @@ class StateManager:
                 _LOGGER.debug("Failed to fetch LED indicator status for %s: %s", self.player.host, err)
 
     async def _finalize_refresh(self) -> None:
-        """Finalize refresh: sync group state, propagate metadata, notify callback."""
+        """Finalize refresh: sync group state, enrich metadata, propagate, notify."""
         # Synchronize group state from device state
         from .groupops import GroupOperations
 
         await GroupOperations(self.player)._synchronize_group_state()
 
-        # If this is a master, propagate metadata to all linked slaves
-        if self.player.is_master and self.player._group and self.player._group.slaves:
-            self.player._group_ops.propagate_metadata_to_slaves()
-
         # HTTP polling path: enrich artwork/metadata when missing (e.g. Arylic GetInfoEx)
         merged = self.player._state_synchronizer.get_merged_state()
         await self.player._coverart_mgr.enrich_metadata_on_track_change(merged)
+
+        # If this is a master, propagate enriched metadata to all linked slaves.
+        if self.player.is_master and self.player._group and self.player._group.slaves:
+            self.player._group_ops.propagate_metadata_to_slaves()
 
         # Notify callback
         if self.player._on_state_changed:

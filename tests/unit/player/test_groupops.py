@@ -147,6 +147,7 @@ class TestGroupOperations:
         # Verify the call contains metadata
         assert "title" in propagated_call[0][0]
         assert propagated_call[0][0]["title"] == "Master Track"
+        assert propagated_call[1]["force_metadata_update"] is True
 
     def test_propagate_metadata_to_slaves_not_master(self, group_ops, mock_player):
         """Test propagating metadata when not master."""

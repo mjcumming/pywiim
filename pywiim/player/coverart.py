@@ -219,8 +219,9 @@ class CoverArtManager:
         """Fetch metadata from getMetaInfo when artwork missing or metadata is Unknown.
 
         This runs as a background task when:
-        1. Track changed and artwork is missing, OR
-        2. Metadata (title/artist) is "Unknown" (Bluetooth AVRCP case)
+        1. Track changed, OR
+        2. Metadata (title/artist) is "Unknown" (Bluetooth AVRCP case), OR
+        3. Artwork is missing but track metadata exists
 
         Args:
             merged_state: Merged state dictionary from StateSynchronizer.
@@ -268,14 +269,14 @@ class CoverArtManager:
         )
 
         # Fetch metadata when:
-        # 1. Track changed and artwork is missing, OR
+        # 1. Track changed, OR
         # 2. Metadata (title/artist) is "Unknown" (Bluetooth AVRCP case), OR
         # 3. Artwork is missing but we have track metadata (Arylic/LinkPlay GetInfoEx case)
+        # A valid URL can still be stale artwork from the previous track, so track
+        # changes refresh enrichment even when image_url is syntactically valid.
         has_track_metadata = bool(title or artist or album)
         needs_artwork_enrichment = not has_valid_artwork and has_track_metadata
-        should_fetch_metadata = (
-            (track_changed and not has_valid_artwork) or needs_metadata_enrichment or needs_artwork_enrichment
-        )
+        should_fetch_metadata = track_changed or needs_metadata_enrichment or needs_artwork_enrichment
 
         if should_fetch_metadata:
             # Cancel any existing fetch task
@@ -325,7 +326,7 @@ class CoverArtManager:
             source_value = source.get(field)
             if source_value and not self._is_invalid_metadata(source_value):
                 current_value = merged_state.get(field)
-                if self._is_invalid_metadata(current_value):
+                if self._is_invalid_metadata(current_value) or str(source_value) != str(current_value):
                     update[field] = source_value
                     update[alias] = source_value
 

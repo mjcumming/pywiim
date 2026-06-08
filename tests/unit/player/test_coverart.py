@@ -349,15 +349,33 @@ class TestCoverArtManager:
 
     @pytest.mark.asyncio
     async def test_enrich_metadata_on_track_change_valid_artwork(self, cover_art_manager, mock_player):
-        """Test enriching metadata when artwork is valid."""
+        """Test enrichment is skipped when artwork is valid and track is unchanged."""
         merged = {"title": "New Track", "artist": "New Artist", "image_url": "http://example.com/art.jpg"}
-        cover_art_manager._last_track_signature = "Old Track|Old Artist|Old Album"
+        cover_art_manager._last_track_signature = "New Track|New Artist|"
         mock_player.client._capabilities = {"supports_metadata": True}
+        cover_art_manager._fetch_artwork_from_metainfo = AsyncMock()
 
         await cover_art_manager.enrich_metadata_on_track_change(merged)
 
-        # Should not schedule fetch if artwork is valid
-        assert cover_art_manager._artwork_fetch_task is None
+        cover_art_manager._fetch_artwork_from_metainfo.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_enrich_metadata_on_track_change_refreshes_valid_but_stale_artwork(
+        self, cover_art_manager, mock_player
+    ):
+        """Track changes should refresh enrichment even when the old artwork URL is valid."""
+        merged = {
+            "title": "New Track",
+            "artist": "New Artist",
+            "album": "New Album",
+            "image_url": "http://example.com/old-track-art.jpg",
+        }
+        cover_art_manager._last_track_signature = "Old Track|Old Artist|Old Album"
+        cover_art_manager._fetch_artwork_from_metainfo = AsyncMock()
+
+        await cover_art_manager.enrich_metadata_on_track_change(merged)
+
+        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged)
 
     @pytest.mark.asyncio
     async def test_fetch_artwork_from_metainfo_success(self, cover_art_manager, mock_player):

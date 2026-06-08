@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Arylic grouped playback artwork refresh** — Track changes now refresh UPnP/GetInfoEx
+  enrichment even when the previous track left behind a syntactically valid artwork URL. Master
+  players propagate metadata to slaves after enrichment, and propagated metadata is forced through
+  idle/paused slave state so grouped playback does not briefly show artwork and then clear or revert
+  to stale art ([mjcumming/wiim#244](https://github.com/mjcumming/wiim/issues/244)).
+
 ## [2.2.9] - 2026-06-08
 
 ### Fixed

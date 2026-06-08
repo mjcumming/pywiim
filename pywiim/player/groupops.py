@@ -1043,6 +1043,7 @@ class GroupOperations:
                     "duration": master_status.duration,
                 },
                 source="propagated",
+                force_metadata_update=True,
             )
 
             # Trigger callback on slave so HA integration updates
