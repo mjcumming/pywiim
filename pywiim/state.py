@@ -310,6 +310,7 @@ class StateSynchronizer:
         data: dict[str, Any],
         timestamp: float | None = None,
         source: str = "http",
+        force_metadata_update: bool = False,
     ) -> None:
         """Update state from HTTP polling data.
 
@@ -319,6 +320,9 @@ class StateSynchronizer:
             source: Source identifier for the update. Defaults to "http" for normal
                 HTTP polling. Use "propagated" when state is propagated from master
                 to slave in a group.
+            force_metadata_update: Apply metadata fields even when transport is paused/idle.
+                Use for explicit enrichment probes that return valid metadata for the current
+                paused track; normal status polling should leave this False.
         """
         ts = timestamp or time.time()
 
@@ -374,7 +378,7 @@ class StateSynchronizer:
             )
 
         # Extract metadata (preserve if playing)
-        if not self._should_clear_metadata():
+        if force_metadata_update or not self._should_clear_metadata():
             for field_name in ["title", "artist", "album", "image_url"]:
                 if field_name in data:
                     value = data.get(field_name)
@@ -395,12 +399,16 @@ class StateSynchronizer:
         self,
         data: dict[str, Any],
         timestamp: float | None = None,
+        force_metadata_update: bool = False,
     ) -> None:
         """Update state from UPnP event data.
 
         Args:
             data: Dictionary with state fields from UPnP event
             timestamp: Timestamp of the update (defaults to now)
+            force_metadata_update: Apply metadata fields even when transport is paused/idle.
+                Use for explicit enrichment probes like GetInfoEx; ordinary UPnP events should
+                leave this False so metadata-free stop/idle updates do not clear current fields.
         """
         ts = timestamp or time.time()
 
@@ -453,7 +461,7 @@ class StateSynchronizer:
             )
 
         # Extract metadata (preserve if playing)
-        if not self._should_clear_metadata():
+        if force_metadata_update or not self._should_clear_metadata():
             for field_name in ["title", "artist", "album", "image_url"]:
                 if field_name in data:
                     value = data.get(field_name)

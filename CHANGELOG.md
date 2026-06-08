@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.9] - 2026-06-08
+
+### Fixed
+- **Arylic/GetInfoEx artwork source merge** — LinkPlay `GetInfoEx` artwork is now applied through
+  the UPnP state lane instead of the HTTP lane, and explicit enrichment updates may apply metadata
+  while paused. This prevents metadata-free UPnP pause updates from falling back to the embedded
+  WiiM logo while the paused track still exposes album art
+  ([mjcumming/wiim#244](https://github.com/mjcumming/wiim/issues/244)).
+
 ## [2.2.8] - 2026-06-05
 
 ### Added

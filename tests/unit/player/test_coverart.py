@@ -431,6 +431,7 @@ class TestCoverArtManager:
         merged = {"title": "Song", "artist": "Artist", "album": "Album"}
         mock_player.client.get_meta_info = AsyncMock(return_value={"metaData": {"title": "Song", "artist": "Artist"}})
         mock_player._state_synchronizer.update_from_http = MagicMock()
+        mock_player._state_synchronizer.update_from_upnp = MagicMock()
         mock_player._state_synchronizer.get_merged_state = MagicMock(return_value=merged)
         mock_player._status_model = PlayerStatus(title="Song", artist="Artist")
         mock_player._on_state_changed = MagicMock()
@@ -450,8 +451,9 @@ class TestCoverArtManager:
         await cover_art_manager._fetch_artwork_from_metainfo(merged)
 
         mock_upnp.get_info_ex.assert_called_once()
-        mock_player._state_synchronizer.update_from_http.assert_called()
-        update = mock_player._state_synchronizer.update_from_http.call_args.args[0]
+        mock_player._state_synchronizer.update_from_upnp.assert_called_once()
+        assert mock_player._state_synchronizer.update_from_upnp.call_args.kwargs["force_metadata_update"] is True
+        update = mock_player._state_synchronizer.update_from_upnp.call_args.args[0]
         assert update["image_url"].startswith("https://example.com/getinfoex.jpg")
         assert mock_player._getinfoex_supported is True
 

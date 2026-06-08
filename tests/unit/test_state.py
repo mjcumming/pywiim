@@ -681,6 +681,84 @@ class TestStateSynchronizerWithProfile:
         sync.update_from_upnp({"image_url": "file:///tmp/cover.jpg"}, timestamp=now)
         assert sync.get_merged_state()["image_url"] == "https://example.com/cover.jpg"
 
+    def test_upnp_artwork_survives_metadata_free_pause_event(self):
+        """GetInfoEx artwork should survive a later UPnP pause event without metadata."""
+        from pywiim.profiles import PROFILES
+
+        sync = StateSynchronizer(profile=PROFILES["wiim"])
+        now = time.time()
+        artwork_url = "https://example.com/getinfoex-art.jpg"
+
+        # Arylic HTTP status often has track text but no artwork.
+        sync.update_from_http(
+            {
+                "play_state": "play",
+                "title": "Song",
+                "artist": "Artist",
+                "album": "Album",
+                "image_url": None,
+            },
+            timestamp=now,
+        )
+
+        # LinkPlay GetInfoEx is a UPnP call and supplies artwork for the same track.
+        sync.update_from_upnp(
+            {
+                "title": "Song",
+                "artist": "Artist",
+                "album": "Album",
+                "image_url": artwork_url,
+            },
+            timestamp=now + 0.1,
+        )
+        assert sync.get_merged_state()["image_url"] == artwork_url
+
+        # The pause debouncer later writes only play_state via UPnP. It must not
+        # clear the still-valid artwork for the paused track.
+        sync.update_from_upnp({"play_state": "pause"}, timestamp=now + 0.6)
+
+        merged = sync.get_merged_state()
+        assert merged["play_state"] == "pause"
+        assert merged["image_url"] == artwork_url
+
+    def test_forced_upnp_artwork_update_applies_while_paused(self):
+        """Explicit GetInfoEx enrichment should apply artwork for the current paused track."""
+        from pywiim.profiles import PROFILES
+
+        sync = StateSynchronizer(profile=PROFILES["wiim"])
+        now = time.time()
+        artwork_url = "https://example.com/paused-getinfoex-art.jpg"
+
+        sync.update_from_http(
+            {
+                "play_state": "pause",
+                "title": "Song",
+                "artist": "Artist",
+                "album": "Album",
+                "image_url": None,
+            },
+            timestamp=now,
+        )
+        assert sync.get_merged_state().get("image_url") is None
+
+        sync.update_from_upnp(
+            {
+                "title": "Song",
+                "artist": "Artist",
+                "album": "Album",
+                "image_url": artwork_url,
+            },
+            timestamp=now + 0.1,
+            force_metadata_update=True,
+        )
+
+        merged = sync.get_merged_state()
+        assert merged["play_state"] == "pause"
+        assert merged["title"] == "Song"
+        assert merged["artist"] == "Artist"
+        assert merged["album"] == "Album"
+        assert merged["image_url"] == artwork_url
+
     def test_metadata_preservation_from_merged_state(self):
         """Test metadata is preserved from merged state when both sources empty."""
         from pywiim.profiles import PROFILES

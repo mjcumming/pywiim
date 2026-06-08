@@ -359,12 +359,30 @@ class CoverArtManager:
             _LOGGER.debug("Built metadata update from %s: %s", source_name, update)
         return update
 
-    def _apply_metadata_update(self, update: dict[str, Any], *, source_name: str) -> None:
+    def _apply_metadata_update(
+        self,
+        update: dict[str, Any],
+        *,
+        source_name: str,
+        state_source: str = "http",
+    ) -> None:
         """Apply enrichment metadata to synchronizer, status model, and callbacks."""
         if not update:
             return
 
-        self.player._state_synchronizer.update_from_http(update, timestamp=time.time())
+        timestamp = time.time()
+        if state_source == "upnp":
+            self.player._state_synchronizer.update_from_upnp(
+                update,
+                timestamp=timestamp,
+                force_metadata_update=True,
+            )
+        else:
+            self.player._state_synchronizer.update_from_http(
+                update,
+                timestamp=timestamp,
+                force_metadata_update=True,
+            )
         merged = self.player._state_synchronizer.get_merged_state()
         if self.player._status_model:
             if "title" in update:
@@ -406,7 +424,7 @@ class CoverArtManager:
         self.player._getinfoex_supported = True
         update = self._build_metadata_update(merged_state, info, source_name="GetInfoEx")
         if update:
-            self._apply_metadata_update(update, source_name="GetInfoEx")
+            self._apply_metadata_update(update, source_name="GetInfoEx", state_source="upnp")
         return update
 
     async def _fetch_artwork_from_metainfo(self, merged_state: dict[str, Any]) -> None:
