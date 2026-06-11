@@ -317,7 +317,7 @@ class TestCoverArtManager:
 
         await cover_art_manager.enrich_metadata_on_track_change(merged)
 
-        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged)
+        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged, force_getinfoex=True)
 
     @pytest.mark.asyncio
     async def test_enrich_metadata_on_track_change_unknown_metadata(self, cover_art_manager, mock_player):
@@ -330,7 +330,7 @@ class TestCoverArtManager:
 
         await cover_art_manager.enrich_metadata_on_track_change(merged)
 
-        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged)
+        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged, force_getinfoex=False)
 
     @pytest.mark.asyncio
     async def test_enrich_metadata_on_track_change_best_effort_when_capability_false(
@@ -345,7 +345,7 @@ class TestCoverArtManager:
 
         await cover_art_manager.enrich_metadata_on_track_change(merged)
 
-        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged)
+        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged, force_getinfoex=True)
 
     @pytest.mark.asyncio
     async def test_enrich_metadata_on_track_change_valid_artwork(self, cover_art_manager, mock_player):
@@ -375,7 +375,7 @@ class TestCoverArtManager:
 
         await cover_art_manager.enrich_metadata_on_track_change(merged)
 
-        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged)
+        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged, force_getinfoex=True)
 
     @pytest.mark.asyncio
     async def test_fetch_artwork_from_metainfo_success(self, cover_art_manager, mock_player):
@@ -476,6 +476,67 @@ class TestCoverArtManager:
         assert mock_player._getinfoex_supported is True
 
     @pytest.mark.asyncio
+    async def test_track_change_forces_getinfoex_when_metainfo_returns_stale_artwork(
+        self, cover_art_manager, mock_player
+    ):
+        """Track changes should let GetInfoEx override stale getMetaInfo artwork."""
+        from pywiim.models import PlayerStatus
+
+        merged = {
+            "title": "New Song",
+            "artist": "New Artist",
+            "album": "New Album",
+            "image_url": "https://example.com/old-song.jpg?cache=Old%20Song-Old%20Artist-Old%20Album",
+        }
+        mock_player.client.get_meta_info = AsyncMock(
+            return_value={
+                "metaData": {
+                    "title": "New Song",
+                    "artist": "New Artist",
+                    "cover": "https://example.com/old-song.jpg",
+                }
+            }
+        )
+        mock_player._state_synchronizer.update_from_http = MagicMock()
+        mock_player._state_synchronizer.update_from_upnp = MagicMock()
+        mock_player._state_synchronizer.get_merged_state = MagicMock(
+            side_effect=[
+                {
+                    **merged,
+                    "image_url": "https://example.com/old-song.jpg?cache=New%20Song-New%20Artist-New%20Album",
+                },
+                {
+                    **merged,
+                    "image_url": "https://example.com/new-song.jpg?cache=New%20Song-New%20Artist-New%20Album",
+                },
+            ]
+        )
+        mock_player._status_model = PlayerStatus(title="New Song", artist="New Artist")
+        mock_player._on_state_changed = MagicMock()
+        mock_player._ensure_upnp_client = AsyncMock(return_value=True)
+
+        mock_upnp = MagicMock()
+        mock_upnp.av_transport = MagicMock()
+        mock_upnp.get_info_ex = AsyncMock(
+            return_value={
+                "title": "New Song",
+                "artist": "New Artist",
+                "image_url": "https://example.com/new-song.jpg",
+            }
+        )
+        mock_player._upnp_client = mock_upnp
+
+        await cover_art_manager._fetch_artwork_from_metainfo(merged, force_getinfoex=True)
+
+        mock_player.client.get_meta_info.assert_awaited_once()
+        mock_upnp.get_info_ex.assert_awaited_once()
+        mock_player._state_synchronizer.update_from_http.assert_called_once()
+        mock_player._state_synchronizer.update_from_upnp.assert_called_once()
+        upnp_update = mock_player._state_synchronizer.update_from_upnp.call_args.args[0]
+        assert upnp_update["image_url"].startswith("https://example.com/new-song.jpg")
+        assert mock_player._status_model.entity_picture.startswith("https://example.com/new-song.jpg")
+
+    @pytest.mark.asyncio
     async def test_enrich_metadata_when_artwork_missing(self, cover_art_manager, mock_player):
         """Schedule enrichment when artwork is missing but metadata exists."""
         merged = {"title": "Song", "artist": "Artist", "album": "Album", "image_url": None}
@@ -484,4 +545,4 @@ class TestCoverArtManager:
 
         await cover_art_manager.enrich_metadata_on_track_change(merged)
 
-        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged)
+        cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged, force_getinfoex=False)

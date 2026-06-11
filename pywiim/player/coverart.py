@@ -298,7 +298,10 @@ class CoverArtManager:
             else:
                 _LOGGER.debug("Track changed, fetching enrichment sources")
 
-            await self._fetch_artwork_from_metainfo(merged_state)
+            await self._fetch_artwork_from_metainfo(
+                merged_state,
+                force_getinfoex=bool(track_changed),
+            )
 
         if not self._last_track_signature and current_signature:
             # First track detected
@@ -428,15 +431,25 @@ class CoverArtManager:
             self._apply_metadata_update(update, source_name="GetInfoEx", state_source="upnp")
         return update
 
-    async def _fetch_artwork_from_metainfo(self, merged_state: dict[str, Any]) -> None:
+    async def _fetch_artwork_from_metainfo(
+        self,
+        merged_state: dict[str, Any],
+        *,
+        force_getinfoex: bool = False,
+    ) -> None:
         """Fetch metadata/artwork from getMetaInfo, then GetInfoEx as fallback.
 
         This runs as a background task when track changes and artwork is missing.
         Also updates title/artist/album from getMetaInfo when the status endpoint
         returns "Unknown" values (common with Bluetooth AVRCP sources).
+        On track changes, GetInfoEx is also probed after getMetaInfo because
+        some LinkPlay/Arylic devices keep returning the first artwork URL from
+        getMetaInfo while GetInfoEx already has the current track art.
 
         Args:
             merged_state: Current merged state dictionary from StateSynchronizer.
+            force_getinfoex: Whether to probe GetInfoEx even when getMetaInfo
+                returned artwork.
         """
         try:
             update: dict[str, Any] = {}
@@ -452,7 +465,7 @@ class CoverArtManager:
                     if update:
                         self._apply_metadata_update(update, source_name="getMetaInfo")
 
-            if not (update.get("image_url") or update.get("entity_picture")):
+            if force_getinfoex or not (update.get("image_url") or update.get("entity_picture")):
                 await self._fetch_artwork_from_getinfoex(merged_state)
         except asyncio.CancelledError:
             # Task was cancelled (new track change detected)
