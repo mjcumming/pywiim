@@ -2852,6 +2852,19 @@ class TestPlayerMediaMetadata:
         assert player.shuffle_state is True
 
     @pytest.mark.asyncio
+    async def test_spotify_loop_mode_5_decodes_repeat_one_for_wiim_scheme(self, mock_client):
+        """Spotify loop_mode 5 is source-specific repeat one on WiiM-scheme devices."""
+        from pywiim.player import Player
+
+        mock_client.capabilities["loop_mode_scheme"] = "wiim"
+        player = Player(mock_client)
+        status = PlayerStatus(source="spotify", play_state="play", loop_mode=5)
+        player._status_model = status
+
+        assert player.shuffle_state is False
+        assert player.repeat_mode == "one"
+
+    @pytest.mark.asyncio
     async def test_repeat_mode_works_for_device_controlled_source(self, mock_client):
         """Test repeat_mode works normally for device-controlled sources."""
         from pywiim.player import Player

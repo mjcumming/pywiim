@@ -5,12 +5,14 @@ Tests LoopModeMapping class and vendor-specific mappings.
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
 
 from pywiim.api.loop_mode import (
     ARYLIC_LOOP_MODE,
     LEGACY_BITFIELD_LOOP_MODE,
     WIIM_LOOP_MODE,
+    decode_loop_mode,
     get_loop_mode_mapping,
     get_loop_mode_mapping_for_scheme,
     resolve_loop_mode_mapping,
@@ -129,6 +131,43 @@ class TestLoopModeMapping:
         assert shuffle is False
         assert repeat_one is False
         assert repeat_all is False
+
+
+class TestDecodeLoopMode:
+    """Test contextual loop mode decoding."""
+
+    def test_wiim_spotify_value_5_is_source_repeat_one(self, caplog):
+        """Spotify on WiiM-scheme devices can report loop_mode 5 for repeat one."""
+        caplog.set_level(logging.WARNING, logger="pywiim.api.loop_mode")
+
+        result = decode_loop_mode(5, loop_mode_scheme="wiim", vendor="wiim", source="spotify")
+
+        assert result.known is True
+        assert result.authority == "source"
+        assert result.shuffle is False
+        assert result.repeat_one is True
+        assert result.repeat_all is False
+        assert "Unknown loop_mode value" not in caplog.text
+
+    def test_arylic_value_5_keeps_scheme_meaning(self):
+        """Arylic scheme keeps loop_mode 5 as shuffle plus repeat one."""
+        result = decode_loop_mode(5, loop_mode_scheme="arylic", vendor="wiim", source="spotify")
+
+        assert result.known is True
+        assert result.authority == "device"
+        assert result.shuffle is True
+        assert result.repeat_one is True
+        assert result.repeat_all is False
+
+    def test_unknown_value_warns_once_per_context(self, caplog):
+        """Repeated reads of the same unknown state should not spam logs."""
+        caplog.set_level(logging.WARNING, logger="pywiim.api.loop_mode")
+
+        decode_loop_mode(998, loop_mode_scheme="wiim", vendor="wiim", source="usb")
+        decode_loop_mode(998, loop_mode_scheme="wiim", vendor="wiim", source="usb")
+
+        warnings = [record for record in caplog.records if "Unknown loop_mode value: 998" in record.message]
+        assert len(warnings) == 1
 
 
 class TestWiiMLoopMode:

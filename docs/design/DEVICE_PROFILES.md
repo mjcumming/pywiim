@@ -126,7 +126,7 @@ These areas still use scattered conditionals. They work correctly but are harder
 | Area | File | Current Approach | Notes |
 |------|------|------------------|-------|
 | Connection config | `pywiim/capabilities.py` | `detect_device_capabilities()` returns dict | Could use `profile.connection` |
-| Loop mode interpretation | `pywiim/api/loop_mode.py` + `get_device_profile` | **`profile.loop_mode_scheme`** merged to `capabilities["loop_mode_scheme"]`; **`resolve_loop_mode_mapping_for_player`** at encode/decode | Done (pywiim#17: Ultra 5.2+ → `arylic`) |
+| Loop mode interpretation | `pywiim/api/loop_mode.py` + `get_device_profile` | **`profile.loop_mode_scheme`** merged to `capabilities["loop_mode_scheme"]`; **`resolve_loop_mode_mapping_for_player`** for writes, **`decode_loop_mode_for_player`** for reads with source context | Done (pywiim#17: Ultra 5.2+ → `arylic`; wiim#246: Spotify/WiiM `loop_mode=5`) |
 | WiFi Direct detection | `pywiim/api/group.py` | `_needs_wifi_direct_mode()` function | Could use `profile.grouping.uses_wifi_direct` |
 | Endpoint probing | `pywiim/capabilities.py` | Runtime probing | Could use `profile.endpoints` as hints |
 
@@ -171,7 +171,7 @@ if profile.grouping.uses_wifi_direct:
     # Use WiFi Direct mode for multiroom
     ...
 
-# Loop mode
+# Loop mode command mapping
 from pywiim.api.loop_mode import get_loop_mode_mapping_for_scheme
 
 mapping = get_loop_mode_mapping_for_scheme(profile.loop_mode_scheme)
@@ -285,11 +285,17 @@ def get_loop_mode_mapping(vendor: str | None) -> LoopModeMapping:
 
 **After (using profile / capabilities):**
 ```python
-from pywiim.api.loop_mode import get_loop_mode_mapping_for_scheme, resolve_loop_mode_mapping_for_player
+from pywiim.api.loop_mode import (
+    decode_loop_mode_for_player,
+    get_loop_mode_mapping_for_scheme,
+    resolve_loop_mode_mapping_for_player,
+)
 
 mapping = get_loop_mode_mapping_for_scheme(profile.loop_mode_scheme)
-# Or from a Player (profile overrides capabilities when set):
+# For writes from a Player (profile overrides capabilities when set):
 mapping = resolve_loop_mode_mapping_for_player(player)
+# For reads, include source context for transport-specific values:
+loop_state = decode_loop_mode_for_player(loop_mode, player)
 ```
 
 **Caller change:**
@@ -297,9 +303,12 @@ mapping = resolve_loop_mode_mapping_for_player(player)
 # Before
 mapping = get_loop_mode_mapping(vendor)
 
-# After
+# After, for command writes
 mapping = resolve_loop_mode_mapping_for_player(player)
 # Or: resolve_loop_mode_mapping(loop_mode_scheme=client.capabilities.get("loop_mode_scheme"), vendor=...)
+
+# After, for status reads
+loop_state = decode_loop_mode_for_player(loop_mode, player)
 ```
 
 ---
@@ -493,4 +502,3 @@ Audio Pro devices have **three generations** with distinct capabilities. See [Au
 - **[ARCHITECTURE_DATA_FLOW.md](ARCHITECTURE_DATA_FLOW.md)** - State synchronization design (profiles used for source selection)
 - **[LESSONS_LEARNED.md](LESSONS_LEARNED.md)** - Key design requirements
 - **[API_DESIGN_PATTERNS.md](API_DESIGN_PATTERNS.md)** - API reliability and defensive programming
-

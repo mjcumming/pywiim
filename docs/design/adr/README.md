@@ -38,7 +38,7 @@ File naming: `NNN-short-slug.md` (e.g. `002-trust-api-after-success.md`). Number
 | [005](005-led-indicator-and-display-apis.md) | LED Indicator and Display APIs | Accepted |
 | [006](006-subwoofer-control-and-caching.md) | Subwoofer Control — WiiM-Only, Probing, Cache, Wire Semantics | Accepted |
 | [007](007-media-position-raw-from-device.md) | Media Position and Duration — Raw from Device, No Client Estimation | Accepted |
-| [008](008-loop-mode-vendor-specific-mapping.md) | Shuffle and Repeat (`loop_mode`) — Vendor-Specific Maps | Accepted |
+| [008](008-loop-mode-vendor-specific-mapping.md) | Shuffle and Repeat (`loop_mode`) — Scheme and Source Context | Accepted |
 | [009](009-group-role-and-slave-detection.md) | Multiroom Group Role — Authoritative `group` and `get_device_group_info` | Accepted |
 | [010](010-wifi-direct-multiroom-player-resolution.md) | WiFi Direct Multiroom — UUID Resolution and Player Registry | Accepted |
 | [011](011-stable-source-ids-and-catalog.md) | Stable Source Identifiers and `source_catalog` Round-Trip | Accepted |

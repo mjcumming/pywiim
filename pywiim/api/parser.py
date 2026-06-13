@@ -256,39 +256,6 @@ def parse_player_status(
         except (TypeError, ValueError):  # noqa: PERF203 – clarity > micro perf.
             data["mute"] = bool(data["mute"])
 
-    # Play-mode mapping from loop_mode values.
-    # Different vendors use different loop_mode value schemes (see loop_mode.py)
-    if "loop_mode" in data:
-        try:
-            # Convert loop_mode to int (API returns it as string)
-            loop_val = int(data["loop_mode"])
-            # Update data dict with int value for PlayerStatus model
-            data["loop_mode"] = loop_val
-        except (TypeError, ValueError):
-            loop_val = 0
-            data["loop_mode"] = 0
-
-        # Only process play_mode if not already set
-        if "play_mode" not in data:
-            from .loop_mode import resolve_loop_mode_mapping
-
-            mapping = resolve_loop_mode_mapping(loop_mode_scheme=loop_mode_scheme, vendor=vendor)
-            is_shuffle, is_repeat_one, is_repeat_all = mapping.from_loop_mode(loop_val)
-
-            # Map to play modes
-            if is_shuffle and is_repeat_all:
-                data["play_mode"] = PLAY_MODE_SHUFFLE_REPEAT_ALL
-            elif is_shuffle and is_repeat_one:
-                data["play_mode"] = PLAY_MODE_SHUFFLE  # Some devices don't differentiate shuffle+repeat_one
-            elif is_shuffle:
-                data["play_mode"] = PLAY_MODE_SHUFFLE
-            elif is_repeat_one:
-                data["play_mode"] = PLAY_MODE_REPEAT_ONE
-            elif is_repeat_all:
-                data["play_mode"] = PLAY_MODE_REPEAT_ALL
-            else:
-                data["play_mode"] = PLAY_MODE_NORMAL
-
     # Artwork – attempt cache-busting when metadata changes.
     cover = (
         raw.get("cover")
@@ -446,6 +413,44 @@ def parse_player_status(
         if isinstance(artwork_url, str) and any(d in artwork_url.lower() for d in _chromecast_artwork_domains):
             data["source"] = "wifi"
             _LOGGER.debug("Issue #6: source bluetooth overridden to wifi (artwork URL suggests Chromecast/network)")
+
+    # Play-mode mapping from loop_mode values.
+    # Decode after source mapping so source-specific protocol values (for example
+    # Spotify loop_mode=5 on WiiM-scheme devices) have enough context.
+    if "loop_mode" in data:
+        try:
+            # Convert loop_mode to int (API returns it as string)
+            loop_val = int(data["loop_mode"])
+            # Update data dict with int value for PlayerStatus model
+            data["loop_mode"] = loop_val
+        except (TypeError, ValueError):
+            loop_val = 0
+            data["loop_mode"] = 0
+
+        # Only process play_mode if not already set
+        if "play_mode" not in data:
+            from .loop_mode import decode_loop_mode
+
+            loop_state = decode_loop_mode(
+                loop_val,
+                loop_mode_scheme=loop_mode_scheme,
+                vendor=vendor,
+                source=data.get("source"),
+            )
+
+            # Map to play modes
+            if loop_state.shuffle and loop_state.repeat_all:
+                data["play_mode"] = PLAY_MODE_SHUFFLE_REPEAT_ALL
+            elif loop_state.shuffle and loop_state.repeat_one:
+                data["play_mode"] = PLAY_MODE_SHUFFLE  # Some devices don't differentiate shuffle+repeat_one
+            elif loop_state.shuffle:
+                data["play_mode"] = PLAY_MODE_SHUFFLE
+            elif loop_state.repeat_one:
+                data["play_mode"] = PLAY_MODE_REPEAT_ONE
+            elif loop_state.repeat_all:
+                data["play_mode"] = PLAY_MODE_REPEAT_ALL
+            else:
+                data["play_mode"] = PLAY_MODE_NORMAL
 
     # EQ numeric → textual preset.
     eq_raw = data.get("eq_preset")

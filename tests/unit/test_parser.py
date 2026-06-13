@@ -5,7 +5,7 @@ Tests response parsing, field mapping, time unit conversion, and normalization.
 
 from __future__ import annotations
 
-from pywiim.api.constants import PLAY_MODE_SHUFFLE
+from pywiim.api.constants import PLAY_MODE_REPEAT_ONE, PLAY_MODE_SHUFFLE
 from pywiim.api.parser import _decode_text, _hex_to_str, _normalize_time_value, parse_player_status
 
 
@@ -232,6 +232,14 @@ class TestParsePlayerStatus:
         raw = {"loop_mode": 5}
         parsed, _ = parse_player_status(raw, vendor="wiim", loop_mode_scheme="arylic")
         assert parsed["play_mode"] == PLAY_MODE_SHUFFLE
+
+    def test_parse_loop_mode_wiim_spotify_value_5(self):
+        """Spotify loop_mode 5 is source-specific repeat one on WiiM-scheme devices."""
+        raw = {"mode": "31", "loop_mode": 5}
+        parsed, _ = parse_player_status(raw, vendor="wiim", loop_mode_scheme="wiim")
+
+        assert parsed["source"] == "spotify"
+        assert parsed["play_mode"] == PLAY_MODE_REPEAT_ONE
 
     def test_parse_source_from_mode(self):
         """Test source mapping from mode field."""

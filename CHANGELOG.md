@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Context-aware `loop_mode` decoding** — `loop_mode` interpretation now uses
+  source context in addition to the device `loop_mode_scheme`. Spotify on WiiM-scheme
+  devices can report `loop_mode=5` for single-track repeat, which is now decoded as
+  repeat-one without noisy "unknown loop_mode" warnings, while Arylic-scheme devices
+  still decode `5` as shuffle plus repeat-one ([mjcumming/wiim#246](https://github.com/mjcumming/wiim/issues/246)).
+
 ## [2.2.12] - 2026-06-13
 
 ### Fixed

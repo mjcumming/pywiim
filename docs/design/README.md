@@ -14,7 +14,7 @@ Decisions we have explicitly committed to (e.g. user-facing stability, API contr
 - **[005: LED Indicator and Display APIs](adr/005-led-indicator-and-display-apis.md)** - Separate capabilities and player APIs for status LED vs screen/display
 - **[006: Subwoofer control](adr/006-subwoofer-control-and-caching.md)** - WiiM-only, probing, cache, inverted wire fields
 - **[007: Media position](adr/007-media-position-raw-from-device.md)** - Raw device position/duration; no library-side estimation
-- **[008: Loop mode](adr/008-loop-mode-vendor-specific-mapping.md)** - Vendor-specific shuffle/repeat numeric maps
+- **[008: Loop mode](adr/008-loop-mode-vendor-specific-mapping.md)** - Scheme-specific maps plus source-aware decoding
 - **[009: Group role](adr/009-group-role-and-slave-detection.md)** - Authoritative `group` field; `get_device_group_info` policy
 - **[010: WiFi Direct multiroom](adr/010-wifi-direct-multiroom-player-resolution.md)** - UUID resolution, `all_players_finder`, internal registry
 - **[011: Stable source ids](adr/011-stable-source-ids-and-catalog.md)** - `player.source` ids vs `source_name`; catalog round-trip (complements 001)

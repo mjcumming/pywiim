@@ -9,10 +9,16 @@ See https://github.com/mjcumming/pywiim/issues/17
 
 from __future__ import annotations
 
-from typing import Any, NamedTuple
+import logging
+import time
+from dataclasses import dataclass
+from typing import Any, Literal, NamedTuple
 
 __all__ = [
     "LoopModeMapping",
+    "LoopModeState",
+    "decode_loop_mode",
+    "decode_loop_mode_for_player",
     "get_loop_mode_mapping",
     "get_loop_mode_mapping_for_scheme",
     "resolve_loop_mode_mapping",
@@ -20,6 +26,13 @@ __all__ = [
     "WIIM_LOOP_MODE",
     "ARYLIC_LOOP_MODE",
 ]
+
+_LOGGER = logging.getLogger(__name__)
+
+LoopModeAuthority = Literal["device", "source", "unknown"]
+
+_UNKNOWN_LOOP_MODE_WARNING_LAST: dict[tuple[int, str, str | None], float] = {}
+_UNKNOWN_LOOP_MODE_WARNING_INTERVAL = 60.0
 
 
 class LoopModeMapping(NamedTuple):
@@ -78,12 +91,30 @@ class LoopModeMapping(NamedTuple):
         if loop_mode == self.normal:
             return (False, False, False)
 
-        # Unknown value - log and return safe default
-        import logging
-
-        _LOGGER = logging.getLogger(__name__)
-        _LOGGER.warning("Unknown loop_mode value: %d. Defaulting to normal playback.", loop_mode)
         return (False, False, False)
+
+    def contains_loop_mode(self, loop_mode: int) -> bool:
+        """Return whether the value is part of this documented mapping."""
+        return loop_mode in {
+            self.normal,
+            self.repeat_one,
+            self.repeat_all,
+            self.shuffle,
+            self.shuffle_repeat_one,
+            self.shuffle_repeat_all,
+        }
+
+
+@dataclass(frozen=True)
+class LoopModeState:
+    """Decoded loop mode state, including context for source-specific values."""
+
+    raw_value: int
+    shuffle: bool | None
+    repeat_one: bool | None
+    repeat_all: bool | None
+    authority: LoopModeAuthority
+    known: bool
 
 
 # WiiM Loop Mode Mapping
@@ -133,6 +164,119 @@ LEGACY_BITFIELD_LOOP_MODE = LoopModeMapping(
     shuffle_repeat_one=5,
     shuffle_repeat_all=6,
 )
+
+
+def decode_loop_mode(
+    loop_mode: int,
+    *,
+    loop_mode_scheme: str | None = None,
+    vendor: str | None = None,
+    source: str | None = None,
+) -> LoopModeState:
+    """Decode a raw ``loop_mode`` value with device and source context.
+
+    ``LoopModeMapping`` stays limited to documented scheme tables. This helper
+    adds source-specific protocol behavior, such as Spotify reporting
+    ``loop_mode=5`` on WiiM-scheme devices for single-track repeat.
+    """
+    mapping = resolve_loop_mode_mapping(loop_mode_scheme=loop_mode_scheme, vendor=vendor)
+    source_key = _normalize_context_value(source)
+
+    if mapping.contains_loop_mode(loop_mode):
+        shuffle, repeat_one, repeat_all = mapping.from_loop_mode(loop_mode)
+        return LoopModeState(
+            raw_value=loop_mode,
+            shuffle=shuffle,
+            repeat_one=repeat_one,
+            repeat_all=repeat_all,
+            authority="device",
+            known=True,
+        )
+
+    if mapping is WIIM_LOOP_MODE and source_key == "spotify" and loop_mode == 5:
+        return LoopModeState(
+            raw_value=loop_mode,
+            shuffle=False,
+            repeat_one=True,
+            repeat_all=False,
+            authority="source",
+            known=True,
+        )
+
+    _log_unknown_loop_mode(loop_mode, mapping, source_key)
+    return LoopModeState(
+        raw_value=loop_mode,
+        shuffle=False,
+        repeat_one=False,
+        repeat_all=False,
+        authority="unknown",
+        known=False,
+    )
+
+
+def decode_loop_mode_for_player(loop_mode: int, player: Any, source: str | None = None) -> LoopModeState:
+    """Decode a raw ``loop_mode`` value using player profile and source context."""
+    scheme: str | None = None
+    prof = getattr(player, "profile", None)
+    if prof is not None:
+        scheme = getattr(prof, "loop_mode_scheme", None)
+    if scheme is None:
+        scheme = player.client._capabilities.get("loop_mode_scheme")
+    vendor = player.client._capabilities.get("vendor")
+
+    if source is None:
+        status_model = getattr(player, "_status_model", None)
+        source = getattr(status_model, "source", None)
+
+    return decode_loop_mode(loop_mode, loop_mode_scheme=scheme, vendor=vendor, source=source)
+
+
+def _normalize_context_value(value: str | None) -> str | None:
+    """Normalize a source/vendor-like context value for comparisons."""
+    if value is None:
+        return None
+
+    normalized = str(value).strip().lower().replace(" ", "_")
+    if not normalized:
+        return None
+    if normalized.startswith("spotify"):
+        return "spotify"
+    return normalized
+
+
+def _loop_mode_mapping_name(mapping: LoopModeMapping) -> str:
+    """Return a stable name for warning keys and log context."""
+    if mapping is WIIM_LOOP_MODE:
+        return "wiim"
+    if mapping is ARYLIC_LOOP_MODE:
+        return "arylic"
+    if mapping is LEGACY_BITFIELD_LOOP_MODE:
+        return "legacy"
+    return "unknown"
+
+
+def _log_unknown_loop_mode(loop_mode: int, mapping: LoopModeMapping, source: str | None) -> None:
+    """Warn about unknown values without multiplying logs on every property read."""
+    scheme = _loop_mode_mapping_name(mapping)
+    warning_key = (loop_mode, scheme, source)
+    now = time.time()
+    last_warning = _UNKNOWN_LOOP_MODE_WARNING_LAST.get(warning_key, 0)
+    if (now - last_warning) < _UNKNOWN_LOOP_MODE_WARNING_INTERVAL:
+        return
+
+    _UNKNOWN_LOOP_MODE_WARNING_LAST[warning_key] = now
+    if len(_UNKNOWN_LOOP_MODE_WARNING_LAST) > 50:
+        cutoff = now - _UNKNOWN_LOOP_MODE_WARNING_INTERVAL * 2
+        for key in list(_UNKNOWN_LOOP_MODE_WARNING_LAST):
+            if _UNKNOWN_LOOP_MODE_WARNING_LAST[key] < cutoff:
+                del _UNKNOWN_LOOP_MODE_WARNING_LAST[key]
+
+    _LOGGER.warning(
+        "Unknown loop_mode value: %d. Defaulting to normal playback. (scheme=%s, source=%s)",
+        loop_mode,
+        scheme,
+        source or "unknown",
+    )
 
 
 def get_loop_mode_mapping_for_scheme(scheme: str) -> LoopModeMapping:

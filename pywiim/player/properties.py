@@ -687,12 +687,11 @@ class PlayerProperties:
         loop_mode = getattr(self.player._status_model, "loop_mode", None)
         if loop_mode is not None:
             try:
-                from ..api.loop_mode import resolve_loop_mode_mapping_for_player
+                from ..api.loop_mode import decode_loop_mode_for_player
 
                 loop_val = int(loop_mode)
-                mapping = resolve_loop_mode_mapping_for_player(self.player)
-                shuffle, _, _ = mapping.from_loop_mode(loop_val)
-                return shuffle
+                loop_state = decode_loop_mode_for_player(loop_val, self.player, source=self.source)
+                return loop_state.shuffle
             except (TypeError, ValueError):
                 pass
 
@@ -729,15 +728,14 @@ class PlayerProperties:
         loop_mode = getattr(self.player._status_model, "loop_mode", None)
         if loop_mode is not None:
             try:
-                from ..api.loop_mode import resolve_loop_mode_mapping_for_player
+                from ..api.loop_mode import decode_loop_mode_for_player
 
                 loop_val = int(loop_mode)
-                mapping = resolve_loop_mode_mapping_for_player(self.player)
-                _, is_repeat_one, is_repeat_all = mapping.from_loop_mode(loop_val)
+                loop_state = decode_loop_mode_for_player(loop_val, self.player, source=self.source)
 
-                if is_repeat_one:
+                if loop_state.repeat_one:
                     return "one"
-                elif is_repeat_all:
+                elif loop_state.repeat_all:
                     return "all"
                 else:
                     return "off"
