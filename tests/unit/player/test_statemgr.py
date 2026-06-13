@@ -272,14 +272,14 @@ class TestStateManager:
         type(mock_player).is_master = PropertyMock(return_value=True)
         mock_player._state_synchronizer.get_merged_state.return_value = {"title": "Master Track"}
         mock_player._coverart_mgr.enrich_metadata_on_track_change = AsyncMock(
-            side_effect=lambda merged: order.append("enrich")
+            side_effect=lambda merged, track_changed=None: order.append("enrich")
         )
         mock_player._group_ops.propagate_metadata_to_slaves = MagicMock(side_effect=lambda: order.append("propagate"))
 
         with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
             mock_groupops.return_value._synchronize_group_state = AsyncMock(side_effect=lambda: order.append("sync"))
 
-            await state_manager._finalize_refresh()
+            await state_manager._finalize_refresh(True)
 
         assert order == ["sync", "enrich", "propagate"]
 
@@ -358,7 +358,55 @@ class TestStateManager:
 
             await state_manager.refresh(full=False)
 
-        mock_player.client.get_meta_info.assert_called_once()
+        # A track change drives getMetaInfo from two independent consumers that the single
+        # track-change edge now reliably reaches: the trigger path (Bluetooth "Unknown"
+        # metadata recovery) and the finalize path (artwork enrichment / stale-art refresh).
+        # Before the latch fix, the trigger path consumed the edge and the artwork path
+        # silently never ran, so this asserted exactly one call.
+        assert mock_player.client.get_meta_info.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_refresh_track_change_refreshes_stale_but_valid_artwork(self, state_manager, mock_player):
+        """Regression (issue #245): a track change must refresh a stale-but-valid art URL.
+
+        Some sources (e.g. DLNA/UPnP push) report the *previous* track's albumArtURI for
+        the whole of the next track. The artwork is syntactically valid, so the
+        missing-artwork enrichment paths never fire — only the track-change edge can
+        trigger a refresh. Earlier in the same refresh, _handle_triggers/_refresh_periodic_data
+        call check_track_changed, which consumes the single-shot track-change latch. Before
+        the fix, enrich_metadata_on_track_change then re-derived the edge from that already
+        consumed latch, saw track_changed=False, and silently skipped the refresh, leaving
+        the cover art one track behind forever. The edge is now computed once and threaded
+        through, so the artwork refresh must run.
+        """
+        mock_status = PlayerStatus(play_state="play", title="New Track", artist="New Artist")
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_metadata": True})
+        mock_player.client.get_meta_info = AsyncMock(return_value={"metaData": {}})
+
+        # New track is playing, but the device still reports the PREVIOUS track's (valid) art.
+        merged_stale = {
+            "title": "New Track",
+            "artist": "New Artist",
+            "album": "New Album",
+            "image_url": "http://192.168.1.100/previous-track-art.jpg",
+        }
+        mock_player._state_synchronizer.get_merged_state = MagicMock(return_value=merged_stale)
+        mock_player._coverart_mgr._last_track_signature = "Old Track|Old Artist|Old Album"
+
+        # Spy on the artwork fetch: it is reachable here ONLY via the track-change edge,
+        # because the art URL is valid (no missing-artwork fallback applies).
+        mock_player._coverart_mgr._fetch_artwork_from_metainfo = AsyncMock()
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+
+            await state_manager.refresh(full=False)
+
+        mock_player._coverart_mgr._fetch_artwork_from_metainfo.assert_awaited_once_with(
+            merged_stale, force_getinfoex=True
+        )
 
     @pytest.mark.asyncio
     async def test_refresh_startup_fetches_metadata_when_missing(self, state_manager, mock_player):

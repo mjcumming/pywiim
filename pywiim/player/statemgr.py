@@ -252,10 +252,16 @@ class StateManager:
                 self.player._status_model.entity_picture = image_url
                 self.player._status_model.cover_url = image_url
 
-        # Detect track changes and fetch artwork immediately if missing
+        # Detect track changes and fetch artwork immediately if missing.
+        # Compute the edge synchronously here (single latch consumer for this UPnP-event
+        # wave) and pass it into the deferred task, so a concurrent poll's
+        # check_track_changed can't swallow the edge before the task runs.
         try:
             loop = asyncio.get_event_loop()
-            loop.create_task(self.player._coverart_mgr.enrich_metadata_on_track_change(merged))
+            upnp_track_changed = self.player._coverart_mgr.check_track_changed(merged)
+            loop.create_task(
+                self.player._coverart_mgr.enrich_metadata_on_track_change(merged, track_changed=upnp_track_changed)
+            )
         except RuntimeError:
             # No event loop (sync context) - will fetch on next poll
             _LOGGER.debug("No event loop available, metadata enrichment will be fetched on next poll")
@@ -302,6 +308,14 @@ class StateManager:
             # Masters/Solo: getPlayerStatusEx (full playback state)
             status = await self._refresh_core_status()
 
+            # Detect the track-change edge ONCE per refresh. check_track_changed mutates
+            # a single-shot latch (_last_track_signature); calling it from more than one
+            # consumer in the same cycle lets the first caller swallow the edge and starves
+            # the rest (this is what silently disabled the stale-artwork refresh). Compute
+            # it here and thread the value through every consumer below.
+            merged_for_track = self.player._state_synchronizer.get_merged_state()
+            track_changed = self.player._coverart_mgr.check_track_changed(merged_for_track)
+
             # Device info - only on full refresh or first time (not needed every poll)
             if full or self.player._device_info is None:
                 await self._refresh_device_info()
@@ -312,13 +326,13 @@ class StateManager:
 
             # Trigger-based fetching (skip for slaves - they get data from master)
             if not self.player.is_slave:
-                await self._handle_triggers(status)
+                await self._handle_triggers(status, track_changed)
 
             # Periodic data refresh (skip expensive endpoints for slaves)
-            await self._refresh_periodic_data(full, status)
+            await self._refresh_periodic_data(full, status, track_changed)
 
             # Finalize (includes role detection for NEXT cycle)
-            await self._finalize_refresh()
+            await self._finalize_refresh(track_changed)
 
         except Exception as err:
             self._handle_refresh_error(err)
@@ -350,8 +364,7 @@ class StateManager:
                 device_type = self.player.client._capabilities.get("device_type", "")
                 if device_type == "HCN_BWD03":
                     _LOGGER.debug(
-                        "HCN_BWD03 slave %s: getPlayerStatus timed out in multiroom mode, "
-                        "falling back to getStatusEx",
+                        "HCN_BWD03 slave %s: getPlayerStatus timed out in multiroom mode, falling back to getStatusEx",
                         self.player.host,
                     )
                     status_dict = await self.player.client.get_status()
@@ -628,19 +641,17 @@ class StateManager:
                 err,
             )
 
-    async def _handle_triggers(self, status: PlayerStatus) -> None:
+    async def _handle_triggers(self, status: PlayerStatus, track_changed: bool) -> None:
         """Handle trigger-based fetching (track change, source change, EQ change).
 
         Args:
             status: Current player status.
+            track_changed: Whether the track changed this refresh cycle (computed once
+                by :meth:`refresh` and shared across all consumers).
         """
         # Initialize polling strategy if needed (uses device capabilities)
         if self._polling_strategy is None:
             self._polling_strategy = PollingStrategy(self.player.client.capabilities)
-
-        # Build merged state for track change detection
-        merged_for_track = self.player._state_synchronizer.get_merged_state()
-        track_changed = self.player._coverart_mgr.check_track_changed(merged_for_track)
 
         # Detect EQ preset change (trigger full EQ info fetch)
         current_eq_preset = status.eq_preset if status else None
@@ -739,18 +750,16 @@ class StateManager:
             except Exception as err:
                 _LOGGER.debug("Failed to fetch EQ info after preset change for %s: %s", self.player.host, err)
 
-    async def _refresh_periodic_data(self, full: bool, status: PlayerStatus) -> None:
+    async def _refresh_periodic_data(self, full: bool, status: PlayerStatus, track_changed: bool) -> None:
         """Refresh periodic data (audio output, EQ presets, presets, BT history).
 
         Args:
             full: Whether this is a full refresh.
             status: Current player status.
+            track_changed: Whether the track changed this refresh cycle (computed once
+                by :meth:`refresh` and shared across all consumers).
         """
         now = time.time()
-
-        # Build merged state for track change detection
-        merged_for_track = self.player._state_synchronizer.get_merged_state()
-        track_changed = self.player._coverart_mgr.check_track_changed(merged_for_track)
 
         # Detect source change
         current_source = status.source if status else None
@@ -970,16 +979,23 @@ class StateManager:
             except Exception as err:
                 _LOGGER.debug("Failed to fetch LED indicator status for %s: %s", self.player.host, err)
 
-    async def _finalize_refresh(self) -> None:
-        """Finalize refresh: sync group state, enrich metadata, propagate, notify."""
+    async def _finalize_refresh(self, track_changed: bool) -> None:
+        """Finalize refresh: sync group state, enrich metadata, propagate, notify.
+
+        Args:
+            track_changed: Whether the track changed this refresh cycle (computed once
+                by :meth:`refresh`). Passed explicitly because check_track_changed has
+                already consumed the latch earlier in this cycle.
+        """
         # Synchronize group state from device state
         from .groupops import GroupOperations
 
         await GroupOperations(self.player)._synchronize_group_state()
 
-        # HTTP polling path: enrich artwork/metadata when missing (e.g. Arylic GetInfoEx)
+        # HTTP polling path: enrich artwork/metadata on track change (refreshes a valid
+        # but stale previous-track URL) or when artwork/metadata is missing.
         merged = self.player._state_synchronizer.get_merged_state()
-        await self.player._coverart_mgr.enrich_metadata_on_track_change(merged)
+        await self.player._coverart_mgr.enrich_metadata_on_track_change(merged, track_changed=track_changed)
 
         # If this is a master, propagate enriched metadata to all linked slaves.
         if self.player.is_master and self.player._group and self.player._group.slaves:

@@ -215,7 +215,12 @@ class CoverArtManager:
 
         return track_changed
 
-    async def enrich_metadata_on_track_change(self, merged_state: dict[str, Any]) -> None:
+    async def enrich_metadata_on_track_change(
+        self,
+        merged_state: dict[str, Any],
+        *,
+        track_changed: bool | None = None,
+    ) -> None:
         """Fetch metadata from getMetaInfo when artwork missing or metadata is Unknown.
 
         This runs as a background task when:
@@ -225,6 +230,12 @@ class CoverArtManager:
 
         Args:
             merged_state: Merged state dictionary from StateSynchronizer.
+            track_changed: Whether the track changed this refresh cycle. Callers on
+                the polling/UPnP paths compute this once via :meth:`check_track_changed`
+                and pass it here, because ``_last_track_signature`` is a single-shot
+                latch that other trigger logic (EQ/source/getMetaInfo) consumes earlier
+                in the same cycle. When ``None`` (legacy callers / isolated tests), the
+                edge is derived from the latch as a best-effort fallback.
         """
 
         # Helper to check if metadata value is invalid/unknown
@@ -240,10 +251,18 @@ class CoverArtManager:
         album = merged_state.get("album") or ""
         current_signature = f"{title}|{artist}|{album}"
 
-        # Check if track changed
-        track_changed = (
-            current_signature and self._last_track_signature and current_signature != self._last_track_signature
-        )
+        # Determine the track-change edge. The caller owns the latch when it passes an
+        # explicit value (it already called check_track_changed for this cycle), so we
+        # must not re-read or re-write _last_track_signature in that case — doing so is
+        # exactly the bug that made the stale-artwork refresh a silent no-op on the
+        # polling path. Only the legacy (track_changed is None) fallback touches the latch.
+        owns_latch = track_changed is None
+        if owns_latch:
+            track_changed = bool(
+                current_signature and self._last_track_signature and current_signature != self._last_track_signature
+            )
+            if track_changed:
+                self._last_track_signature = current_signature
 
         # Check if metadata needs enrichment (title/artist/album are present but Unknown)
         # This is common with Bluetooth AVRCP where getPlayerStatusEx returns "Unknown"
@@ -253,9 +272,6 @@ class CoverArtManager:
             or ("artist" in merged_state and is_invalid_metadata(artist))
             or ("album" in merged_state and is_invalid_metadata(album))
         )
-
-        if track_changed:
-            self._last_track_signature = current_signature
 
         # Check if artwork is missing or is default logo
         image_url = merged_state.get("image_url")
@@ -303,8 +319,9 @@ class CoverArtManager:
                 force_getinfoex=bool(track_changed),
             )
 
-        if not self._last_track_signature and current_signature:
-            # First track detected
+        if owns_latch and not self._last_track_signature and current_signature:
+            # First track detected (legacy fallback only; the caller owns the latch
+            # via check_track_changed on the polling/UPnP paths).
             self._last_track_signature = current_signature
 
     @staticmethod

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.12] - 2026-06-13
+
+### Fixed
+- **Cover art stuck one track behind on the HTTP polling path** — The track-change signal
+  (`_last_track_signature`) was a single-shot latch consumed by the EQ/source trigger logic
+  early in `refresh()`, so the artwork enrichment in `_finalize_refresh` re-derived
+  `track_changed=False` and silently skipped refreshing a *valid but stale* previous-track
+  artwork URL. The enrichment override (added in 2.2.10) therefore never ran on the polling
+  path that most setups use when UPnP eventing is degraded. The track-change edge is now
+  computed once per refresh and threaded to every consumer (triggers, periodic data, finalize,
+  and the UPnP-event path), so `getMetaInfo`/`GetInfoEx` enrichment reliably runs on each track
+  change ([mjcumming/wiim#245](https://github.com/mjcumming/wiim/issues/245)).
+
 ## [2.2.11] - 2026-06-11
 
 ### Fixed
