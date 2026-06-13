@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.13] - 2026-06-13
+
 ### Fixed
 - **Context-aware `loop_mode` decoding** — `loop_mode` interpretation now uses
   source context in addition to the device `loop_mode_scheme`. Spotify on WiiM-scheme
