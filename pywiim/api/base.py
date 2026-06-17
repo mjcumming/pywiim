@@ -706,6 +706,70 @@ class BaseWiiMClient:
             device_info=device_info,
         )
 
+    async def _apply_protocol_preference(self) -> None:
+        """Switch the cached endpoint to the vendor's preferred protocol when beneficial.
+
+        The initial probe is HTTPS-first because WiiM hardware only listens on HTTPS:443.
+        Some LinkPlay devices (Arylic/Up2Stream/generic) also answer on HTTPS:443 but with a
+        very slow embedded TLS handshake (~250-450ms), while plain HTTP:80 is ~10x faster.
+        Because the device vendor is only known *after* the first request (which already cached
+        an endpoint), we correct the choice here once capabilities are known.
+
+        Only a HTTPS->HTTP downgrade is performed, and only when the device's profile prefers
+        HTTP *and* plain HTTP actually returns a valid response. Anything else keeps the cached
+        endpoint untouched, so WiiM (HTTPS-only) is never affected.
+
+        See: https://github.com/mjcumming/wiim/issues/248
+        """
+        # Never override an explicit user choice.
+        if self._user_specified_protocol or self._user_specified_port:
+            return
+        if not self._endpoint:
+            return
+
+        priority = self._capabilities.get("protocol_priority") or []
+        preferred = priority[0] if priority else None
+        current = "https" if self._endpoint.startswith("https://") else "http"
+
+        # Only act on the beneficial case: profile prefers HTTP but we cached HTTPS.
+        if preferred != "http" or current != "https":
+            return
+
+        host_for_url = f"[{self._host}]" if ":" in self._host and not self._host.startswith("[") else self._host
+        candidate = f"http://{host_for_url}:80"
+        test_url = candidate + "/httpapi.asp?command=getStatusEx"
+        probe_timeout = aiohttp.ClientTimeout(connect=PROBE_TIMEOUT_CONNECT, total=PROBE_TIMEOUT_TOTAL)
+
+        try:
+            await self._ensure_session()
+            async with asyncio.timeout(PROBE_ASYNC_TIMEOUT):
+                resp = await self._session_request("GET", test_url, timeout=probe_timeout)
+                async with resp:
+                    resp.raise_for_status()
+                    text = await resp.text()
+                    if text and (text.strip() == "OK" or text.strip().startswith("{")):
+                        _LOGGER.info(
+                            "Switching %s from %s to faster HTTP endpoint %s (profile prefers HTTP)",
+                            self._host,
+                            self._endpoint,
+                            candidate,
+                        )
+                        self._endpoint = candidate
+                        self.port = 80
+                        return
+            _LOGGER.debug(
+                "HTTP preference probe for %s did not return a valid body; keeping %s",
+                self._host,
+                self._endpoint,
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug(
+                "HTTP preference probe failed for %s, keeping %s: %s",
+                self._host,
+                self._endpoint,
+                err,
+            )
+
     def _is_connectivity_error(self, err: Exception | None) -> bool:
         """Return True if the error indicates device unreachable (not protocol mismatch)."""
         if err is None:
@@ -1015,8 +1079,9 @@ class BaseWiiMClient:
             )
 
             if not has_valid_artwork:
-                # Check if get_meta_info method is available (from PlaybackAPI mixin)
-                if hasattr(self, "get_meta_info"):
+                # Check if get_meta_info method is available (from PlaybackAPI mixin) and the
+                # device actually implements it (issue #248 - skip "unknown command" devices).
+                if self._capabilities.get("supports_metadata", True) and hasattr(self, "get_meta_info"):
                     try:
                         meta_info = await self.get_meta_info()
                         if meta_info and "metaData" in meta_info:

@@ -79,6 +79,86 @@ class TestBaseWiiMClientInitialization:
         assert client._session == session
 
 
+class TestApplyProtocolPreference:
+    """Post-detection protocol correction (issue #248)."""
+
+    def _mk_response(self, body: str):
+        resp = MagicMock()
+        resp.status = 200
+        resp.text = AsyncMock(return_value=body)
+        resp.raise_for_status = MagicMock()
+        resp.__aenter__ = AsyncMock(return_value=resp)
+        resp.__aexit__ = AsyncMock(return_value=None)
+        return resp
+
+    @pytest.mark.asyncio
+    async def test_downgrades_https_to_http_for_http_first_profile(self, mock_aiohttp_session):
+        """Arylic-style device: cached HTTPS is switched to HTTP when HTTP:80 works."""
+        client = BaseWiiMClient(host="192.168.1.50", session=mock_aiohttp_session)
+        client._endpoint = "https://192.168.1.50:443"
+        client.port = 443
+        client._capabilities = {"vendor": "arylic", "protocol_priority": ["http", "https"]}
+
+        mock_aiohttp_session.request = AsyncMock(return_value=self._mk_response('{"uuid": "x"}'))
+        mock_aiohttp_session.closed = False
+
+        await client._apply_protocol_preference()
+
+        assert client._endpoint == "http://192.168.1.50:80"
+        assert client.port == 80
+        # Probe must have targeted HTTP:80.
+        called_url = mock_aiohttp_session.request.call_args[0][1]
+        assert called_url.startswith("http://192.168.1.50:80/")
+
+    @pytest.mark.asyncio
+    async def test_no_switch_for_https_first_profile(self, mock_aiohttp_session):
+        """WiiM device (HTTPS-first profile) is never downgraded."""
+        client = BaseWiiMClient(host="192.168.1.68", session=mock_aiohttp_session)
+        client._endpoint = "https://192.168.1.68:443"
+        client.port = 443
+        client._capabilities = {"vendor": "wiim", "protocol_priority": ["https", "http"]}
+
+        mock_aiohttp_session.request = AsyncMock(return_value=self._mk_response('{"uuid": "x"}'))
+        mock_aiohttp_session.closed = False
+
+        await client._apply_protocol_preference()
+
+        assert client._endpoint == "https://192.168.1.68:443"
+        assert client.port == 443
+        mock_aiohttp_session.request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_keeps_https_when_http_probe_fails(self, mock_aiohttp_session):
+        """If HTTP:80 doesn't return a valid body, keep the working HTTPS endpoint."""
+        client = BaseWiiMClient(host="192.168.1.50", session=mock_aiohttp_session)
+        client._endpoint = "https://192.168.1.50:443"
+        client.port = 443
+        client._capabilities = {"vendor": "arylic", "protocol_priority": ["http", "https"]}
+
+        mock_aiohttp_session.request = AsyncMock(side_effect=aiohttp.ClientError("refused"))
+        mock_aiohttp_session.closed = False
+
+        await client._apply_protocol_preference()
+
+        assert client._endpoint == "https://192.168.1.50:443"
+        assert client.port == 443
+
+    @pytest.mark.asyncio
+    async def test_respects_user_specified_protocol(self, mock_aiohttp_session):
+        """An explicit user protocol/port choice is never overridden."""
+        client = BaseWiiMClient(host="192.168.1.50", protocol="https", session=mock_aiohttp_session)
+        client._endpoint = "https://192.168.1.50:443"
+        client._capabilities = {"vendor": "arylic", "protocol_priority": ["http", "https"]}
+
+        mock_aiohttp_session.request = AsyncMock(return_value=self._mk_response('{"uuid": "x"}'))
+        mock_aiohttp_session.closed = False
+
+        await client._apply_protocol_preference()
+
+        assert client._endpoint == "https://192.168.1.50:443"
+        mock_aiohttp_session.request.assert_not_called()
+
+
 class TestBaseWiiMClientProperties:
     """Test BaseWiiMClient properties."""
 

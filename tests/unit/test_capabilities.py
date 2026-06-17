@@ -54,6 +54,17 @@ class TestVendorDetection:
         vendor = detect_vendor(device_info)
         assert vendor == "arylic"
 
+    def test_detect_vendor_arylic_s10p(self):
+        """S10+ reports model 'S10P_WIFI' (no '+') - should still be Arylic (issue #248)."""
+        device_info = DeviceInfo(uuid="test", model="S10P_WIFI", name="Stereo")
+        assert detect_vendor(device_info) == "arylic"
+
+    def test_arylic_models_prefer_http_first(self):
+        """Arylic Up2Stream/S10P must probe HTTP before HTTPS (issue #248)."""
+        for model in ("UP2STREAM_AMP_V4", "UP2STREAM_AMP_2P1", "S10P_WIFI"):
+            caps = detect_device_capabilities(DeviceInfo(uuid="t", model=model, firmware="4.6.415145"))
+            assert caps["protocol_priority"] == ["http", "https"], f"{model} should be HTTP-first"
+
     def test_detect_vendor_audio_pro(self):
         """Test detecting Audio Pro vendor."""
         device_info = DeviceInfo(uuid="test", model="Audio Pro A10", name="Audio Pro")
@@ -618,6 +629,44 @@ class TestWiiMCapabilitiesClass:
         capabilities = await detector.detect_capabilities(mock_client, device_info)
 
         assert capabilities["supports_eq"] is True
+
+    @pytest.mark.asyncio
+    async def test_getmetainfo_unknown_command_disables_metadata(self, mock_client):
+        """Non-WiiM device returning 'unknown command' for getMetaInfo disables metadata (issue #248)."""
+        device_info = DeviceInfo(uuid="test-uuid", model="UP2STREAM_AMP_V4", firmware="4.6.415145")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getMetaInfo" in endpoint:
+                # Device replies HTTP 200 with a non-JSON body and does NOT raise.
+                return ApiResponse(parsed=None, raw="unknown command")
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["vendor"] == "arylic"
+        assert capabilities["supports_metadata"] is False
+
+    @pytest.mark.asyncio
+    async def test_getmetainfo_unknown_command_kept_for_wiim(self, mock_client):
+        """WiiM keeps metadata enabled even if getMetaInfo momentarily returns 'unknown command'."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro", firmware="5.0.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        def request_side_effect(endpoint, **kwargs):
+            if "getMetaInfo" in endpoint:
+                return ApiResponse(parsed=None, raw="unknown command")
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=request_side_effect)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["supports_metadata"] is True
 
     @pytest.mark.asyncio
     async def test_get_cached_capabilities(self, mock_client):

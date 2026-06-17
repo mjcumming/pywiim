@@ -183,7 +183,10 @@ class DeviceProfile:
 # Pre-defined Device Profiles
 # =============================================================================
 
-# Default WiiM profile - most common case, everything works via HTTP
+# Default WiiM profile - most common case.
+# WiiM hardware (Pro/Plus/Ultra/Mini, etc.) exposes the HTTP API on HTTPS:443 and
+# does NOT listen on plain HTTP:80 (the port is closed), so HTTPS must be tried first.
+# See: https://github.com/mjcumming/wiim/issues/248
 PROFILE_WIIM = DeviceProfile(
     vendor="wiim",
     display_name="WiiM",
@@ -195,8 +198,8 @@ PROFILE_WIIM = DeviceProfile(
         mute="upnp",
     ),
     connection=ConnectionConfig(
-        preferred_ports=(80, 443),
-        protocol_priority=("http", "https"),
+        preferred_ports=(443, 80),
+        protocol_priority=("https", "http"),
         response_timeout=5.0,
     ),
     endpoints=EndpointConfig(
@@ -377,8 +380,9 @@ def detect_vendor(device_info: DeviceInfo) -> str:
     if "wiim" in name_lower:
         return "wiim"
 
-    # Arylic devices
-    if any(arylic in model_lower for arylic in ["arylic", "up2stream", "s10+"]):
+    # Arylic devices. Note: the S10+ reports its model as "S10P_WIFI" (a "p", no "+"),
+    # so match "s10p" as well. See https://github.com/mjcumming/wiim/issues/248
+    if any(arylic in model_lower for arylic in ["arylic", "up2stream", "s10+", "s10p"]):
         return "arylic"
     if "arylic" in name_lower or "up2stream" in name_lower:
         return "arylic"

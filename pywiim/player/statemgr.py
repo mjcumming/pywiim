@@ -774,7 +774,10 @@ class StateManager:
         #   some radio sources where title/artist are stable.
         # - Periodic refresh while playing ensures integrations see these fields reliably.
         is_playing = bool(status and status.play_state and status.play_state in PLAYING_STATES)
-        should_fetch_metainfo = (
+        # Skip entirely on devices that don't implement getMetaInfo (e.g. some Arylic models
+        # that return "unknown command"); otherwise we'd call it every poll for nothing.
+        # See https://github.com/mjcumming/wiim/issues/248
+        should_fetch_metainfo = self.player.supports_metadata and (
             full
             or self.player._metadata is None
             or (

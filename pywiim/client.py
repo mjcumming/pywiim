@@ -198,6 +198,11 @@ class WiiMClient(
                 self.timeout = capabilities["response_timeout"]
 
             self._capabilities_detected = True
+
+            # Now that the vendor/profile is known, correct the cached endpoint to the
+            # device's preferred protocol (e.g. HTTP-first for Arylic). No-op for WiiM.
+            await self._apply_protocol_preference()
+
             # Capabilities are already logged in capabilities.py with more detail
             # Only log at debug level here to avoid duplicate messages
             _LOGGER.debug(
@@ -234,6 +239,7 @@ class WiiMClient(
                 capabilities.setdefault("supports_subwoofer", False)
                 self._capabilities.update(capabilities)
                 self._capabilities_detected = True
+                await self._apply_protocol_preference()
                 return self._capabilities
             except Exception:
                 # If even static detection fails, use empty capabilities

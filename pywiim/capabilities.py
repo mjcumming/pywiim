@@ -296,7 +296,21 @@ class WiiMCapabilities:
 
         # Probe for metadata support (getMetaInfo)
         try:
-            await client._request("/httpapi.asp?command=getMetaInfo")
+            meta_resp = await client._request("/httpapi.asp?command=getMetaInfo")
+            # Devices that don't implement getMetaInfo (e.g. some Arylic Up2Stream models)
+            # return a non-JSON body like "unknown command" with HTTP 200 instead of raising.
+            # Disable metadata for those so the poll loop stops calling it every cycle.
+            # WiiM always keeps metadata enabled. See https://github.com/mjcumming/wiim/issues/248
+            meta_raw = str(getattr(meta_resp, "raw", "") or "").lower()
+            if not capabilities.get("is_wiim_device", False) and (
+                "unknown command" in meta_raw or "not support" in meta_raw or "fail" == meta_raw.strip()
+            ):
+                capabilities["supports_metadata"] = False
+                _LOGGER.debug(
+                    "Device %s getMetaInfo unsupported (got %r); disabling metadata",
+                    client.host,
+                    meta_raw[:40],
+                )
         except WiiMError:
             # Keep metadata enabled for all WiiM devices. A single probe failure can be
             # transient and should not permanently disable metadata/artwork handling.
@@ -455,6 +469,9 @@ class WiiMCapabilities:
         profile = get_device_profile(device_info)
         capabilities["reboot_command"] = profile.endpoints.reboot_command
         capabilities["loop_mode_scheme"] = profile.loop_mode_scheme
+        # Profile is authoritative for protocol preference (HTTP-first for Arylic/generic,
+        # HTTPS-first for WiiM/Audio-Pro). See https://github.com/mjcumming/wiim/issues/248
+        capabilities["protocol_priority"] = list(profile.connection.protocol_priority)
         _LOGGER.debug(
             "Device %s reboot command: %s (from profile %s)",
             client.host,
@@ -629,6 +646,14 @@ def detect_device_capabilities(device_info: DeviceInfo) -> dict[str, Any]:
                 capabilities["supports_metadata"] = False  # Metadata typically not supported
         # For other legacy devices (e.g., Arylic), use defaults - capabilities will be probed
 
+    # Protocol/port preference is profile-driven (single source of truth). The per-branch
+    # assignments above tune timeouts/feature flags; the device profile is authoritative for
+    # which protocol to probe first. This closes the gap where non-legacy LinkPlay devices
+    # (Arylic Up2Stream/S10P) kept the HTTPS-first default and cached the slow HTTPS endpoint.
+    # See: https://github.com/mjcumming/wiim/issues/248
+    profile = get_device_profile(device_info)
+    capabilities["protocol_priority"] = list(profile.connection.protocol_priority)
+
     return capabilities
 
 
@@ -697,6 +722,7 @@ def supports_standard_led_control(device_info: DeviceInfo) -> bool:
         "arylic",
         "up2stream",
         "s10+",
+        "s10p",  # S10+ reports model "S10P_WIFI"
         "amp 2.0",
         "amp 2.1",
     ]
@@ -719,7 +745,7 @@ def get_led_command_format(device_info: DeviceInfo) -> str:
     model_lower = device_info.model.lower()
 
     # Arylic devices use different LED commands
-    if any(arylic_type in model_lower for arylic_type in ["arylic", "up2stream"]):
+    if any(arylic_type in model_lower for arylic_type in ["arylic", "up2stream", "s10p"]):
         return "arylic"
 
     return "standard"

@@ -208,6 +208,38 @@ def _build_probe_list(self) -> list[tuple[str, int]]:
         ("http", 80),     # HTTP fallback
         ("http", 8080),   # Alternative HTTP
     ]
+```
+
+### 5. Vendor-Aware Protocol Correction (post-detection)
+
+The initial probe is **HTTPS-first** because WiiM hardware only listens on HTTPS:443
+(plain HTTP:80 is refused). The device vendor, however, is not known until **after** the
+first request — the model string comes from `getStatusEx`, which itself needs a working
+endpoint. So the very first probe cannot be vendor-aware.
+
+Some LinkPlay devices (Arylic / Up2Stream / generic) answer on HTTPS:443 **and** HTTP:80,
+but their embedded TLS handshake is slow (~250–470 ms vs ~25–85 ms over plain HTTP). For
+those, HTTPS would otherwise win the probe and be cached permanently, making every poll
+sluggish (see [mjcumming/wiim#248](https://github.com/mjcumming/wiim/issues/248)).
+
+Once capabilities are detected, `_apply_protocol_preference()` corrects the choice:
+
+- The **device profile** (`profiles.py`) is the single source of truth for protocol order
+  (`connection.protocol_priority`): WiiM and Audio Pro MkII/W-gen are HTTPS-first, Arylic /
+  generic / Audio Pro Original are HTTP-first.
+- The correction only ever performs an **HTTPS→HTTP downgrade**, and only when the profile
+  prefers HTTP **and** a probe of plain HTTP:80 returns a valid body. Anything else keeps the
+  already-cached endpoint untouched.
+
+This is deliberately conservative — it never upgrades HTTP→HTTPS and never switches to an
+endpoint it hasn't just verified, so:
+
+- **WiiM** (HTTPS-only) is never touched.
+- **HTTP-only Arylic** (e.g. `UP2STREAM_AMP_V4`) becomes snappy on HTTP.
+- **HTTPS-only Arylic** (e.g. `ARYLIC_H50`, where HTTP:80 is refused) keeps its working HTTPS
+  endpoint even though the profile prefers HTTP.
+
+```python
 
 async def _test_endpoint(self, base_url: str, test_path: str) -> bool:
     """Test if endpoint is reachable."""

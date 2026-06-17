@@ -471,7 +471,9 @@ class CoverArtManager:
         try:
             update: dict[str, Any] = {}
 
-            if hasattr(self.player.client, "get_meta_info"):
+            # Skip getMetaInfo on devices that don't implement it (issue #248); the
+            # GetInfoEx fallback below still runs and can supply artwork.
+            if self.player.supports_metadata and hasattr(self.player.client, "get_meta_info"):
                 meta_info = await self.player.client.get_meta_info()
                 if meta_info and "metaData" in meta_info:
                     update = self._build_metadata_update(

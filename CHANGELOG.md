@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.14] - 2026-06-17
+
+### Fixed
+- **Slow HTTPS endpoint cached on Arylic devices despite HTTP being ~10x faster** —
+  The endpoint probe is HTTPS-first (WiiM hardware only listens on HTTPS:443), so Arylic
+  devices that also answer on HTTPS:443 with a slow embedded-TLS handshake (~250–470 ms vs
+  ~25–85 ms over plain HTTP) had HTTPS cached permanently, making every poll cycle sluggish.
+  The device profile is now the single source of truth for protocol preference, and once the
+  vendor is known the client re-points a cached HTTPS endpoint to HTTP **only** when the
+  profile prefers HTTP *and* plain HTTP actually returns a valid response — so HTTP-only
+  Arylic devices become snappy while HTTPS-only Arylic and all WiiM devices keep working
+  unchanged ([mjcumming/wiim#248](https://github.com/mjcumming/wiim/issues/248)).
+- **Arylic S10+ mis-detected as `linkplay_generic`** — The S10+ reports its model as
+  `S10P_WIFI` (a "p", no "+"), which the vendor and LED-format detection did not match. It is
+  now correctly identified as an Arylic device ([mjcumming/wiim#248](https://github.com/mjcumming/wiim/issues/248)).
+- **`getMetaInfo` called on every poll for devices that do not support it** — Devices such as
+  some Arylic Up2Stream models reply to `getMetaInfo` with a non-JSON `unknown command` body
+  and HTTP 200 (rather than an error), so metadata stayed enabled and the command was retried
+  every poll cycle. Capability detection now recognises this response and disables metadata for
+  non-WiiM devices, and the poll/cover-art paths skip `getMetaInfo` when it is unsupported
+  ([mjcumming/wiim#248](https://github.com/mjcumming/wiim/issues/248)).
+
 ## [2.2.13] - 2026-06-13
 
 ### Fixed
