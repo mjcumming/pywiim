@@ -215,6 +215,38 @@ class TestWiiMClient:
         assert "upnp_description_available" not in capabilities
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("quiet", "expected_level"),
+        [(False, "WARNING"), (True, "DEBUG")],
+    )
+    async def test_detect_capabilities_failure_log_level(self, mock_client, caplog, quiet, expected_level):
+        """A recoverable capability-detection failure logs at WARNING normally,
+        but at DEBUG when _quiet_capabilities is set (discovery probes, #249)."""
+        import logging
+
+        from pywiim.api.base import BaseWiiMClient
+
+        mock_client._capabilities_detected = False
+        mock_client._capabilities = {}
+        mock_client._quiet_capabilities = quiet
+
+        # Both the primary and the static-fallback path raise -> recoverable
+        # except block at client.py runs and emits the "Failed to detect
+        # capabilities" record at the level under test.
+        with patch.object(
+            BaseWiiMClient,
+            "get_device_info_model",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("Device unreachable"),
+        ):
+            with caplog.at_level(logging.DEBUG, logger="pywiim.client"):
+                await mock_client._detect_capabilities()
+
+        records = [r for r in caplog.records if "Failed to detect capabilities" in r.getMessage()]
+        assert records, "expected a 'Failed to detect capabilities' log record"
+        assert records[0].levelname == expected_level
+
+    @pytest.mark.asyncio
     async def test_refresh_capabilities_invalidates_and_redetects(self, mock_client):
         """refresh_capabilities clears detector cache (when force) and merges new caps."""
         from pywiim.api.base import BaseWiiMClient

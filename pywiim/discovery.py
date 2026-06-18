@@ -386,6 +386,9 @@ async def is_linkplay_device(
     # fail strict JSON checks in the lightweight probe.
     try:
         client = WiiMClient(host=host, timeout=max(timeout, 5.0))
+        # Probe context: a failure here just means "not a LinkPlay device".
+        # Keep capability-detection failures at debug (issue mjcumming/wiim#249).
+        client._quiet_capabilities = True
         try:
             status = await client.get_player_status()
             if isinstance(status, dict) and len(status) > 0:
@@ -439,6 +442,9 @@ async def validate_device(device: DiscoveredDevice) -> DiscoveredDevice:
             device.ip,
             timeout=5.0,
         )
+        # Discovery validation is soft-fail (see docstring): a capability-detection
+        # failure here is benign, so keep it at debug (issue mjcumming/wiim#249).
+        client._quiet_capabilities = True
 
         try:
             # Ensure capabilities are detected (triggers vendor detection)

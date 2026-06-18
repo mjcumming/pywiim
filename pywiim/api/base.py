@@ -677,6 +677,10 @@ class BaseWiiMClient:
                         # Valid response - cache this endpoint
                         if text and (text.strip() == "OK" or text.strip().startswith("{")):
                             self._endpoint = base_url
+                            # Keep self.port aligned with the cached endpoint. Discovery and the
+                            # integration read client.port to persist protocol/port, so a stale
+                            # default (443) would mis-persist HTTPS for an HTTP endpoint. See wiim#248.
+                            self.port = port
                             self._endpoint_tested = True
                             _LOGGER.debug("Discovered working endpoint: %s (cached permanently)", self._endpoint)
                             return
@@ -897,14 +901,31 @@ class BaseWiiMClient:
             _LOGGER.debug("Using preferred ports from capabilities: %s", preferred_ports)
             return [("https", port) for port in preferred_ports]
 
-        # Standard probe list: Try HTTPS first (more common on WiiM devices)
-        return [
+        https_combos = [
             ("https", 443),  # WiiM default
             ("https", 4443),  # Audio Pro MkII
             ("https", 8443),  # Alternative HTTPS
+        ]
+        http_combos = [
             ("http", 80),  # HTTP fallback
             ("http", 8080),  # Alternative HTTP
         ]
+
+        # Honor the device profile's protocol preference when the vendor is already known
+        # (e.g. a client constructed with cached Arylic capabilities → HTTP-first). This is
+        # what makes the *discovered/persisted* endpoint correct: the coordinator/poll client
+        # is created with cached capabilities but skips _detect_capabilities (and therefore
+        # _apply_protocol_preference), so the probe order itself must respect protocol_priority.
+        # When the vendor is not yet known (cold first probe, no capabilities), fall back to
+        # HTTPS-first because WiiM only listens on HTTPS:443; _apply_protocol_preference then
+        # corrects the choice once capabilities are detected. See wiim#248.
+        priority = self._capabilities.get("protocol_priority") or []
+        if priority and priority[0] == "http":
+            _LOGGER.debug("Probing HTTP-first per capabilities protocol_priority for %s", self._host)
+            return http_combos + https_combos
+
+        # Standard probe list: Try HTTPS first (more common on WiiM devices)
+        return https_combos + http_combos
 
     # ------------------------------------------------------------------
     # Legacy Response Validation ----------------------------------------

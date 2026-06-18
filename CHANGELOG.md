@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.15] - 2026-06-18
+
+### Fixed
+- **Arylic HTTP endpoint still not persisted (follow-up to 2.2.14)** — The 2.2.14
+  `_apply_protocol_preference()` correction only ran inside `_detect_capabilities()`, but the
+  poll/coordinator client is constructed with *cached* capabilities and skips detection, so it
+  still probed HTTPS-first and persisted the slow HTTPS endpoint. The standard probe list now
+  orders by the device profile's `protocol_priority` whenever capabilities are known, so a
+  client that already knows it is talking to an Arylic device probes — and caches/persists —
+  HTTP first. HTTPS-only Arylic devices still fall through to their working HTTPS endpoint, and
+  WiiM/Audio Pro remain HTTPS-first. Additionally, `client.port` is now kept in sync with the
+  cached endpoint so discovery/integration code that reads `port` no longer mis-persists HTTPS
+  for an HTTP endpoint ([mjcumming/wiim#248](https://github.com/mjcumming/wiim/issues/248)).
+
 ## [2.2.14] - 2026-06-17
 
 ### Fixed

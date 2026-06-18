@@ -159,6 +159,42 @@ class TestApplyProtocolPreference:
         mock_aiohttp_session.request.assert_not_called()
 
 
+class TestProbeListOrdering:
+    """Probe order must honor capabilities protocol_priority (issue #248)."""
+
+    def test_http_first_when_capabilities_prefer_http(self):
+        """A client that already knows it's Arylic (cached caps) probes HTTP before HTTPS."""
+        client = BaseWiiMClient(
+            host="192.168.1.50",
+            capabilities={"vendor": "arylic", "protocol_priority": ["http", "https"]},
+        )
+        probe_list = client._build_standard_probe_list()
+        assert probe_list[0] == ("http", 80)
+        # HTTPS combos must still be present as fallback (e.g. HTTPS-only Arylic).
+        assert ("https", 443) in probe_list
+
+    def test_https_first_when_capabilities_prefer_https(self):
+        """WiiM (HTTPS-first caps) keeps HTTPS-first probe order."""
+        client = BaseWiiMClient(
+            host="192.168.1.68",
+            capabilities={"vendor": "wiim", "protocol_priority": ["https", "http"]},
+        )
+        assert client._build_standard_probe_list()[0] == ("https", 443)
+
+    def test_https_first_when_no_capabilities(self):
+        """Cold client with no capabilities defaults to HTTPS-first (WiiM needs HTTPS)."""
+        client = BaseWiiMClient(host="192.168.1.99")
+        assert client._build_standard_probe_list()[0] == ("https", 443)
+
+    def test_preferred_ports_still_take_precedence(self):
+        """Audio Pro MkII preferred_ports override protocol_priority ordering."""
+        client = BaseWiiMClient(
+            host="192.168.1.77",
+            capabilities={"preferred_ports": [4443, 8443, 443], "protocol_priority": ["http", "https"]},
+        )
+        assert client._build_standard_probe_list() == [("https", 4443), ("https", 8443), ("https", 443)]
+
+
 class TestBaseWiiMClientProperties:
     """Test BaseWiiMClient properties."""
 
@@ -1057,6 +1093,38 @@ class TestBaseWiiMClientProtocolFallback:
                 # Should have cached the endpoint
                 assert client._endpoint is not None
                 assert client._endpoint_tested is True
+                # self.port must align with the cached endpoint (issue #248). HTTPS-first
+                # probe succeeds on 443, so both endpoint and port reflect 443.
+                assert client._endpoint == "https://192.168.1.100:443"
+                assert client.port == 443
+
+    @pytest.mark.asyncio
+    async def test_probe_and_cache_endpoint_syncs_port_for_http(self, mock_aiohttp_session):
+        """When the working endpoint is HTTP:80, client.port is updated to 80 (issue #248)."""
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.text = AsyncMock(return_value='{"status": "ok"}')
+        mock_response.raise_for_status = MagicMock()
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+        mock_aiohttp_session.request = AsyncMock(return_value=mock_response)
+        mock_aiohttp_session.closed = False
+
+        # Arylic-style cached caps → HTTP-first probe order → HTTP:80 wins.
+        client = BaseWiiMClient(
+            host="192.168.1.50",
+            session=mock_aiohttp_session,
+            capabilities={"vendor": "arylic", "protocol_priority": ["http", "https"]},
+        )
+        client._endpoint = None
+
+        with patch.object(client, "_get_ssl_context", new_callable=AsyncMock) as mock_ssl:
+            mock_ssl.return_value = None
+            with patch("asyncio.timeout"):
+                await client._probe_and_cache_endpoint("/api/status")
+
+        assert client._endpoint == "http://192.168.1.50:80"
+        assert client.port == 80
 
     @pytest.mark.asyncio
     async def test_probe_and_cache_endpoint_failure_connectivity(self, mock_aiohttp_session):

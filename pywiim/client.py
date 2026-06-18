@@ -139,6 +139,11 @@ class WiiMClient(
         self._capability_detector = WiiMCapabilities()
         self._capabilities_detected = capabilities is not None
         self._detecting_capabilities = False  # Flag to prevent recursion
+        # When True, a recoverable capability-detection failure logs at debug
+        # instead of warning. Set by discovery probes (validate_device /
+        # is_linkplay_device), where probing a non-LinkPlay device that fails to
+        # answer is the expected, benign outcome -- not something to warn about.
+        self._quiet_capabilities = False
 
     async def _detect_capabilities(self, force: bool = False) -> dict[str, Any]:
         """Detect device capabilities and update client configuration.
@@ -215,7 +220,13 @@ class WiiMClient(
             return self._capabilities
 
         except Exception as err:
-            _LOGGER.warning(
+            # This path is recoverable: we fall back to static detection below.
+            # During discovery probing of arbitrary LAN devices (a Yamaha AVR, a
+            # TV, etc. handed over by HA's broad SSDP MediaRenderer matcher) this
+            # failure is the expected outcome, so probe callers set
+            # _quiet_capabilities to keep the log clean (see issue mjcumming/wiim#249).
+            _LOGGER.log(
+                logging.DEBUG if self._quiet_capabilities else logging.WARNING,
                 "Failed to detect capabilities for %s: %s. Using defaults.",
                 self.host,
                 err,

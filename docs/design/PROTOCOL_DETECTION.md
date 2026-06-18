@@ -199,15 +199,17 @@ def _build_probe_list(self) -> list[tuple[str, int]]:
         # Audio Pro MkII: Use preferred ports
         return [("https", port) for port in preferred_ports]
     
-    # Standard devices: Try common combinations
-    # Order: HTTPS (most common) → HTTP (fallback)
-    return [
-        ("https", 443),   # WiiM default
-        ("https", 4443),  # Audio Pro MkII
-        ("https", 8443),  # Alternative HTTPS
-        ("http", 80),     # HTTP fallback
-        ("http", 8080),   # Alternative HTTP
-    ]
+    # When the vendor is already known (client constructed with cached
+    # capabilities), honor the profile's protocol_priority so the *probe itself*
+    # picks the right transport — HTTP-first for Arylic, HTTPS-first for WiiM.
+    https = [("https", 443), ("https", 4443), ("https", 8443)]
+    http = [("http", 80), ("http", 8080)]
+    priority = self._capabilities.get("protocol_priority") or []
+    if priority and priority[0] == "http":
+        return http + https     # Arylic / generic — HTTP first, HTTPS fallback
+
+    # Default (vendor unknown, or HTTPS-first profile): HTTPS first, HTTP fallback.
+    return https + http
 ```
 
 ### 5. Vendor-Aware Protocol Correction (post-detection)
@@ -222,22 +224,35 @@ but their embedded TLS handshake is slow (~250–470 ms vs ~25–85 ms over plai
 those, HTTPS would otherwise win the probe and be cached permanently, making every poll
 sluggish (see [mjcumming/wiim#248](https://github.com/mjcumming/wiim/issues/248)).
 
-Once capabilities are detected, `_apply_protocol_preference()` corrects the choice:
+The **device profile** (`profiles.py`) is the single source of truth for protocol order
+(`connection.protocol_priority`): WiiM and Audio Pro MkII/W-gen are HTTPS-first, Arylic /
+generic / Audio Pro Original are HTTP-first. There are two cooperating mechanisms:
 
-- The **device profile** (`profiles.py`) is the single source of truth for protocol order
-  (`connection.protocol_priority`): WiiM and Audio Pro MkII/W-gen are HTTPS-first, Arylic /
-  generic / Audio Pro Original are HTTP-first.
-- The correction only ever performs an **HTTPS→HTTP downgrade**, and only when the profile
-  prefers HTTP **and** a probe of plain HTTP:80 returns a valid body. Anything else keeps the
-  already-cached endpoint untouched.
+1. **Probe ordering (`_build_standard_probe_list`)** — when the client already has
+   capabilities (the usual case for the coordinator/poll client, which is constructed with
+   cached capabilities and *skips* `_detect_capabilities`), the probe list is ordered by
+   `protocol_priority`, so the very first probe lands on — and caches/persists — the right
+   transport. This is what makes the *persisted* endpoint correct.
 
-This is deliberately conservative — it never upgrades HTTP→HTTPS and never switches to an
-endpoint it hasn't just verified, so:
+2. **Post-detection correction (`_apply_protocol_preference`)** — for a cold client with no
+   capabilities (the first-ever discovery probe), the probe is HTTPS-first; once
+   `_detect_capabilities` populates the vendor, this performs a one-time **HTTPS→HTTP
+   downgrade**, but only when the profile prefers HTTP **and** a probe of plain HTTP:80
+   returns a valid body.
 
-- **WiiM** (HTTPS-only) is never touched.
-- **HTTP-only Arylic** (e.g. `UP2STREAM_AMP_V4`) becomes snappy on HTTP.
-- **HTTPS-only Arylic** (e.g. `ARYLIC_H50`, where HTTP:80 is refused) keeps its working HTTPS
-  endpoint even though the profile prefers HTTP.
+Both are conservative — they never upgrade HTTP→HTTPS and never select an endpoint without a
+verified response. When a working endpoint is cached, `self.port` is updated to match it so
+discovery/integration code that reads `client.port` persists the correct protocol. Net result:
+
+- **WiiM** (HTTPS-only) always stays on HTTPS.
+- **HTTP-only Arylic** (e.g. `UP2STREAM_AMP_V4`) caches HTTP directly — snappy and persisted.
+- **HTTPS-only Arylic** (e.g. `ARYLIC_H50`, where HTTP:80 is refused) probes HTTP first, falls
+  through to its working HTTPS endpoint, and keeps it.
+
+> **Integration note:** the corrected endpoint only persists if the poll/coordinator client is
+> constructed **with the device capabilities** (so `protocol_priority` is known at probe time)
+> and is **not** pinned to a previously-cached HTTPS endpoint/port. A client given an explicit
+> protocol/port is treated as user intent and is never re-probed.
 
 ```python
 
@@ -274,6 +289,24 @@ async def _test_endpoint(self, base_url: str, test_path: str) -> bool:
         _LOGGER.debug("Endpoint test failed: %s - %s", base_url, e)
         return False
 ```
+
+### 6. Quiet Probing During Discovery
+
+Home Assistant's SSDP matcher for the integration is deliberately broad
+(`urn:schemas-upnp-org:device:MediaRenderer:1`) so that all LinkPlay OEMs
+(WiiM, Arylic, Audio Pro, …) are auto-discovered — those OEMs do **not** reliably
+advertise a `WiiM`/`LinkPlay` UPnP `manufacturer`, so a narrower match would
+silently miss them. The cost of a broad match is that every DLNA renderer on the
+LAN (AV receivers, TVs) is also handed to the config flow and probed.
+
+That probe (`discovery.is_linkplay_device` / `discovery.validate_device`) is a
+**soft-fail** check: a device failing to answer the LinkPlay HTTP API simply
+isn't one. Such failures must stay at `debug`. Probe clients therefore set
+`client._quiet_capabilities = True`, which downgrades the otherwise-`warning`
+"Failed to detect capabilities for …" message (a *recoverable* path that falls
+back to static detection) to `debug`. Configured-device setup leaves the flag
+`False`, so a real capability-detection failure there still warns. See
+[mjcumming/wiim#249](https://github.com/mjcumming/wiim/issues/249).
 
 ### Manual Reprobe
 
