@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   WiiM/Audio Pro remain HTTPS-first. Additionally, `client.port` is now kept in sync with the
   cached endpoint so discovery/integration code that reads `port` no longer mis-persists HTTPS
   for an HTTP endpoint ([mjcumming/wiim#248](https://github.com/mjcumming/wiim/issues/248)).
+- **Spurious "Failed to detect capabilities" WARNING for non-LinkPlay devices during discovery** —
+  Home Assistant's broad SSDP matcher (`MediaRenderer:1`, intentionally wide so all LinkPlay OEMs
+  are discovered) hands every DLNA renderer on the LAN (AV receivers, TVs) to the config flow,
+  which probes each via `validate_device`/`is_linkplay_device`. The fallback probe calls
+  `get_player_status()` → `_detect_capabilities()`, whose *recoverable* failure path logged at
+  `warning` — so each non-WiiM device produced a misleading "Failed to detect capabilities…"
+  WARNING even though it was simply not a LinkPlay device. Discovery probes now set
+  `client._quiet_capabilities`, downgrading that message to `debug`; configured-device setup is
+  unchanged and still warns on a genuine failure
+  ([mjcumming/wiim#249](https://github.com/mjcumming/wiim/issues/249)).
 
 ## [2.2.14] - 2026-06-17
 
