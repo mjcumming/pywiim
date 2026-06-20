@@ -254,23 +254,42 @@ class MiscAPI:
         encoded = quote(json.dumps(payload, separators=(",", ":")), safe="")
         await self._request(f"{API_ENDPOINT_DISPLAY_CONFIG}{encoded}")  # type: ignore[attr-defined]
 
-    async def set_display_enabled(self, enabled: bool, *, default_bright: int | None = None) -> None:
+    async def set_display_enabled(
+        self,
+        enabled: bool,
+        *,
+        default_bright: int | None = None,
+        auto_sense_enable: int | None = None,
+    ) -> None:
         """Turn the display/LCD on or off (WiiM Ultra only).
 
-        The device API always sends ``default_bright`` in the same command as
-        ``disable``; this wrapper uses :data:`DISPLAY_DEFAULT_BRIGHTNESS` when
-        turning **on** so the screen is not left at level 1 (minimum).
+        The device API always sends ``default_bright`` and ``auto_sense_enable``
+        in the same command as ``disable``; this wrapper uses
+        :data:`DISPLAY_DEFAULT_BRIGHTNESS` when turning **on** so the screen is
+        not left at level 1 (minimum).
+
+        Adaptive brightness (``auto_sense_enable``): when turning the screen on
+        this defaults to **1** (adaptive brightness enabled). Historically it was
+        forced to ``0``, which on at least some WiiM Ultra / Amp Ultra firmware
+        left the panel dark even though the device reported the display as "on"
+        (``disable=0``) — users had to toggle adaptive brightness in the WiiM app
+        to relight it (mjcumming/wiim#250). Pass ``auto_sense_enable=0`` to keep
+        adaptive brightness off (fixed brightness).
 
         Args:
             enabled: True to turn screen on, False to turn off.
             default_bright: When turning on, optional brightness (1–100). If omitted,
                 uses ``DISPLAY_DEFAULT_BRIGHTNESS``. Ignored when ``enabled`` is False.
+            auto_sense_enable: 1 to enable adaptive brightness, 0 to disable. If
+                omitted, defaults to 1 when turning on and 0 when turning off.
         """
         if enabled:
             bright = default_bright if default_bright is not None else DISPLAY_DEFAULT_BRIGHTNESS
-            await self.set_display_config(disable=0, default_bright=bright)
+            sense = auto_sense_enable if auto_sense_enable is not None else 1
+            await self.set_display_config(disable=0, default_bright=bright, auto_sense_enable=sense)
         else:
-            await self.set_display_config(disable=1)
+            sense = auto_sense_enable if auto_sense_enable is not None else 0
+            await self.set_display_config(disable=1, auto_sense_enable=sense)
 
     # ------------------------------------------------------------------
     # Status and information helpers

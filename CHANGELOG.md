@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.16] - 2026-06-20
+
+### Fixed
+- **WiiM Ultra / Amp Ultra display reported "on" but panel stayed dark when turned back on**
+  — `setLightOperationBrightConfig` requires `auto_sense_enable`, `default_bright`, and `disable`
+  in one payload, and `set_display_enabled(True)` hard-coded `auto_sense_enable=0`. On affected
+  firmware this registered the display as on (`disable=0`) while leaving the LCD dark and silently
+  disabling the user's adaptive-brightness setting — users had to toggle adaptive brightness in
+  the WiiM app to relight it. Turning the display **on** now enables adaptive brightness
+  (`auto_sense_enable=1`) by default so the panel actually lights. Both `set_display_enabled` (client
+  and player) gain an optional `auto_sense_enable` keyword (pass `0` for fixed brightness); defaults
+  are `1` when turning on and `0` when turning off ([mjcumming/wiim#250](https://github.com/mjcumming/wiim/issues/250)).
+
 ## [2.2.15] - 2026-06-18
 
 ### Fixed

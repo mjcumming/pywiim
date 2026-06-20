@@ -231,8 +231,10 @@ class TestMiscAPI:
         assert len(requests) == 2
         on_payload = json.loads(unquote(requests[0][len(API_ENDPOINT_DISPLAY_CONFIG) :]))
         off_payload = json.loads(unquote(requests[1][len(API_ENDPOINT_DISPLAY_CONFIG) :]))
+        # Turning on enables adaptive brightness (auto_sense_enable=1) so the
+        # panel relights on WiiM Ultra firmware (mjcumming/wiim#250).
         assert on_payload == {
-            "auto_sense_enable": 0,
+            "auto_sense_enable": 1,
             "default_bright": DISPLAY_DEFAULT_BRIGHTNESS,
             "disable": 0,
         }
@@ -259,6 +261,25 @@ class TestMiscAPI:
         await client.set_display_enabled(True, default_bright=42)
         payload = json.loads(unquote(requests[0][len(API_ENDPOINT_DISPLAY_CONFIG) :]))
         assert payload["default_bright"] == 42
+        assert payload["disable"] == 0
+
+    @pytest.mark.asyncio
+    async def test_set_display_enabled_auto_sense_override(self, mock_client):
+        """Test set_display_enabled(True, auto_sense_enable=0) keeps adaptive brightness off."""
+        from pywiim.api.constants import API_ENDPOINT_DISPLAY_CONFIG
+        from pywiim.api.misc import MiscAPI
+
+        requests = []
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                return ApiResponse(parsed="OK", raw=None)
+
+        client = TestClient()
+        await client.set_display_enabled(True, auto_sense_enable=0)
+        payload = json.loads(unquote(requests[0][len(API_ENDPOINT_DISPLAY_CONFIG) :]))
+        assert payload["auto_sense_enable"] == 0
         assert payload["disable"] == 0
 
     @pytest.mark.asyncio

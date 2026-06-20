@@ -5158,9 +5158,9 @@ class TestPlayerLEDIndicatorAndDisplay:
         type(mock_client).capabilities = PropertyMock(return_value={})
         player = Player(mock_client)
         await player.set_display_enabled(True)
-        mock_client.set_display_enabled.assert_called_once_with(True, default_bright=None)
+        mock_client.set_display_enabled.assert_called_once_with(True, default_bright=None, auto_sense_enable=None)
         await player.set_display_enabled(False)
-        mock_client.set_display_enabled.assert_called_with(False, default_bright=None)
+        mock_client.set_display_enabled.assert_called_with(False, default_bright=None, auto_sense_enable=None)
 
     @pytest.mark.asyncio
     async def test_set_display_config_delegates_to_client(self, mock_client):

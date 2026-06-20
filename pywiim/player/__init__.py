@@ -524,14 +524,28 @@ class Player(PlayerBase):
 
     # === Display (WiiM Ultra; ADR 005) ===
 
-    async def set_display_enabled(self, enabled: bool, *, default_bright: int | None = None) -> None:
+    async def set_display_enabled(
+        self,
+        enabled: bool,
+        *,
+        default_bright: int | None = None,
+        auto_sense_enable: int | None = None,
+    ) -> None:
         """Turn display/LCD on or off (WiiM Ultra only).
 
         The LCD uses ``setLightOperationBrightConfig`` (brightness + on/off), not the
         LED indicator API. When turning on, optional ``default_bright`` overrides
         the library default (full brightness on a 1–100 scale).
+
+        Adaptive brightness (``auto_sense_enable``) defaults to enabled (1) when
+        turning on; pass ``auto_sense_enable=0`` for a fixed brightness. This
+        avoids the panel staying dark on some WiiM Ultra firmware (mjcumming/wiim#250).
         """
-        await self.client.set_display_enabled(enabled, default_bright=default_bright)
+        await self.client.set_display_enabled(
+            enabled,
+            default_bright=default_bright,
+            auto_sense_enable=auto_sense_enable,
+        )
 
     async def set_display_config(
         self,
