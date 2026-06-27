@@ -25,6 +25,14 @@ __all__ = [
     "GroupDeviceState",
     "GroupState",
     "DeviceGroupInfo",
+    "AudioInputEnableItem",
+    "AudioInputEnable",
+    "AcousticCapability",
+    "RoutineStep",
+    "Routine",
+    "RoutineList",
+    "SoundCardInfo",
+    "SoundCardModeSupport",
 ]
 
 
@@ -267,6 +275,120 @@ class EQInfo(_WiimBase):
 
     eq_enabled: bool | None = None
     eq_preset: str | None = None
+
+
+class AudioInputEnableItem(_WiimBase):
+    """One entry from WiiM ``getAudioInputEnable``."""
+
+    mode: str
+    enable: bool
+
+    @field_validator("enable", mode="before")
+    @classmethod
+    def _normalize_enable(cls, v: bool | int | str) -> bool:
+        """Normalize WiiM 0/1-ish enable flags to bool."""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, int):
+            return v == 1
+        if isinstance(v, str):
+            return v.strip().lower() in {"1", "true", "on", "yes", "enabled"}
+        return False
+
+
+class AudioInputEnable(_WiimBase):
+    """Payload from WiiM ``getAudioInputEnable``."""
+
+    version: str | None = Field(None, alias="ver")
+    audio_input: list[AudioInputEnableItem] = Field(default_factory=list, alias="audioInput")
+
+
+class AcousticCapability(_WiimBase):
+    """Read-only acoustic capability payload from WiiM ``GetAcousticCapability``.
+
+    The endpoint is broad and firmware-shaped. pywiim keeps feature blocks as
+    dictionaries for now so callers can inspect GEQ/PEQ/RC/OutputDelay data
+    without locking a premature high-level API.
+    """
+
+    version: str | None = Field(None, alias="Version")
+    geq: dict[str, Any] | None = Field(None, alias="GEQ")
+    peq: dict[str, Any] | None = Field(None, alias="PEQ")
+    room_correction: dict[str, Any] | None = Field(None, alias="RC")
+    headphone_eq: dict[str, Any] | None = Field(None, alias="HeadphoneEQ")
+    sub_lpf: dict[str, Any] | None = Field(None, alias="SubLPF")
+    evaluation: dict[str, Any] | None = Field(None, alias="Evaluation")
+    eq_block: dict[str, Any] | None = Field(None, alias="EQBlock")
+    output_delay: dict[str, Any] | None = Field(None, alias="OutputDelay")
+
+
+class RoutineStep(_WiimBase):
+    """One step inside a WiiM routine."""
+
+    type: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class Routine(_WiimBase):
+    """A WiiM routine from ``getAllRoutines``."""
+
+    id: str
+    name: str | None = None
+    index: int | None = None
+    create_date: str | None = Field(None, alias="createDate")
+    update_date: str | None = Field(None, alias="updateDate")
+    steps: list[RoutineStep] = Field(default_factory=list)
+
+
+class RoutineList(_WiimBase):
+    """Payload from WiiM ``getAllRoutines``."""
+
+    routines: list[Routine] = Field(default_factory=list)
+
+
+class SoundCardInfo(_WiimBase):
+    """Nested sound-card details from ``getSoundCardModeSupportList``."""
+
+    card_name: str | None = Field(None, alias="cardName")
+    dev_name: str | None = Field(None, alias="devName")
+    card_id: str | None = Field(None, alias="cardId")
+    hifi_src_version: str | None = Field(None, alias="HiFiSRCVersion")
+    support_digital_filter: bool | None = Field(None, alias="supportDigitalFilter")
+    support_vrms_change: bool | None = Field(None, alias="supportVrmsChange")
+    support_sample_rate_switch_latency: bool | None = Field(None, alias="supportSampleRateSwitchLatency")
+    coexist_mode: list[str] | None = Field(None, alias="coexistMode")
+    channel_support_list: list[int] | None = Field(None, alias="channelSupportList")
+    bit_depth_support_list: list[int] | None = Field(None, alias="bitDepthSupportList")
+    format_support_list: list[str] | None = Field(None, alias="formatSupportList")
+    sample_rate_support_list: list[int] | None = Field(None, alias="sampleRateSupportList")
+
+    @field_validator(
+        "support_digital_filter", "support_vrms_change", "support_sample_rate_switch_latency", mode="before"
+    )
+    @classmethod
+    def _normalize_optional_bool(cls, v: bool | int | str | None) -> bool | None:
+        """Normalize optional 0/1-ish support flags."""
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, int):
+            return v == 1
+        if isinstance(v, str):
+            return v.strip().lower() in {"1", "true", "on", "yes", "supported"}
+        return None
+
+
+class SoundCardModeSupport(_WiimBase):
+    """One output mode entry from ``getSoundCardModeSupportList``.
+
+    The endpoint has an ``index`` field, but field reports show it should not be
+    treated as the stable output identity. Use ``mode`` as identity.
+    """
+
+    index: int | None = None
+    mode: str
+    sound_card: SoundCardInfo | None = Field(None, alias="soundCard")
 
 
 class PollingMetrics(BaseModel):

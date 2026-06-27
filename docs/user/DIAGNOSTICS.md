@@ -47,6 +47,18 @@ For devices that require HTTPS:
 python -m pywiim.diagnostics 192.168.1.100 --port 443
 ```
 
+### Discovered WiiM API Probe
+
+To probe only the read-only WiiM APIs discovered from app traffic:
+
+```bash
+python -m pywiim.cli.diagnostics 192.168.1.100 --discovered-apis-only --output discovered-apis.json
+```
+
+This checks `getAudioInputEnable`, `getModeRename`, `GetAcousticCapability`,
+`getAllRoutines`, and `getSoundCardModeSupportList` without running the full
+diagnostic feature suite.
+
 ### Verbose Output
 
 For detailed logging:
@@ -210,4 +222,3 @@ This diagnostic tool is designed to make it easy to gather information for suppo
    - Feature support
 
 This eliminates the need for back-and-forth questions about device configuration.
-

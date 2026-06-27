@@ -18,6 +18,11 @@ class DummyClient:
         self._capabilities_detected = True
         self._detect_capabilities = AsyncMock()
         self.get_debug_info = AsyncMock(return_value={})
+        self.get_audio_input_enable = AsyncMock(return_value=None)
+        self.get_mode_rename = AsyncMock(return_value=None)
+        self.get_acoustic_capability = AsyncMock(return_value=None)
+        self.get_all_routines = AsyncMock(return_value=None)
+        self.get_sound_card_mode_support_list = AsyncMock(return_value=[])
         self.capabilities = {
             "vendor": "wiim",
             "is_wiim_device": True,
@@ -93,6 +98,40 @@ async def test_gather_debug_info_failure_adds_warning(capsys):
     out = capsys.readouterr().out
     assert "getDebugInfo" in out
     assert "optional endpoint" in out
+
+
+@pytest.mark.asyncio
+async def test_gather_discovered_api_info_stores_read_only_probe_results(capsys):
+    """_gather_discovered_api_info records discovered WiiM endpoint payloads."""
+    client = DummyClient()
+    client.get_mode_rename = AsyncMock(return_value={"optical": "TV"})
+    client.get_sound_card_mode_support_list = AsyncMock(return_value=[{"mode": "usb"}])
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    await diagnostics._gather_discovered_api_info()
+
+    result = diagnostics.report["discovered_apis"]
+    assert result["getAudioInputEnable"]["supported"] is False
+    assert result["getModeRename"]["supported"] is True
+    assert result["getModeRename"]["value"] == {"optical": "TV"}
+    assert result["getSoundCardModeSupportList"]["supported"] is True
+    assert "Probing discovered WiiM APIs" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_gather_discovered_api_info_catches_probe_errors():
+    """_gather_discovered_api_info keeps later probes running after one error."""
+    client = DummyClient()
+    client.get_audio_input_enable = AsyncMock(side_effect=Exception("boom"))
+    client.get_mode_rename = AsyncMock(return_value={"line_in": "Turntable"})
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    await diagnostics._gather_discovered_api_info()
+
+    result = diagnostics.report["discovered_apis"]
+    assert result["getAudioInputEnable"]["supported"] is False
+    assert result["getAudioInputEnable"]["error"] == "boom"
+    assert result["getModeRename"]["supported"] is True
 
 
 @pytest.mark.asyncio

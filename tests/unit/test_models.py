@@ -8,6 +8,8 @@ from __future__ import annotations
 import pytest
 
 from pywiim.models import (
+    AcousticCapability,
+    AudioInputEnable,
     DeviceGroupInfo,
     DeviceInfo,
     EQInfo,
@@ -16,7 +18,9 @@ from pywiim.models import (
     MultiroomInfo,
     PlayerStatus,
     PollingMetrics,
+    RoutineList,
     SlaveInfo,
+    SoundCardModeSupport,
     TrackMetadata,
 )
 
@@ -239,6 +243,90 @@ class TestPlayerStatus:
         )
         assert hasattr(status, "unknown_field")
         assert status.unknown_field == "value"
+
+
+class TestWiiMDiscoveryModels:
+    """Test read-only WiiM discovery models."""
+
+    def test_audio_input_enable_model(self):
+        """Audio input enable payload preserves modes and normalizes flags."""
+        payload = AudioInputEnable.model_validate(
+            {
+                "ver": "1.0",
+                "audioInput": [
+                    {"mode": "wifi", "enable": 1},
+                    {"mode": "phono", "enable": "0"},
+                ],
+            }
+        )
+
+        assert payload.version == "1.0"
+        assert payload.audio_input[0].mode == "wifi"
+        assert payload.audio_input[0].enable is True
+        assert payload.audio_input[1].enable is False
+
+    def test_acoustic_capability_model(self):
+        """Acoustic capability keeps feature blocks available for inspection."""
+        payload = AcousticCapability.model_validate(
+            {
+                "Version": "1.0",
+                "GEQ": {"Version": "1.0"},
+                "PEQ": {"Filters": ["OFF", "PK"]},
+                "OutputDelay": {"MinDelayUs": -1000000, "StepDelayUs": 100},
+            }
+        )
+
+        assert payload.version == "1.0"
+        assert payload.geq == {"Version": "1.0"}
+        assert payload.peq == {"Filters": ["OFF", "PK"]}
+        assert payload.output_delay["MinDelayUs"] == -1000000
+
+    def test_routine_list_model(self):
+        """Routine list maps date aliases and step payloads."""
+        payload = RoutineList.model_validate(
+            {
+                "routines": [
+                    {
+                        "id": "routine-id",
+                        "name": "PC",
+                        "index": 3,
+                        "createDate": "2026-06-23T06:08:26Z",
+                        "updateDate": "2026-06-23T06:08:56Z",
+                        "steps": [{"type": "audioInput", "payload": {"input": "optical"}}],
+                    }
+                ]
+            }
+        )
+
+        routine = payload.routines[0]
+        assert routine.id == "routine-id"
+        assert routine.create_date == "2026-06-23T06:08:26Z"
+        assert routine.update_date == "2026-06-23T06:08:56Z"
+        assert routine.steps[0].type == "audioInput"
+        assert routine.steps[0].payload == {"input": "optical"}
+
+    def test_sound_card_mode_support_model(self):
+        """Sound-card support uses mode as stable identity and keeps card details."""
+        payload = SoundCardModeSupport.model_validate(
+            {
+                "index": 5,
+                "mode": "AUDIO_OUTPUT_UAC_CARD_MODE",
+                "soundCard": {
+                    "cardName": "SABRE-D70 Pro SABRE",
+                    "devName": "Topping D70 Pro SABRE",
+                    "cardId": "hw:1,0",
+                    "supportVrmsChange": "1",
+                    "sampleRateSupportList": [44100, 48000, 192000],
+                },
+            }
+        )
+
+        assert payload.index == 5
+        assert payload.mode == "AUDIO_OUTPUT_UAC_CARD_MODE"
+        assert payload.sound_card is not None
+        assert payload.sound_card.card_name == "SABRE-D70 Pro SABRE"
+        assert payload.sound_card.dev_name == "Topping D70 Pro SABRE"
+        assert payload.sound_card.support_vrms_change is True
 
 
 class TestSlaveInfo:

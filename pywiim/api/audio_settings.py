@@ -12,9 +12,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import ValidationError
+
 from ..exceptions import WiiMError
+from ..models import SoundCardModeSupport
 from .constants import (
     API_ENDPOINT_GET_CHANNEL_BALANCE,
+    API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST,
     API_ENDPOINT_GET_SPDIF_SAMPLE_RATE,
     API_ENDPOINT_SET_CHANNEL_BALANCE,
     API_ENDPOINT_SET_SPDIF_SWITCH_DELAY,
@@ -27,6 +31,33 @@ class AudioSettingsAPI:
     This mixin provides methods for configuring advanced audio settings
     including SPDIF sample rates and channel balance.
     """
+
+    # ------------------------------------------------------------------
+    # Audio output support discovery
+    # ------------------------------------------------------------------
+
+    async def get_sound_card_mode_support_list(self) -> list[SoundCardModeSupport]:
+        """Return WiiM sound-card/output mode support entries.
+
+        This read-only endpoint can enumerate real output hardware (including
+        attached USB DACs). It is expected to be WiiM/firmware-specific; devices
+        that do not support it return an empty list.
+        """
+        try:
+            response = await self._request(API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST)  # type: ignore[attr-defined]
+            if isinstance(response.parsed, list):
+                supported: list[SoundCardModeSupport] = []
+                for item in response.parsed:
+                    if not isinstance(item, dict) or not item.get("mode"):
+                        continue
+                    try:
+                        supported.append(SoundCardModeSupport.model_validate(item))
+                    except ValidationError:
+                        continue
+                return supported
+        except WiiMError:
+            return []
+        return []
 
     # ------------------------------------------------------------------
     # SPDIF sample rate configuration

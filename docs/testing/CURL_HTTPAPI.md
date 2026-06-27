@@ -45,6 +45,11 @@ These are **GET**-style URLs (read-only). Good for baselines before/after you ch
 | `getPlayerStatus` | Basic playback JSON |
 | `getPlayerStatusEx` | Richer playback JSON (when supported) |
 | `getMetaInfo` | Track metadata (may be empty on some sources) |
+| `getAudioInputEnable` | WiiM input enablement metadata; see [WiiM Discovered Read-Only APIs](../design/WIIM_DISCOVERED_APIS.md). |
+| `getModeRename` | WiiM user-renamed input labels; may return plain `Failed` when no labels are renamed. |
+| `GetAcousticCapability` | WiiM acoustic capability blocks (GEQ/PEQ/RC/output delay/etc.). |
+| `getAllRoutines` | WiiM routines (device-side action sequences, not playback presets). |
+| `getSoundCardModeSupportList` | WiiM output sound-card support list; key by `mode`, not `index`. |
 
 Examples:
 
@@ -61,6 +66,13 @@ curl -ks "https://${DEVICE}:443/httpapi.asp?command=getPlayerStatusEx" | python3
 
 # Optional: only if the device accepts this command name (may be "unknown command" on WiiM Pro)
 curl -ks "https://${DEVICE}:443/httpapi.asp?command=getAudioOutputStatus"
+
+# WiiM-only research endpoints from pywiim#20
+curl -ks "https://${DEVICE}:443/httpapi.asp?command=getAudioInputEnable" | python3 -m json.tool
+curl -ks "https://${DEVICE}:443/httpapi.asp?command=getModeRename" | python3 -m json.tool
+curl -ks "https://${DEVICE}:443/httpapi.asp?command=GetAcousticCapability" | python3 -m json.tool
+curl -ks "https://${DEVICE}:443/httpapi.asp?command=getAllRoutines" | python3 -m json.tool
+curl -ks "https://${DEVICE}:443/httpapi.asp?command=getSoundCardModeSupportList" | python3 -m json.tool
 ```
 
 **Note:** Output field meanings (`hardware`, `source`, `audiocast`) for the **JSON object** are documented in [API_DESIGN_PATTERNS.md](../design/API_DESIGN_PATTERNS.md). pywiim probes **`getNewAudioOutputHardwareMode` first**, then **`getAudioOutputStatus`**, matching real firmware differences (see [mjcumming/wiim#144](https://github.com/mjcumming/wiim/issues/144) and `WiiMCapabilities.detect_capabilities` in `pywiim/capabilities.py`).

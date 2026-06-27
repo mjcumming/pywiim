@@ -18,11 +18,18 @@ import logging
 from typing import Any
 from urllib.parse import quote
 
+from pydantic import ValidationError
+
 from ..exceptions import WiiMError
+from ..models import AcousticCapability, AudioInputEnable, RoutineList
 from .constants import (
     API_ENDPOINT_DISPLAY_CONFIG,
+    API_ENDPOINT_GET_ACOUSTIC_CAPABILITY,
+    API_ENDPOINT_GET_ALL_ROUTINES,
+    API_ENDPOINT_GET_AUDIO_INPUT_ENABLE,
     API_ENDPOINT_GET_LED_MCU,
     API_ENDPOINT_GET_LED_SWITCH,
+    API_ENDPOINT_GET_MODE_RENAME,
     API_ENDPOINT_SET_BUTTONS,
     API_ENDPOINT_SET_LED,
     API_ENDPOINT_TRIGGER_OUT_SET,
@@ -33,12 +40,83 @@ from .constants import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _is_unsupported_discovered_payload(payload: dict[str, Any]) -> bool:
+    """Return True for firmware error payloads from optional discovered APIs."""
+    raw = str(payload.get("raw", "")).strip().lower()
+    error = str(payload.get("error", "")).strip().lower()
+    state = payload.get("state")
+
+    if "unknown command" in raw:
+        return True
+    if error in {"unsupported_command", "unknown command", "fail", "failed"}:
+        return True
+    return state == -1 and bool(error)
+
+
 class MiscAPI:
     """Miscellaneous device control helpers (buttons, etc.).
 
     This mixin provides methods for controlling miscellaneous device features
     such as touch buttons and alternative LED control methods.
     """
+
+    # ------------------------------------------------------------------
+    # WiiM read-only discovery helpers
+    # ------------------------------------------------------------------
+
+    async def get_audio_input_enable(self) -> AudioInputEnable | None:
+        """Return WiiM input enablement metadata, if available.
+
+        This is a read-only WiiM endpoint discovered from app traffic. It is
+        expected to be absent on many LinkPlay/OEM devices; unsupported responses
+        return ``None``.
+        """
+        try:
+            result = await self._request(API_ENDPOINT_GET_AUDIO_INPUT_ENABLE)  # type: ignore[attr-defined]
+            if isinstance(result.parsed, dict) and not _is_unsupported_discovered_payload(result.parsed):
+                return AudioInputEnable.model_validate(result.parsed)
+        except (ValidationError, WiiMError):
+            return None
+        return None
+
+    async def get_mode_rename(self) -> dict[str, str] | None:
+        """Return user-renamed source labels from WiiM, if configured.
+
+        WiiM returns a dynamic object such as ``{"optical": "TV"}``. When no
+        source has been renamed, firmware may return plain ``Failed``; that maps
+        to ``None``.
+        """
+        try:
+            result = await self._request(API_ENDPOINT_GET_MODE_RENAME)  # type: ignore[attr-defined]
+            if isinstance(result.parsed, dict) and not _is_unsupported_discovered_payload(result.parsed):
+                return {str(key): str(value) for key, value in result.parsed.items() if value is not None}
+        except (ValidationError, WiiMError):
+            return None
+        return None
+
+    async def get_acoustic_capability(self) -> AcousticCapability | None:
+        """Return WiiM acoustic capability metadata, if available."""
+        try:
+            result = await self._request(API_ENDPOINT_GET_ACOUSTIC_CAPABILITY)  # type: ignore[attr-defined]
+            if isinstance(result.parsed, dict) and not _is_unsupported_discovered_payload(result.parsed):
+                return AcousticCapability.model_validate(result.parsed)
+        except (ValidationError, WiiMError):
+            return None
+        return None
+
+    async def get_all_routines(self) -> RoutineList | None:
+        """Return WiiM routines, if available.
+
+        Routines are device-side action sequences, not playback presets. This
+        method is read-only and does not imply pywiim can execute routines.
+        """
+        try:
+            result = await self._request(API_ENDPOINT_GET_ALL_ROUTINES)  # type: ignore[attr-defined]
+            if isinstance(result.parsed, dict) and not _is_unsupported_discovered_payload(result.parsed):
+                return RoutineList.model_validate(result.parsed)
+        except (ValidationError, WiiMError):
+            return None
+        return None
 
     # ------------------------------------------------------------------
     # Touch button controls

@@ -60,6 +60,7 @@ class DeviceDiagnostics:
         await self._gather_capabilities()
         await self._gather_status()
         await self._gather_debug_info()
+        await self._gather_discovered_api_info()
         await self._test_endpoints()
         await self._test_features()
 
@@ -182,6 +183,40 @@ class DeviceDiagnostics:
             error_msg = f"Failed to get debug info: {err}"
             self.report["warnings"].append(error_msg)
             print(f"   ⚠ getDebugInfo: {err} (optional endpoint)")
+
+    async def _gather_discovered_api_info(self) -> None:
+        """Gather read-only WiiM app API payloads discovered from app traffic."""
+        print("\n🔎 Probing discovered WiiM APIs...")
+        discovered: dict[str, Any] = {}
+
+        async def probe(name: str, func: Any) -> None:
+            try:
+                value = await func()
+                if hasattr(value, "model_dump"):
+                    value = value.model_dump()
+                elif isinstance(value, list):
+                    value = [item.model_dump() if hasattr(item, "model_dump") else item for item in value]
+                discovered[name] = {
+                    "supported": value is not None and value != [],
+                    "value": value,
+                }
+                status = "OK" if discovered[name]["supported"] else "not supported / empty"
+                print(f"   ✓ {name}: {status}")
+            except Exception as err:
+                discovered[name] = {
+                    "supported": False,
+                    "error": str(err),
+                    "error_type": type(err).__name__,
+                }
+                print(f"   ⚠ {name}: {err}")
+
+        await probe("getAudioInputEnable", self.client.get_audio_input_enable)
+        await probe("getModeRename", self.client.get_mode_rename)
+        await probe("GetAcousticCapability", self.client.get_acoustic_capability)
+        await probe("getAllRoutines", self.client.get_all_routines)
+        await probe("getSoundCardModeSupportList", self.client.get_sound_card_mode_support_list)
+
+        self.report["discovered_apis"] = discovered
 
     async def _test_endpoints(self) -> None:
         """Test various API endpoints."""
@@ -774,6 +809,7 @@ class DeviceDiagnostics:
         await self._gather_capabilities()
         await self._gather_status()
         await self._gather_debug_info()
+        await self._gather_discovered_api_info()
 
         # Optional detailed testing
         if include_endpoint_tests:
@@ -941,6 +977,9 @@ Examples:
 
   # HTTPS device
   python -m pywiim.diagnostics 192.168.1.100 --port 443
+
+  # Probe only read-only WiiM APIs discovered from app traffic
+  python -m pywiim.diagnostics 192.168.1.100 --discovered-apis-only
         """,
     )
     parser.add_argument(
@@ -964,6 +1003,11 @@ Examples:
         action="store_true",
         help="Enable verbose logging",
     )
+    parser.add_argument(
+        "--discovered-apis-only",
+        action="store_true",
+        help="Only probe read-only WiiM APIs discovered from app traffic",
+    )
 
     args = parser.parse_args()
 
@@ -979,8 +1023,14 @@ Examples:
     diagnostics = DeviceDiagnostics(client)
 
     try:
-        await diagnostics.run_full_diagnostic()
-        diagnostics.print_report()
+        if args.discovered_apis_only:
+            print("🔎 Starting discovered WiiM API probe...")
+            print(f"   Device: {client.host}:{client.port}\n")
+            await diagnostics._gather_device_info()
+            await diagnostics._gather_discovered_api_info()
+        else:
+            await diagnostics.run_full_diagnostic()
+            diagnostics.print_report()
 
         if args.output:
             diagnostics.save_report(args.output)

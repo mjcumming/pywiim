@@ -5,6 +5,7 @@ Complete API reference for the `pywiim` library.
 ## Table of Contents
 
 - [WiiMClient](#wiimclient)
+  - [Read-only WiiM discovery helpers](#read-only-wiim-discovery-helpers)
 - [Player](#player)
 - [Models](#models)
 - [Exceptions](#exceptions)
@@ -73,6 +74,37 @@ async def get_player_status() -> dict[str, Any]:
 async def get_player_status_model() -> PlayerStatus:
     """Get player status as Pydantic model."""
 ```
+
+### Read-only WiiM discovery helpers
+
+These helpers expose WiiM-specific endpoints discovered from app traffic and
+documented in [WiiM Discovered Read-Only APIs](../design/WIIM_DISCOVERED_APIS.md).
+They are read-only surfaces for diagnostics and real-device validation. pywiim
+does not yet use them to alter source catalogs, output selection, capability
+flags, or Home Assistant behavior.
+
+Unsupported endpoints return `None` or an empty list.
+
+```python
+async def get_audio_input_enable() -> AudioInputEnable | None:
+    """Get WiiM input enablement metadata from getAudioInputEnable."""
+
+async def get_mode_rename() -> dict[str, str] | None:
+    """Get WiiM user-renamed source labels from getModeRename."""
+
+async def get_acoustic_capability() -> AcousticCapability | None:
+    """Get WiiM acoustic capability blocks from GetAcousticCapability."""
+
+async def get_all_routines() -> RoutineList | None:
+    """Get WiiM routine metadata from getAllRoutines."""
+
+async def get_sound_card_mode_support_list() -> list[SoundCardModeSupport]:
+    """Get WiiM output sound-card support metadata."""
+```
+
+Important: `getModeRename` labels are display metadata, not stable source IDs.
+`getSoundCardModeSupportList` entries should be keyed by `mode`; the endpoint's
+`index` field is not known to match output read/write mode integers.
 
 ## Player
 

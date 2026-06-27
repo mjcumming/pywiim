@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.18] - 2026-06-27
+
+### Added
+- **Read-only WiiM app-discovered APIs** — `WiiMClient` now exposes optional helpers for
+  `getAudioInputEnable`, `getModeRename`, `GetAcousticCapability`, `getAllRoutines`, and
+  `getSoundCardModeSupportList`. These helpers are intentionally read-only and return `None`
+  or an empty list when unsupported so they can be used for diagnostics and future capability
+  enrichment without changing source/output behavior yet ([#20](https://github.com/mjcumming/pywiim/issues/20)).
+- **`wiim-diagnostics --discovered-apis-only`** — Focused real-device probe for the new
+  read-only WiiM endpoints, with JSON report support.
+
+### Fixed
+- **Unsupported LinkPlay/Arylic error payloads for discovered APIs** — Firmware responses such
+  as `{"error": "unsupported_command", "raw": "unknown command"}` and
+  `{"state": -1, "error": "Fail"}` are now classified as unsupported instead of being accepted
+  as permissive empty Pydantic models.
+
+### Documentation
+- **Discovered WiiM API protocol note** — Added real-device observations for WiiM Pro,
+  Arylic H50, and Up2Stream Amp V4 to document that these endpoints appear WiiM-specific
+  in current testing.
+
 ## [2.2.17] - 2026-06-27
 
 ### Fixed

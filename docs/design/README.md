@@ -48,6 +48,7 @@ When changing behavior that might be covered by an ADR, check the ADR first. Whe
 - **[API_DESIGN_PATTERNS.md](API_DESIGN_PATTERNS.md)** - API reliability matrix, defensive programming, and endpoint patterns
 - **[UPNP_INTEGRATION.md](UPNP_INTEGRATION.md)** - UPnP integration patterns, architecture, and health tracking
 - **[LINKPLAY_ARCHITECTURE.md](LINKPLAY_ARCHITECTURE.md)** - LinkPlay "split brain" system, transport protocols, shuffle/repeat support, and control authority
+- **[WIIM_DISCOVERED_APIS.md](WIIM_DISCOVERED_APIS.md)** - WiiM-only read-only API findings pending real-device validation
 
 ## Implementation Patterns
 

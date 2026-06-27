@@ -13,6 +13,67 @@ from pywiim.api.base import ApiResponse
 from pywiim.exceptions import WiiMError
 
 
+class TestAudioSettingsAPISoundCardSupport:
+    """Test AudioSettingsAPI sound-card support discovery."""
+
+    @pytest.mark.asyncio
+    async def test_get_sound_card_mode_support_list(self, mock_client):
+        """Test getSoundCardModeSupportList parses output entries by mode."""
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(
+                parsed=[
+                    {
+                        "index": 5,
+                        "mode": "AUDIO_OUTPUT_UAC_CARD_MODE",
+                        "soundCard": {
+                            "cardName": "SABRE-D70 Pro SABRE",
+                            "devName": "Topping D70 Pro SABRE at usb-xhci-hcd.0.auto-1.2",
+                            "cardId": "hw:1,0",
+                            "supportDigitalFilter": 1,
+                            "sampleRateSupportList": [44100, 48000, 192000],
+                        },
+                    }
+                ],
+                raw=None,
+            )
+        )
+
+        result = await mock_client.get_sound_card_mode_support_list()
+
+        assert len(result) == 1
+        assert result[0].index == 5
+        assert result[0].mode == "AUDIO_OUTPUT_UAC_CARD_MODE"
+        assert result[0].sound_card is not None
+        assert result[0].sound_card.dev_name == "Topping D70 Pro SABRE at usb-xhci-hcd.0.auto-1.2"
+        assert result[0].sound_card.support_digital_filter is True
+        assert result[0].sound_card.sample_rate_support_list == [44100, 48000, 192000]
+
+    @pytest.mark.asyncio
+    async def test_get_sound_card_mode_support_list_filters_invalid_items(self, mock_client):
+        """Invalid entries without a mode are ignored."""
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(
+                parsed=[
+                    {"index": 1, "soundCard": {"devName": "Missing Mode"}},
+                    {"index": 2, "mode": "AUDIO_OUTPUT_SPDIF_MODE", "soundCard": {"devName": "Optical Out"}},
+                    "not-a-dict",
+                ],
+                raw=None,
+            )
+        )
+
+        result = await mock_client.get_sound_card_mode_support_list()
+
+        assert [item.mode for item in result] == ["AUDIO_OUTPUT_SPDIF_MODE"]
+
+    @pytest.mark.asyncio
+    async def test_get_sound_card_mode_support_list_unsupported(self, mock_client):
+        """Unsupported endpoint returns an empty list."""
+        mock_client._request = AsyncMock(side_effect=WiiMError("unknown command"))
+
+        assert await mock_client.get_sound_card_mode_support_list() == []
+
+
 class TestAudioSettingsAPISPDIF:
     """Test AudioSettingsAPI SPDIF methods."""
 

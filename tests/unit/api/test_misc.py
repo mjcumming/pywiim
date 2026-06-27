@@ -13,6 +13,184 @@ class TestMiscAPI:
     """Test MiscAPI mixin."""
 
     @pytest.mark.asyncio
+    async def test_get_audio_input_enable(self):
+        """Test getAudioInputEnable model parsing."""
+        from pywiim.api.constants import API_ENDPOINT_GET_AUDIO_INPUT_ENABLE
+        from pywiim.api.misc import MiscAPI
+
+        requests = []
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                return ApiResponse(
+                    parsed={
+                        "ver": "1.0",
+                        "audioInput": [
+                            {"mode": "wifi", "enable": 1},
+                            {"mode": "phono", "enable": "0"},
+                        ],
+                    },
+                    raw=None,
+                )
+
+        result = await TestClient().get_audio_input_enable()
+
+        assert requests == [API_ENDPOINT_GET_AUDIO_INPUT_ENABLE]
+        assert result is not None
+        assert result.version == "1.0"
+        assert result.audio_input[0].mode == "wifi"
+        assert result.audio_input[0].enable is True
+        assert result.audio_input[1].enable is False
+
+    @pytest.mark.asyncio
+    async def test_get_audio_input_enable_unsupported(self):
+        """Unsupported getAudioInputEnable returns None."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                raise WiiMError("unknown command")
+
+        assert await TestClient().get_audio_input_enable() is None
+
+    @pytest.mark.asyncio
+    async def test_get_audio_input_enable_unsupported_error_payload(self):
+        """Unsupported getAudioInputEnable error dictionaries return None."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                return ApiResponse(parsed={"error": "unsupported_command", "raw": "unknown command"}, raw=None)
+
+        assert await TestClient().get_audio_input_enable() is None
+
+    @pytest.mark.asyncio
+    async def test_get_mode_rename(self):
+        """Test getModeRename dynamic map parsing."""
+        from pywiim.api.constants import API_ENDPOINT_GET_MODE_RENAME
+        from pywiim.api.misc import MiscAPI
+
+        requests = []
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                return ApiResponse(parsed={"SPDIF-In": "Phono", "optical": "TV"}, raw=None)
+
+        result = await TestClient().get_mode_rename()
+
+        assert requests == [API_ENDPOINT_GET_MODE_RENAME]
+        assert result == {"SPDIF-In": "Phono", "optical": "TV"}
+
+    @pytest.mark.asyncio
+    async def test_get_mode_rename_failed_returns_none(self):
+        """Firmware returns plain Failed when no modes are renamed."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                return ApiResponse(parsed=None, raw="Failed")
+
+        assert await TestClient().get_mode_rename() is None
+
+    @pytest.mark.asyncio
+    async def test_get_mode_rename_unsupported_error_payload(self):
+        """Unsupported getModeRename error dictionaries return None."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                return ApiResponse(parsed={"error": "unsupported_command", "raw": "unknown command"}, raw=None)
+
+        assert await TestClient().get_mode_rename() is None
+
+    @pytest.mark.asyncio
+    async def test_get_acoustic_capability(self):
+        """Test GetAcousticCapability parsing."""
+        from pywiim.api.constants import API_ENDPOINT_GET_ACOUSTIC_CAPABILITY
+        from pywiim.api.misc import MiscAPI
+
+        requests = []
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                return ApiResponse(
+                    parsed={
+                        "Version": "1.0",
+                        "PEQ": {"Version": "1.0", "Filters": ["OFF", "PK"]},
+                        "OutputDelay": {"EnableMicroDelay": True, "StepDelayUs": 100},
+                    },
+                    raw=None,
+                )
+
+        result = await TestClient().get_acoustic_capability()
+
+        assert requests == [API_ENDPOINT_GET_ACOUSTIC_CAPABILITY]
+        assert result is not None
+        assert result.version == "1.0"
+        assert result.peq == {"Version": "1.0", "Filters": ["OFF", "PK"]}
+        assert result.output_delay["StepDelayUs"] == 100
+
+    @pytest.mark.asyncio
+    async def test_get_acoustic_capability_unsupported_error_payload(self):
+        """Unsupported GetAcousticCapability error dictionaries return None."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                return ApiResponse(parsed={"error": "unsupported_command", "raw": "unknown command"}, raw=None)
+
+        assert await TestClient().get_acoustic_capability() is None
+
+    @pytest.mark.asyncio
+    async def test_get_all_routines(self):
+        """Test getAllRoutines parsing."""
+        from pywiim.api.constants import API_ENDPOINT_GET_ALL_ROUTINES
+        from pywiim.api.misc import MiscAPI
+
+        requests = []
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                return ApiResponse(
+                    parsed={
+                        "routines": [
+                            {
+                                "id": "0000000067570795",
+                                "name": "PC",
+                                "index": 3,
+                                "createDate": "2026-06-23T06:08:26Z",
+                                "steps": [{"type": "audioInput", "payload": {"input": "optical"}}],
+                            }
+                        ]
+                    },
+                    raw=None,
+                )
+
+        result = await TestClient().get_all_routines()
+
+        assert requests == [API_ENDPOINT_GET_ALL_ROUTINES]
+        assert result is not None
+        assert len(result.routines) == 1
+        assert result.routines[0].name == "PC"
+        assert result.routines[0].create_date == "2026-06-23T06:08:26Z"
+        assert result.routines[0].steps[0].payload == {"input": "optical"}
+
+    @pytest.mark.asyncio
+    async def test_get_all_routines_failed_error_payload(self):
+        """Unsupported getAllRoutines failed dictionaries return None."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                return ApiResponse(parsed={"state": -1, "error": "Fail"}, raw=None)
+
+        assert await TestClient().get_all_routines() is None
+
+    @pytest.mark.asyncio
     async def test_set_buttons_enabled(self, mock_client):
         """Test setting buttons enabled."""
         from pywiim.api.misc import MiscAPI

@@ -382,6 +382,7 @@ API_ENDPOINT_GET_SPDIF_SAMPLE_RATE = "/httpapi.asp?command=getSpdifOutSampleRate
 API_ENDPOINT_SET_SPDIF_SWITCH_DELAY = "/httpapi.asp?command=setSpdifOutSwitchDelayMs:"
 API_ENDPOINT_GET_CHANNEL_BALANCE = "/httpapi.asp?command=getChannelBalance"
 API_ENDPOINT_SET_CHANNEL_BALANCE = "/httpapi.asp?command=setChannelBalance:"
+API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST = "/httpapi.asp?command=getSoundCardModeSupportList"
 
 # Miscellaneous endpoints
 API_ENDPOINT_SET_LED = "/httpapi.asp?command=LED_SWITCH_SET:"
@@ -397,6 +398,10 @@ API_ENDPOINT_DISPLAY_CONFIG = "/httpapi.asp?command=setLightOperationBrightConfi
 DISPLAY_BRIGHTNESS_MIN = 1
 DISPLAY_BRIGHTNESS_MAX = 100
 DISPLAY_DEFAULT_BRIGHTNESS = 100
+API_ENDPOINT_GET_AUDIO_INPUT_ENABLE = "/httpapi.asp?command=getAudioInputEnable"
+API_ENDPOINT_GET_MODE_RENAME = "/httpapi.asp?command=getModeRename"
+API_ENDPOINT_GET_ACOUSTIC_CAPABILITY = "/httpapi.asp?command=GetAcousticCapability"
+API_ENDPOINT_GET_ALL_ROUTINES = "/httpapi.asp?command=getAllRoutines"
 
 # Bluetooth endpoints
 API_ENDPOINT_START_BT_DISCOVERY = "/httpapi.asp?command=startbtdiscovery:"
@@ -650,11 +655,16 @@ __all__ = [
     "API_ENDPOINT_PRESET",
     "API_ENDPOINT_AUDIO_OUTPUT_STATUS",
     "API_ENDPOINT_AUDIO_OUTPUT_SET",
+    "API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST",
     "API_ENDPOINT_LED",
     "API_ENDPOINT_LED_BRIGHTNESS",
     "API_ENDPOINT_ARYLIC_LED",
     "API_ENDPOINT_ARYLIC_LED_BRIGHTNESS",
     "API_ENDPOINT_DISPLAY_CONFIG",
+    "API_ENDPOINT_GET_AUDIO_INPUT_ENABLE",
+    "API_ENDPOINT_GET_MODE_RENAME",
+    "API_ENDPOINT_GET_ACOUSTIC_CAPABILITY",
+    "API_ENDPOINT_GET_ALL_ROUTINES",
     "DISPLAY_BRIGHTNESS_MIN",
     "DISPLAY_BRIGHTNESS_MAX",
     "DISPLAY_DEFAULT_BRIGHTNESS",
