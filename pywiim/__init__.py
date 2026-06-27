@@ -75,7 +75,18 @@ from .exceptions import (
 )
 from .group import Group
 from .group_helpers import build_group_state_from_players
-from .models import DeviceInfo, PlayerStatus
+from .models import (
+    AcousticCapability,
+    AudioInputEnable,
+    AudioInputEnableItem,
+    DeviceInfo,
+    PlayerStatus,
+    Routine,
+    RoutineList,
+    RoutineStep,
+    SoundCardInfo,
+    SoundCardModeSupport,
+)
 from .normalize import normalize_device_info
 from .player import NotificationPlaybackResult, Player
 from .polling import PollingStrategy, TrackChangeDetector, fetch_parallel
@@ -88,7 +99,7 @@ from .profiles import (
 from .role import RoleDetectionResult, detect_role
 from .state import GroupStateSynchronizer, StateSynchronizer
 
-__version__ = "2.2.17"
+__version__ = "2.2.18"
 __all__ = [
     # Main client
     "WiiMClient",
@@ -107,6 +118,14 @@ __all__ = [
     # Models
     "DeviceInfo",
     "PlayerStatus",
+    "AudioInputEnableItem",
+    "AudioInputEnable",
+    "AcousticCapability",
+    "RoutineStep",
+    "Routine",
+    "RoutineList",
+    "SoundCardInfo",
+    "SoundCardModeSupport",
     # Discovery
     "DiscoveredDevice",
     "discover_devices",
