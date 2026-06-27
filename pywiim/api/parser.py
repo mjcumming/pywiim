@@ -31,32 +31,80 @@ _POSITION_DURATION_WARNING_LAST: dict[str, float] = {}
 _POSITION_DURATION_WARNING_INTERVAL = 60.0  # seconds
 _POSITION_DURATION_TOLERANCE = 2  # seconds - ignore small clock drift
 
+_MS_THRESHOLD = 36_000_000  # 10 hours * 3600 seconds * 1000 ms
+_MILLISECOND_TIME_SOURCES = {
+    "1",  # AirPlay
+    "2",  # DLNA
+    "10",  # Network/local URL playback
+    "11",  # USB on some firmwares
+    "51",  # USB on newer firmwares
+    "airplay",
+    "dlna",
+    "network",
+    "udisk",
+    "udisklocal",
+    "usb",
+    "wifi",
+}
 
-def _normalize_time_value(value: int, field_name: str, source: str | None = None) -> int:
+
+def _time_source_key(value: str | None) -> str:
+    """Return a normalized source key for time-unit heuristics."""
+    return str(value or "").strip().lower().replace(" ", "").replace("_", "")
+
+
+def _uses_milliseconds_for_large_values(source: str | None, vendor: str | None = None) -> bool:
+    """Return True when a source is known to report curpos/totlen in milliseconds.
+
+    Some local/network file playback modes legitimately exceed the old 10-hour
+    threshold, so they must not be reclassified as microseconds.
+    """
+    source_key = _time_source_key(source)
+    vendor_key = _time_source_key(vendor)
+    return source_key in _MILLISECOND_TIME_SOURCES or vendor_key.startswith("udisk")
+
+
+def _normalize_time_value(
+    value: int,
+    field_name: str,
+    source: str | None = None,
+    vendor: str | None = None,
+) -> int:
     """Normalize time values that may be in milliseconds or microseconds.
 
     The LinkPlay API returns time in different units depending on the streaming source:
     - Most sources: milliseconds (1,000 ms = 1 second)
     - Streaming services (Spotify, etc.): microseconds (1,000,000 μs = 1 second)
 
-    This function uses a sanity check approach: if a value would represent > 10 hours
+    Known local/network file sources are always treated as milliseconds. Other
+    sources use a fallback sanity check: if a value would represent > 10 hours
     when interpreted as milliseconds, it's likely in microseconds instead.
 
     Args:
         value: Raw time value from API
         field_name: Name of field for logging ("position" or "duration")
         source: Optional source name for enhanced logging
+        vendor: Optional vendor/app name for source-specific time-unit handling
 
     Returns:
         Time in seconds
 
     See: https://github.com/mjcumming/wiim/issues/75
     """
-    # Sanity threshold: 10 hours in milliseconds
-    # Most music tracks are < 10 minutes; if > 10 hours in "ms", likely microseconds
-    MS_THRESHOLD = 36_000_000  # 10 hours * 3600 seconds * 1000 ms
+    if _uses_milliseconds_for_large_values(source, vendor):
+        result = value // 1_000
+        _LOGGER.debug(
+            "🎵 %s value %d treated as milliseconds for local/network source, "
+            "converting to seconds: %d seconds (source: %s, vendor: %s)",
+            field_name.capitalize(),
+            value,
+            result,
+            source or "unknown",
+            vendor or "unknown",
+        )
+        return result
 
-    if value > MS_THRESHOLD:
+    if value > _MS_THRESHOLD:
         # Value appears to be in microseconds
         result = value // 1_000_000
         _LOGGER.debug(
@@ -162,7 +210,8 @@ def parse_player_status(
     # The API returns time in milliseconds for most sources but microseconds for streaming services.
     # Use intelligent normalization to handle both cases.
     # See: https://github.com/mjcumming/wiim/issues/75
-    source_hint = raw.get("mode")  # Will be used for enhanced logging
+    source_hint = raw.get("mode") or raw.get("source")  # Will be used for enhanced logging
+    vendor_hint = raw.get("vendor") or raw.get("Vendor") or raw.get("app") or vendor
 
     # AirPlay debug logging removed to reduce noise on every poll.
     # Raw API response still available for debugging if needed.
@@ -171,7 +220,7 @@ def parse_player_status(
     if (pos := raw.get("curpos") or raw.get("offset_pts") or data.get("position_ms")) is not None:
         try:
             pos_int = int(pos)
-            normalized_position = _normalize_time_value(pos_int, "position", source_hint)
+            normalized_position = _normalize_time_value(pos_int, "position", source_hint, vendor_hint)
             data["position"] = normalized_position
             _LOGGER.debug("🎵 API PARSER: Setting data['position'] = %s", normalized_position)
 
@@ -196,7 +245,7 @@ def parse_player_status(
         try:
             duration_int = int(duration_val)
             if duration_int > 0:  # Only set duration if it's actually provided
-                normalized_duration = _normalize_time_value(duration_int, "duration", source_hint)
+                normalized_duration = _normalize_time_value(duration_int, "duration", source_hint, vendor_hint)
 
                 # For AirPlay and other streaming sources, totlen is the actual total duration
                 # The previous logic incorrectly interpreted it as remaining time
@@ -395,7 +444,14 @@ def parse_player_status(
             "bbc iplayer": "wifi",
             "bbc": "wifi",
         }
-        vendor_source = _VENDOR_MAP.get(vendor_clean.lower(), vendor_clean.lower().replace(" ", "_"))
+        vendor_key = vendor_clean.lower()
+        if vendor_key.startswith("udisk"):
+            # WiiM Ultra USB playback can report mode=10 (network/local playback)
+            # with vendor=UDiskLocal. Treat the vendor as the stronger signal
+            # and expose the canonical source id from the source catalog.
+            vendor_source = "usb"
+        else:
+            vendor_source = _VENDOR_MAP.get(vendor_key, vendor_key.replace(" ", "_"))
         current_source = data.get("source")
         should_override = current_source in {None, "wifi", "unknown"}
         # Issue #6: allow known network apps to override incorrect bluetooth mode mapping.

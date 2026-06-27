@@ -484,14 +484,15 @@ The library automatically handles several edge cases and device quirks related t
 - Most sources (USB, Line In, etc.): **milliseconds** (1,000 ms = 1 second)
 - Streaming services (Spotify, Tidal, Qobuz, etc.): **microseconds** (1,000,000 μs = 1 second)
 
-**Solution**: The library uses intelligent auto-detection with a 10-hour threshold:
+**Solution**: The library uses source-aware auto-detection:
 
 ```python
-# Values < 36,000,000 = treated as milliseconds
-# Values ≥ 36,000,000 = treated as microseconds
+# Known local/network/file sources = treated as milliseconds
+# Other values < 36,000,000 = treated as milliseconds
+# Other values ≥ 36,000,000 = treated as microseconds
 
-# This works because most tracks are < 10 hours
-# If a value would be > 10 hours in ms, it's likely μs instead
+# This keeps very long local files working while preserving the
+# streaming-service microsecond fallback.
 ```
 
 **Impact**: Position and duration values are always returned in **seconds** regardless of source. No manual conversion needed.
@@ -528,11 +529,10 @@ else:
 if position > 30 and duration < 120:
     media_duration = None  # Hide bad duration
     
-# Scenario B: Position clearly exceeds reasonable duration
-# → Likely firmware bug in position reporting
-# → Reset position to 0
+# Scenario B: Position clearly exceeds reported duration
+# → Prefer hiding unreliable duration over changing device position
 else:
-    media_position = 0  # Reset bad position
+    media_duration = None
 ```
 
 **Additional protection**: Position is clamped to duration at the property level:
@@ -593,7 +593,7 @@ Different sources have different position/duration characteristics:
 
 | Source Type | Position | Duration | Time Unit | Notes |
 |-------------|----------|----------|-----------|-------|
-| **USB/Local Files** | ✅ Always | ✅ Always | milliseconds | Most reliable |
+| **USB/Local Files** | ✅ Always | ✅ Always | milliseconds | Long files can exceed 10h |
 | **Spotify/Tidal/Qobuz** | ✅ Always | ✅ Always | **microseconds** | Auto-detected |
 | **AirPlay** | ✅ Always | ✅ Always | milliseconds | totlen = total duration |
 | **Bluetooth** | ❌ Often N/A | ❌ Often N/A | - | Commonly reports `curpos=0`/`totlen=0` even while playing (depends on phone/app/firmware) |

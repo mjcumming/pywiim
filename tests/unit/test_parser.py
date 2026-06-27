@@ -42,6 +42,16 @@ class TestNormalizeTimeValue:
         result = _normalize_time_value(36000000 + 1, "position", "spotify")
         assert result == 36  # microseconds
 
+    def test_normalize_long_local_network_values_as_milliseconds(self):
+        """Long local/network files can exceed 10 hours and still report milliseconds."""
+        result = _normalize_time_value(41000000, "duration", "10")
+        assert result == 41000
+
+    def test_normalize_udisk_values_as_milliseconds(self):
+        """USB/UDisk playback reports long curpos/totlen values in milliseconds."""
+        result = _normalize_time_value(89784000, "duration", "10", "UDiskLocal")
+        assert result == 89784
+
 
 class TestHexDecoding:
     """Test hex-encoded string decoding."""
@@ -161,6 +171,65 @@ class TestParsePlayerStatus:
         parsed, _ = parse_player_status(raw)
 
         assert parsed["duration"] == 240
+
+    def test_parse_long_mode_10_duration_milliseconds(self):
+        """Mode 10 local/network playback can report >10h durations in milliseconds."""
+        raw = {"status": "play", "mode": "10", "curpos": 230000, "totlen": 41000000}
+        parsed, _ = parse_player_status(raw)
+
+        assert parsed["position"] == 230
+        assert parsed["duration"] == 41000
+
+    def test_parse_long_udisk_duration_milliseconds(self):
+        """UDisk playback can report very long durations in milliseconds."""
+        raw = {
+            "status": "play",
+            "mode": "10",
+            "vendor": "UDiskLocal",
+            "curpos": 5732000,
+            "totlen": 89784000,
+        }
+        parsed, _ = parse_player_status(raw)
+
+        assert parsed["position"] == 5732
+        assert parsed["duration"] == 89784
+        assert parsed["source"] == "usb"
+        assert parsed["vendor"] == "UDiskLocal"
+
+    def test_parse_udisk_vendor_uses_usb_source(self):
+        """WiiM Ultra USB playback reports mode 10 plus UDisk vendor."""
+        raw = {
+            "type": "0",
+            "ch": "0",
+            "mode": "10",
+            "loop": "4",
+            "eq": "0",
+            "vendor": "UDiskLocal",
+            "status": "play",
+            "curpos": "5732",
+            "offset_pts": "5739",
+            "totlen": "89784",
+            "Title": "547261636B2030322047756974617273205370616E6973682044616E636573204578636572707473",
+            "Artist": "566172696F75732041727469737473",
+            "Album": "5068696C6861726D6F6E696320417564696F20323032332044656D6F204344",
+            "alarmflag": "0",
+            "plicount": "0",
+            "plicurr": "0",
+            "vol": "12",
+            "mute": "0",
+        }
+        parsed, _ = parse_player_status(raw)
+
+        assert parsed["source"] == "usb"
+        assert parsed["vendor"] == "UDiskLocal"
+        assert parsed["title"] == "Track 02 Guitars Spanish Dances Excerpts"
+
+    def test_parse_dlna_mode_without_vendor_uses_dlna_source(self):
+        """DLNA playback may report mode 2 without a vendor field."""
+        raw = {"status": "play", "mode": "2"}
+        parsed, _ = parse_player_status(raw)
+
+        assert parsed["source"] == "dlna"
 
     def test_parse_duration_zero(self):
         """Test duration of 0 (streaming services)."""

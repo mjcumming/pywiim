@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.17] - 2026-06-27
+
+### Fixed
+- **Long local/network media durations** — `curpos` / `totlen` parsing is now source-aware, so
+  local URL playback (`mode=10`) and USB/UDisk tracks keep millisecond time units even when the
+  raw duration exceeds the old 10-hour heuristic threshold. Very long tracks no longer collapse to
+  tiny durations such as `41s` or trigger false position > duration warnings
+  ([mjcumming/wiim#251](https://github.com/mjcumming/wiim/issues/251),
+  [#21](https://github.com/mjcumming/pywiim/issues/21)).
+- **WiiM Ultra USB source detection** — `getPlayerStatusEx` responses with `vendor=UDisk*`
+  now normalize to canonical source `usb` even when firmware reports `mode=10`
+  ([#21](https://github.com/mjcumming/pywiim/issues/21)).
+
 ## [2.2.16] - 2026-06-20
 
 ### Fixed
