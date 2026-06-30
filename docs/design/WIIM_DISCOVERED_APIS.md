@@ -13,6 +13,7 @@ payloads have been tested across real devices and firmware versions.
 | Command | pywiim helper | Model | Current use |
 | --- | --- | --- | --- |
 | `getAudioInputEnable` | `client.get_audio_input_enable()` | `AudioInputEnable` | Read-only input enable metadata |
+| `getAudioInputCapbility` | `client.get_audio_input_capability()` | `AudioInputCapability` | Read-only input capability metadata |
 | `getModeRename` | `client.get_mode_rename()` | `dict[str, str]` | Read-only user source-label map |
 | `GetAcousticCapability` | `client.get_acoustic_capability()` | `AcousticCapability` | Read-only acoustic capability blocks |
 | `getAllRoutines` | `client.get_all_routines()` | `RoutineList` | Read-only routine list |
@@ -43,6 +44,29 @@ Example shape:
 Possible later use: enrich `source_catalog` with per-device input enablement.
 This should be an overlay on stable source IDs and profile/hardware knowledge,
 not a replacement for source identity.
+
+## `getAudioInputCapbility`
+
+The firmware command is misspelled as `Capbility`. It returns available input
+modes without the enable/disable state from `getAudioInputEnable`.
+
+Example shape:
+
+```json
+{
+  "ver": "1.0",
+  "audioInput": [
+    {"mode": "wifi"},
+    {"mode": "line-in"},
+    {"mode": "bluetooth"},
+    {"mode": "optical"}
+  ]
+}
+```
+
+Possible later use: fallback or enrichment source for `source_catalog` when
+`InputList` is absent. Treat modes as raw device labels and normalize through
+pywiim's existing source normalization before any user-facing behavior.
 
 ## `getModeRename`
 
@@ -150,6 +174,30 @@ Possible later use: enrich audio-output availability, especially USB DAC
 presence and capability metadata. Do not replace the existing output probe
 strategy until this endpoint is tested on multiple WiiM models and firmware
 versions.
+
+## Related daily-use APIs
+
+The same app-string sweep exposed a few endpoints that are closer to daily
+listening than one-time setup:
+
+| Command | pywiim helper | Model | Current use |
+| --- | --- | --- | --- |
+| `EQGetLV2Band:http://moddevices.com/plugins/caps/Eq10HP` | `client.get_graphic_eq_bands()` | `GraphicEQSettings` | Read-only graphic EQ state |
+| `EQGetLV2SourceBandEx:{...Eq10HP...}` | `client.get_graphic_eq_bands(source_name=...)` | `GraphicEQSettings` | Read-only per-source graphic EQ state |
+| `EQv2GetList:http://moddevices.com/plugins/caps/Eq10HP` | `client.get_graphic_eq_preset_list()` | `dict[str, list[str]]` | Read-only graphic EQ preset names |
+| `RoomCorrGet` | `client.get_room_correction()` | `RoomCorrectionSettings` | Read-only room-correction state |
+
+Write commands for graphic EQ and room correction are intentionally not exposed
+yet. Use the WiiM app for setup/configuration until write behavior is validated
+across more models and firmware versions.
+
+## Intentionally Not Exposed
+
+One-off setup, account, network, update-server, token, static-IP, Wi-Fi, Alexa,
+and factory-reset style commands from the app bundle are not good Home
+Assistant surfaces. pywiim may keep selected read-only diagnostics over time,
+but user-facing HA entities/services should focus on daily listening and
+automation workflows.
 
 ## Real-Device Testing
 

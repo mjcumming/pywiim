@@ -21,11 +21,12 @@ from urllib.parse import quote
 from pydantic import ValidationError
 
 from ..exceptions import WiiMError
-from ..models import AcousticCapability, AudioInputEnable, RoutineList
+from ..models import AcousticCapability, AudioInputCapability, AudioInputEnable, RoutineList
 from .constants import (
     API_ENDPOINT_DISPLAY_CONFIG,
     API_ENDPOINT_GET_ACOUSTIC_CAPABILITY,
     API_ENDPOINT_GET_ALL_ROUTINES,
+    API_ENDPOINT_GET_AUDIO_INPUT_CAPABILITY,
     API_ENDPOINT_GET_AUDIO_INPUT_ENABLE,
     API_ENDPOINT_GET_LED_MCU,
     API_ENDPOINT_GET_LED_SWITCH,
@@ -75,6 +76,21 @@ class MiscAPI:
             result = await self._request(API_ENDPOINT_GET_AUDIO_INPUT_ENABLE)  # type: ignore[attr-defined]
             if isinstance(result.parsed, dict) and not _is_unsupported_discovered_payload(result.parsed):
                 return AudioInputEnable.model_validate(result.parsed)
+        except (ValidationError, WiiMError):
+            return None
+        return None
+
+    async def get_audio_input_capability(self) -> AudioInputCapability | None:
+        """Return WiiM input capability metadata, if available.
+
+        The firmware command is named ``getAudioInputCapbility`` (misspelled).
+        It returns available input modes without enable/disable state. This is
+        read-only and expected to be absent on many non-WiiM LinkPlay devices.
+        """
+        try:
+            result = await self._request(API_ENDPOINT_GET_AUDIO_INPUT_CAPABILITY)  # type: ignore[attr-defined]
+            if isinstance(result.parsed, dict) and not _is_unsupported_discovered_payload(result.parsed):
+                return AudioInputCapability.model_validate(result.parsed)
         except (ValidationError, WiiMError):
             return None
         return None

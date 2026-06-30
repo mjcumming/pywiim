@@ -399,6 +399,7 @@ DISPLAY_BRIGHTNESS_MIN = 1
 DISPLAY_BRIGHTNESS_MAX = 100
 DISPLAY_DEFAULT_BRIGHTNESS = 100
 API_ENDPOINT_GET_AUDIO_INPUT_ENABLE = "/httpapi.asp?command=getAudioInputEnable"
+API_ENDPOINT_GET_AUDIO_INPUT_CAPABILITY = "/httpapi.asp?command=getAudioInputCapbility"
 API_ENDPOINT_GET_MODE_RENAME = "/httpapi.asp?command=getModeRename"
 API_ENDPOINT_GET_ACOUSTIC_CAPABILITY = "/httpapi.asp?command=GetAcousticCapability"
 API_ENDPOINT_GET_ALL_ROUTINES = "/httpapi.asp?command=getAllRoutines"
@@ -441,10 +442,9 @@ API_ENDPOINT_SUBWOOFER_SET = "/httpapi.asp?command=setSubLPF:"
 API_ENDPOINT_TRIGGER_OUT_STATUS = "/httpapi.asp?command=getTriggeroutStatus"
 API_ENDPOINT_TRIGGER_OUT_SET = "/httpapi.asp?command=setTriggeroutStatus:"
 
-# PEQ (Parametric Equalizer) endpoints - official WiiM LV2 PEQ API
+# PEQ / GEQ endpoints - official WiiM LV2 EQ API
 # pluginURI (implemented in pywiim): http://moddevices.com/plugins/caps/EqNp
-# Same endpoints also accept other LV2 plugins (e.g. graphic 10-band Eq10HP);
-# pywiim does not implement Eq10HP — see docs/integration/API_REFERENCE.md (PEQ section).
+# graphic 10-band pluginURI: http://moddevices.com/plugins/caps/Eq10HP
 API_ENDPOINT_PEQ_GET_BAND = "/httpapi.asp?command=EQGetLV2BandEx:"
 API_ENDPOINT_PEQ_GET_SOURCE_BAND = "/httpapi.asp?command=EQGetLV2SourceBandEx:"
 API_ENDPOINT_PEQ_SET_BAND = "/httpapi.asp?command=EQSetLV2Band:"
@@ -464,6 +464,13 @@ API_ENDPOINT_PEQ_SET_CHANNEL_MODE = "/httpapi.asp?command=EQSetChannelMode:"
 
 # PEQ plugin URI (Parametric Equalizer)
 PEQ_PLUGIN_URI = "http://moddevices.com/plugins/caps/EqNp"
+
+# GEQ plugin URI (Graphic 10-band Equalizer)
+GEQ_PLUGIN_URI = "http://moddevices.com/plugins/caps/Eq10HP"
+
+# Room correction read endpoint. Uses the PEQ-shaped EqNp LV2 payload, but it is
+# a distinct device-side correction block rather than the user PEQ preset.
+API_ENDPOINT_ROOM_CORRECTION_GET = "/httpapi.asp?command=RoomCorrGet"
 
 # PEQ band letters (10 active bands: a-j; k-l exist but default to Off)
 PEQ_BAND_LETTERS = ("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")

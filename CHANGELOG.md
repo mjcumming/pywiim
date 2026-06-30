@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **More read-only WiiM daily-use APIs** — `WiiMClient` now exposes
+  `get_audio_input_capability()` for the firmware-spelled `getAudioInputCapbility`,
+  read-only LV2 graphic EQ helpers (`get_graphic_eq_bands()`,
+  `get_graphic_eq_preset_list()` for `Eq10HP`), and read-only room-correction
+  state (`get_room_correction()`). These APIs are documented as daily-use or
+  capability/diagnostic surfaces; one-off setup, account, network, and token
+  endpoints remain intentionally out of scope. Diagnostics and verify CLIs now
+  include these read-only probes/summaries.
+
 ## [2.2.18] - 2026-06-27
 
 ### Added

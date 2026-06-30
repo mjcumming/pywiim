@@ -27,6 +27,8 @@ __all__ = [
     "DeviceGroupInfo",
     "AudioInputEnableItem",
     "AudioInputEnable",
+    "AudioInputCapabilityItem",
+    "AudioInputCapability",
     "AcousticCapability",
     "RoutineStep",
     "Routine",
@@ -301,6 +303,24 @@ class AudioInputEnable(_WiimBase):
 
     version: str | None = Field(None, alias="ver")
     audio_input: list[AudioInputEnableItem] = Field(default_factory=list, alias="audioInput")
+
+
+class AudioInputCapabilityItem(_WiimBase):
+    """One entry from WiiM ``getAudioInputCapbility``.
+
+    The command name is misspelled in firmware ("Capbility"). It returns source
+    modes that the device can expose, without the per-input enable flag returned
+    by ``getAudioInputEnable``.
+    """
+
+    mode: str
+
+
+class AudioInputCapability(_WiimBase):
+    """Payload from WiiM ``getAudioInputCapbility``."""
+
+    version: str | None = Field(None, alias="ver")
+    audio_input: list[AudioInputCapabilityItem] = Field(default_factory=list, alias="audioInput")
 
 
 class AcousticCapability(_WiimBase):

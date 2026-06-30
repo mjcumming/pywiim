@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import json
 import sys
+from dataclasses import asdict
 from typing import Any
 
 from ..client import WiiMClient
@@ -812,6 +813,82 @@ class FeatureTester:
             self.results["failed"].append(f"eq: Error - {str(e)}")
             print(f"   ✗ Error: {e}")
 
+    async def test_advanced_eq_readonly(self) -> None:
+        """Test advanced WiiM EQ read-only endpoints."""
+        print("\n🎚️  Testing Advanced EQ Read-Only APIs...")
+
+        if not self.client.capabilities.get("supports_peq", False):
+            self.results["skipped"].append("advanced_eq: Not supported")
+            print("   ⊘ Advanced EQ not supported")
+            return
+
+        try:
+            peq_presets = await self.client.get_peq_preset_list()
+            self.results["passed"].append("advanced_eq: get_peq_preset_list")
+            print(
+                "   ✓ get_peq_preset_list "
+                f"({len(peq_presets.get('preset', []))} built-in, {len(peq_presets.get('custom', []))} custom)"
+            )
+            self._print_data("PEQ Presets", peq_presets, show_always=True)
+        except Exception as e:
+            self.results["warnings"].append(f"advanced_eq: get_peq_preset_list - {str(e)}")
+            print(f"   ⚠️  get_peq_preset_list: {e}")
+
+        try:
+            graphic_eq = await self.client.get_graphic_eq_bands()
+            self.results["passed"].append("advanced_eq: get_graphic_eq_bands")
+            print(
+                "   ✓ get_graphic_eq_bands "
+                f"({len(graphic_eq.bands)} bands, preset={graphic_eq.name or 'Unknown'})"
+            )
+            self._print_data(
+                "Graphic EQ",
+                {
+                    "enabled": graphic_eq.enabled,
+                    "name": graphic_eq.name,
+                    "source_name": graphic_eq.source_name,
+                    "eq_level": graphic_eq.eq_level,
+                    "bands": [asdict(band) for band in graphic_eq.bands],
+                },
+                show_always=True,
+            )
+        except Exception as e:
+            self.results["warnings"].append(f"advanced_eq: get_graphic_eq_bands - {str(e)}")
+            print(f"   ⚠️  get_graphic_eq_bands: {e}")
+
+        try:
+            graphic_presets = await self.client.get_graphic_eq_preset_list()
+            self.results["passed"].append("advanced_eq: get_graphic_eq_preset_list")
+            print(
+                "   ✓ get_graphic_eq_preset_list "
+                f"({len(graphic_presets.get('preset', []))} built-in, "
+                f"{len(graphic_presets.get('custom', []))} custom)"
+            )
+            self._print_data("Graphic EQ Presets", graphic_presets, show_always=True)
+        except Exception as e:
+            self.results["warnings"].append(f"advanced_eq: get_graphic_eq_preset_list - {str(e)}")
+            print(f"   ⚠️  get_graphic_eq_preset_list: {e}")
+
+        try:
+            room = await self.client.get_room_correction()
+            self.results["passed"].append("advanced_eq: get_room_correction")
+            print(f"   ✓ get_room_correction ({len(room.bands)} bands, enabled={room.enabled})")
+            self._print_data(
+                "Room Correction",
+                {
+                    "enabled": room.enabled,
+                    "name": room.name,
+                    "source_name": room.source_name,
+                    "eq_level": room.eq_level,
+                    "plugin_uri": room.plugin_uri,
+                    "bands": [asdict(band) for band in room.bands],
+                },
+                show_always=True,
+            )
+        except Exception as e:
+            self.results["warnings"].append(f"advanced_eq: get_room_correction - {str(e)}")
+            print(f"   ⚠️  get_room_correction: {e}")
+
     async def test_preset_controls(self) -> None:
         """Test preset controls."""
         print("\n⭐ Testing Preset Controls...")
@@ -1150,6 +1227,7 @@ class FeatureTester:
         await self.test_source_controls()
         await self.test_audio_output()
         await self.test_eq_controls()
+        await self.test_advanced_eq_readonly()
         await self.test_preset_controls()
         await self.test_multiroom_controls()
         await self.test_bluetooth_controls()

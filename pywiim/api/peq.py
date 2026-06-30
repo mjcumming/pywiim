@@ -59,6 +59,8 @@ from .constants import (
     API_ENDPOINT_PEQ_SOURCE_LOAD,
     API_ENDPOINT_PEQ_SOURCE_OFF,
     API_ENDPOINT_PEQ_SOURCE_SAVE,
+    API_ENDPOINT_ROOM_CORRECTION_GET,
+    GEQ_PLUGIN_URI,
     PEQ_BAND_LETTERS,
     PEQ_CHANNEL_MODE_LR,
     PEQ_CHANNEL_MODE_STEREO,
@@ -87,6 +89,9 @@ __all__ = [
     "PEQBand",
     "PEQSettings",
     "PEQPresetInfo",
+    "GraphicEQBand",
+    "GraphicEQSettings",
+    "RoomCorrectionSettings",
     "PEQ_MODE_OFF",
     "PEQ_MODE_LOW_SHELF",
     "PEQ_MODE_PEAK",
@@ -94,6 +99,19 @@ __all__ = [
     "PEQ_CHANNEL_MODE_STEREO",
     "PEQ_CHANNEL_MODE_LR",
 ]
+
+GEQ_BAND_NAMES = (
+    "band31hz",
+    "band63hz",
+    "band125hz",
+    "band250hz",
+    "band500hz",
+    "band1khz",
+    "band2khz",
+    "band4khz",
+    "band8khz",
+    "band16khz",
+)
 
 
 @dataclass
@@ -190,6 +208,39 @@ class PEQPresetInfo:
     preset_type: str = "Custom"
 
 
+@dataclass
+class GraphicEQBand:
+    """One band from WiiM's LV2 10-band graphic EQ plugin."""
+
+    name: str
+    gain: float = 0.0
+
+
+@dataclass
+class GraphicEQSettings:
+    """Settings for WiiM's LV2 10-band graphic EQ plugin (Eq10HP)."""
+
+    source_name: str = ""
+    enabled: bool = False
+    channel_mode: str = PEQ_CHANNEL_MODE_STEREO
+    name: str = ""
+    eq_level: int | None = None
+    bands: list[GraphicEQBand] = field(default_factory=list)
+
+
+@dataclass
+class RoomCorrectionSettings:
+    """Read-only room-correction settings from ``RoomCorrGet``."""
+
+    source_name: str = ""
+    enabled: bool = False
+    channel_mode: str = PEQ_CHANNEL_MODE_STEREO
+    name: str = ""
+    eq_level: int | None = None
+    plugin_uri: str = PEQ_PLUGIN_URI
+    bands: list[PEQBand] = field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -217,6 +268,58 @@ def _parse_eq_band_array(band_array: list[dict[str, Any]]) -> list[PEQBand]:
         band = PEQBand.from_api_params(letter, param_map)
         bands.append(band)
     return bands
+
+
+def _parse_graphic_eq_band_array(band_array: list[dict[str, Any]]) -> list[GraphicEQBand]:
+    """Parse Eq10HP band array into stable 10-band graphic EQ objects."""
+    gains: dict[str, float] = {}
+    for entry in band_array:
+        pname = entry.get("param_name")
+        val = entry.get("value")
+        if pname and val is not None:
+            try:
+                gains[str(pname)] = float(val)
+            except (ValueError, TypeError):
+                _LOGGER.debug("GEQ: skipping unreadable param %r = %r", pname, val)
+
+    return [GraphicEQBand(name=name, gain=gains.get(name, 0.0)) for name in GEQ_BAND_NAMES]
+
+
+def _parse_graphic_eq_settings(raw: dict[str, Any]) -> GraphicEQSettings:
+    """Convert a raw Eq10HP API response into :class:`GraphicEQSettings`."""
+    eq_level = raw.get("EQLevel")
+    try:
+        parsed_eq_level = int(eq_level) if eq_level is not None else None
+    except (TypeError, ValueError):
+        parsed_eq_level = None
+
+    return GraphicEQSettings(
+        source_name=str(raw.get("source_name", "")),
+        enabled=str(raw.get("EQStat", "Off")).strip().lower() == "on",
+        channel_mode=str(raw.get("channelMode", PEQ_CHANNEL_MODE_STEREO)),
+        name=str(raw.get("Name", "")),
+        eq_level=parsed_eq_level,
+        bands=_parse_graphic_eq_band_array(raw.get("EQBand", [])),
+    )
+
+
+def _parse_room_correction_settings(raw: dict[str, Any]) -> RoomCorrectionSettings:
+    """Convert a raw RoomCorrGet response into :class:`RoomCorrectionSettings`."""
+    eq_level = raw.get("EQLevel")
+    try:
+        parsed_eq_level = int(eq_level) if eq_level is not None else None
+    except (TypeError, ValueError):
+        parsed_eq_level = None
+
+    return RoomCorrectionSettings(
+        source_name=str(raw.get("source_name", "")),
+        enabled=str(raw.get("EQStat", "Off")).strip().lower() == "on",
+        channel_mode=str(raw.get("channelMode", PEQ_CHANNEL_MODE_STEREO)),
+        name=str(raw.get("Name", "")),
+        eq_level=parsed_eq_level,
+        plugin_uri=str(raw.get("pluginURI", PEQ_PLUGIN_URI)),
+        bands=_parse_eq_band_array(raw.get("EQBand", [])),
+    )
 
 
 def _encode_json_param(payload: dict[str, Any]) -> str:
@@ -289,6 +392,45 @@ class PEQAPI:
 
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
         return _parse_peq_settings(raw.parsed if isinstance(raw.parsed, dict) else {})
+
+    async def get_graphic_eq_bands(self, source_name: str | None = None) -> GraphicEQSettings:
+        """Get WiiM LV2 graphic 10-band EQ settings.
+
+        This targets the ``Eq10HP`` LV2 plugin used by WiiM's graphic EQ. It is
+        read-only for now; use the WiiM app for setup until write behavior is
+        tested across more firmware versions.
+        """
+        self._require_peq()
+        _LOGGER.debug("get_graphic_eq_bands source=%s", source_name)
+        if source_name is not None:
+            payload = {"source_name": source_name, "pluginURI": GEQ_PLUGIN_URI}
+            endpoint = API_ENDPOINT_PEQ_GET_SOURCE_BAND + _encode_json_param(payload)
+        else:
+            endpoint = API_ENDPOINT_PEQ_GET_BAND + quote(GEQ_PLUGIN_URI, safe="")
+
+        raw = await self._request(endpoint)  # type: ignore[attr-defined]
+        return _parse_graphic_eq_settings(raw.parsed if isinstance(raw.parsed, dict) else {})
+
+    async def get_graphic_eq_preset_list(self) -> dict[str, list[str]]:
+        """Get all custom and preset names for the WiiM graphic EQ plugin."""
+        self._require_peq()
+        endpoint = API_ENDPOINT_PEQ_GET_LIST + quote(GEQ_PLUGIN_URI, safe="")
+        raw = await self._request(endpoint)  # type: ignore[attr-defined]
+        data = raw.parsed if isinstance(raw.parsed, dict) else {}
+        return {
+            "custom": list(data.get("custom", [])),
+            "preset": list(data.get("preset", [])),
+        }
+
+    async def get_room_correction(self) -> RoomCorrectionSettings:
+        """Get WiiM room-correction settings.
+
+        The payload is PEQ-shaped but belongs to the device's room-correction
+        block, not the user PEQ preset. This helper is intentionally read-only.
+        """
+        self._require_peq()
+        raw = await self._request(API_ENDPOINT_ROOM_CORRECTION_GET)  # type: ignore[attr-defined]
+        return _parse_room_correction_settings(raw.parsed if isinstance(raw.parsed, dict) else {})
 
     # ------------------------------------------------------------------
     # Tune (set)

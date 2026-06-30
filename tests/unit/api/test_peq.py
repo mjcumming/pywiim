@@ -20,10 +20,14 @@ from pywiim.api.constants import (
     PEQ_MODE_PEAK,
 )
 from pywiim.api.peq import (
+    GraphicEQSettings,
     PEQBand,
     PEQSettings,
+    RoomCorrectionSettings,
     _parse_eq_band_array,
+    _parse_graphic_eq_settings,
     _parse_peq_settings,
+    _parse_room_correction_settings,
     _validate_channel_mode,
     _validate_frequency,
     _validate_gain,
@@ -195,6 +199,79 @@ class TestParsePeqSettings:
         assert len(settings.bands) == 10
 
 
+class TestParseGraphicEqSettings:
+    """Tests for Eq10HP graphic EQ parsing."""
+
+    def test_graphic_eq_response(self):
+        """Graphic EQ response returns 10 named gain bands."""
+        raw = {
+            "EQStat": "On",
+            "EQLevel": 1,
+            "source_name": "wifi",
+            "Name": "Acoustic",
+            "channelMode": PEQ_CHANNEL_MODE_STEREO,
+            "EQBand": [
+                {"param_name": "band31hz", "value": 5.0},
+                {"param_name": "band1khz", "value": 1.8},
+                {"param_name": "band16khz", "value": "2.2"},
+            ],
+        }
+
+        settings = _parse_graphic_eq_settings(raw)
+
+        assert isinstance(settings, GraphicEQSettings)
+        assert settings.enabled is True
+        assert settings.eq_level == 1
+        assert settings.source_name == "wifi"
+        assert settings.name == "Acoustic"
+        assert len(settings.bands) == 10
+        assert settings.bands[0].name == "band31hz"
+        assert settings.bands[0].gain == 5.0
+        assert settings.bands[5].name == "band1khz"
+        assert settings.bands[5].gain == 1.8
+        assert settings.bands[9].gain == 2.2
+
+    def test_graphic_eq_defaults(self):
+        """Missing graphic EQ bands default to 0 dB."""
+        settings = _parse_graphic_eq_settings({})
+
+        assert settings.enabled is False
+        assert len(settings.bands) == 10
+        assert all(band.gain == 0.0 for band in settings.bands)
+
+
+class TestParseRoomCorrectionSettings:
+    """Tests for RoomCorrGet parsing."""
+
+    def test_room_correction_response(self):
+        """Room correction response is parsed as a PEQ-shaped read-only block."""
+        raw = {
+            "EQStat": "On",
+            "EQLevel": 2,
+            "source_name": "default",
+            "Name": "Room",
+            "pluginURI": "http://moddevices.com/plugins/caps/EqNp",
+            "channelMode": PEQ_CHANNEL_MODE_STEREO,
+            "EQBand": [
+                {"param_name": "a_mode", "value": 1},
+                {"param_name": "a_freq", "value": 31.25},
+                {"param_name": "a_q", "value": 0.25},
+                {"param_name": "a_gain", "value": -2.5},
+            ],
+        }
+
+        settings = _parse_room_correction_settings(raw)
+
+        assert isinstance(settings, RoomCorrectionSettings)
+        assert settings.enabled is True
+        assert settings.eq_level == 2
+        assert settings.source_name == "default"
+        assert settings.name == "Room"
+        assert len(settings.bands) == 10
+        assert settings.bands[0].frequency == 31.25
+        assert settings.bands[0].gain == -2.5
+
+
 # ---------------------------------------------------------------------------
 # PEQAPI public methods (via mock_client)
 # ---------------------------------------------------------------------------
@@ -240,6 +317,82 @@ class TestGetPeqBands:
         mock_client._capabilities = {"supports_peq": False}
         with pytest.raises(WiiMError, match="supports_peq"):
             await mock_client.get_peq_bands()
+
+
+class TestGetGraphicEqBands:
+    """Tests for read-only Eq10HP graphic EQ helpers."""
+
+    @pytest.mark.asyncio
+    async def test_get_graphic_eq_bands_no_source(self, mock_client):
+        """get_graphic_eq_bands without source calls Eq10HP endpoint."""
+        raw = {
+            "EQStat": "On",
+            "channelMode": PEQ_CHANNEL_MODE_STEREO,
+            "EQBand": [{"param_name": "band31hz", "value": 1.0}],
+        }
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=raw, raw=None))
+
+        result = await mock_client.get_graphic_eq_bands()
+
+        assert isinstance(result, GraphicEQSettings)
+        call_args = mock_client._request.call_args[0][0]
+        assert "EQGetLV2BandEx" in call_args
+        assert "Eq10HP" in call_args
+
+    @pytest.mark.asyncio
+    async def test_get_graphic_eq_bands_with_source(self, mock_client):
+        """get_graphic_eq_bands with source calls source-scoped Eq10HP endpoint."""
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"EQBand": []}, raw=None))
+
+        result = await mock_client.get_graphic_eq_bands(source_name="wifi")
+
+        assert isinstance(result, GraphicEQSettings)
+        call_args = mock_client._request.call_args[0][0]
+        assert "EQGetLV2SourceBandEx" in call_args
+        assert "source_name" in call_args
+        assert "Eq10HP" in call_args
+
+    @pytest.mark.asyncio
+    async def test_get_graphic_eq_preset_list(self, mock_client):
+        """get_graphic_eq_preset_list returns custom and preset names."""
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(parsed={"custom": ["Desk"], "preset": ["Flat", "Acoustic"]}, raw=None)
+        )
+
+        result = await mock_client.get_graphic_eq_preset_list()
+
+        assert result == {"custom": ["Desk"], "preset": ["Flat", "Acoustic"]}
+        call_args = mock_client._request.call_args[0][0]
+        assert "EQv2GetList" in call_args
+        assert "Eq10HP" in call_args
+
+
+class TestGetRoomCorrection:
+    """Tests for read-only room correction helper."""
+
+    @pytest.mark.asyncio
+    async def test_get_room_correction(self, mock_client):
+        """get_room_correction parses RoomCorrGet payload."""
+        mock_client._request = AsyncMock(
+            return_value=ApiResponse(
+                parsed={
+                    "EQStat": "On",
+                    "EQLevel": 2,
+                    "source_name": "default",
+                    "EQBand": [{"param_name": "a_gain", "value": -3.0}],
+                },
+                raw=None,
+            )
+        )
+
+        result = await mock_client.get_room_correction()
+
+        assert isinstance(result, RoomCorrectionSettings)
+        assert result.enabled is True
+        assert result.eq_level == 2
+        assert result.bands[0].gain == -3.0
+        call_args = mock_client._request.call_args[0][0]
+        assert "RoomCorrGet" in call_args
 
 
 class TestSetPeqBands:

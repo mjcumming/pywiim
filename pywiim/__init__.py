@@ -30,6 +30,7 @@ from .api.constants import (
     ALARM_TRIGGER_ONCE,
     ALARM_TRIGGER_WEEKLY,
     ALARM_TRIGGER_WEEKLY_BITMASK,
+    GEQ_PLUGIN_URI,
     PEQ_CHANNEL_MODE_LR,
     PEQ_CHANNEL_MODE_STEREO,
     PEQ_DEFAULT_FREQUENCIES,
@@ -53,7 +54,7 @@ from .api.constants import (
     SUBWOOFER_PHASE_0,
     SUBWOOFER_PHASE_180,
 )
-from .api.peq import PEQBand, PEQPresetInfo, PEQSettings
+from .api.peq import GraphicEQBand, GraphicEQSettings, PEQBand, PEQPresetInfo, PEQSettings, RoomCorrectionSettings
 from .api.subwoofer import SubwooferStatus
 from .backoff import BackoffController
 from .client import WiiMClient
@@ -77,6 +78,8 @@ from .group import Group
 from .group_helpers import build_group_state_from_players
 from .models import (
     AcousticCapability,
+    AudioInputCapability,
+    AudioInputCapabilityItem,
     AudioInputEnable,
     AudioInputEnableItem,
     DeviceInfo,
@@ -120,6 +123,8 @@ __all__ = [
     "PlayerStatus",
     "AudioInputEnableItem",
     "AudioInputEnable",
+    "AudioInputCapabilityItem",
+    "AudioInputCapability",
     "AcousticCapability",
     "RoutineStep",
     "Routine",
@@ -177,7 +182,11 @@ __all__ = [
     "PEQBand",
     "PEQSettings",
     "PEQPresetInfo",
+    "GraphicEQBand",
+    "GraphicEQSettings",
+    "RoomCorrectionSettings",
     "PEQ_PLUGIN_URI",
+    "GEQ_PLUGIN_URI",
     "PEQ_MODE_OFF",
     "PEQ_MODE_LOW_SHELF",
     "PEQ_MODE_PEAK",

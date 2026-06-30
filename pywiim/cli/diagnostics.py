@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import sys
+from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from typing import Any
 
@@ -190,12 +191,19 @@ class DeviceDiagnostics:
         discovered: dict[str, Any] = {}
 
         async def probe(name: str, func: Any) -> None:
+            def serialize_probe_value(item: Any) -> Any:
+                if hasattr(item, "model_dump"):
+                    return item.model_dump()
+                if is_dataclass(item):
+                    return asdict(item)
+                return item
+
             try:
                 value = await func()
-                if hasattr(value, "model_dump"):
-                    value = value.model_dump()
+                if hasattr(value, "model_dump") or is_dataclass(value):
+                    value = serialize_probe_value(value)
                 elif isinstance(value, list):
-                    value = [item.model_dump() if hasattr(item, "model_dump") else item for item in value]
+                    value = [serialize_probe_value(item) for item in value]
                 discovered[name] = {
                     "supported": value is not None and value != [],
                     "value": value,
@@ -211,10 +219,14 @@ class DeviceDiagnostics:
                 print(f"   ⚠ {name}: {err}")
 
         await probe("getAudioInputEnable", self.client.get_audio_input_enable)
+        await probe("getAudioInputCapbility", self.client.get_audio_input_capability)
         await probe("getModeRename", self.client.get_mode_rename)
         await probe("GetAcousticCapability", self.client.get_acoustic_capability)
         await probe("getAllRoutines", self.client.get_all_routines)
         await probe("getSoundCardModeSupportList", self.client.get_sound_card_mode_support_list)
+        await probe("Eq10HP", self.client.get_graphic_eq_bands)
+        await probe("Eq10HPPresetList", self.client.get_graphic_eq_preset_list)
+        await probe("RoomCorrGet", self.client.get_room_correction)
 
         self.report["discovered_apis"] = discovered
 
@@ -279,6 +291,8 @@ class DeviceDiagnostics:
             ("LED Indicator", self._test_led_indicator),
             ("Display", self._test_display),
             ("PEQ (Advanced EQ)", self._test_peq),
+            ("Graphic EQ", self._test_graphic_eq),
+            ("Room Correction", self._test_room_correction),
         ]
 
         self.report["features"] = {}
@@ -419,6 +433,20 @@ class DeviceDiagnostics:
                             print(f"         - {p}")
                         if len(preset) > 10:
                             print(f"         ... and {len(preset) - 10} more")
+
+                # Special handling for Graphic EQ
+                if name == "Graphic EQ" and result.get("supported"):
+                    print(f"      Current preset: {result.get('name') or 'Unknown'}")
+                    print(f"      Enabled: {result.get('enabled')}")
+                    print(f"      Bands: {result.get('band_count', 0)}")
+                    preset = result.get("preset_names", [])
+                    print(f"      Built-in presets: {len(preset)}")
+
+                # Special handling for Room Correction
+                if name == "Room Correction" and result.get("supported"):
+                    print(f"      Enabled: {result.get('enabled')}")
+                    print(f"      Source: {result.get('source_name') or 'Unknown'}")
+                    print(f"      Bands: {result.get('band_count', 0)}")
             except Exception as err:
                 self.report["features"][name] = {
                     "supported": False,
@@ -738,6 +766,50 @@ class DeviceDiagnostics:
         except Exception as err:
             return {"supported": False, "error": str(err)}
 
+    async def _test_graphic_eq(self) -> dict[str, Any]:
+        """Test read-only WiiM LV2 graphic EQ (Eq10HP)."""
+        try:
+            if not self.client.capabilities.get("supports_peq", False):
+                return {"supported": False, "reason": "Graphic EQ not supported (WiiM only)"}
+            settings = await self.client.get_graphic_eq_bands()
+            preset_list = await self.client.get_graphic_eq_preset_list()
+            return {
+                "supported": True,
+                "enabled": settings.enabled,
+                "name": settings.name,
+                "source_name": settings.source_name,
+                "eq_level": settings.eq_level,
+                "band_count": len(settings.bands),
+                "bands": [asdict(band) for band in settings.bands],
+                "custom_presets": list(preset_list.get("custom", [])),
+                "preset_names": list(preset_list.get("preset", [])),
+            }
+        except WiiMError:
+            return {"supported": False, "reason": "Graphic EQ not available"}
+        except Exception as err:
+            return {"supported": False, "error": str(err)}
+
+    async def _test_room_correction(self) -> dict[str, Any]:
+        """Test read-only WiiM room-correction state."""
+        try:
+            if not self.client.capabilities.get("supports_peq", False):
+                return {"supported": False, "reason": "Room correction not supported (WiiM only)"}
+            settings = await self.client.get_room_correction()
+            return {
+                "supported": True,
+                "enabled": settings.enabled,
+                "name": settings.name,
+                "source_name": settings.source_name,
+                "eq_level": settings.eq_level,
+                "plugin_uri": settings.plugin_uri,
+                "band_count": len(settings.bands),
+                "bands": [asdict(band) for band in settings.bands],
+            }
+        except WiiMError:
+            return {"supported": False, "reason": "Room correction not available"}
+        except Exception as err:
+            return {"supported": False, "error": str(err)}
+
     def _generate_summary(self) -> dict[str, Any]:
         """Generate diagnostic summary."""
         device = self.report.get("device", {})
@@ -946,6 +1018,18 @@ class DeviceDiagnostics:
                 self.report["peq"] = {"supported": False}
         except Exception:
             self.report["peq"] = {"supported": False}
+
+        # Add Graphic EQ (Eq10HP) state if supported
+        try:
+            self.report["graphic_eq"] = await self._test_graphic_eq()
+        except Exception:
+            self.report["graphic_eq"] = {"supported": False}
+
+        # Add room-correction state if supported
+        try:
+            self.report["room_correction"] = await self._test_room_correction()
+        except Exception:
+            self.report["room_correction"] = {"supported": False}
 
         # Generate summary
         self.report["summary"] = self._generate_summary()

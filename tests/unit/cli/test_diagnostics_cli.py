@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from pywiim.api.peq import GraphicEQBand, GraphicEQSettings, RoomCorrectionSettings
 from pywiim.cli.diagnostics import DeviceDiagnostics
 
 
@@ -19,10 +20,14 @@ class DummyClient:
         self._detect_capabilities = AsyncMock()
         self.get_debug_info = AsyncMock(return_value={})
         self.get_audio_input_enable = AsyncMock(return_value=None)
+        self.get_audio_input_capability = AsyncMock(return_value=None)
         self.get_mode_rename = AsyncMock(return_value=None)
         self.get_acoustic_capability = AsyncMock(return_value=None)
         self.get_all_routines = AsyncMock(return_value=None)
         self.get_sound_card_mode_support_list = AsyncMock(return_value=[])
+        self.get_graphic_eq_bands = AsyncMock(return_value=GraphicEQSettings())
+        self.get_graphic_eq_preset_list = AsyncMock(return_value={"custom": [], "preset": []})
+        self.get_room_correction = AsyncMock(return_value=RoomCorrectionSettings())
         self.capabilities = {
             "vendor": "wiim",
             "is_wiim_device": True,
@@ -106,15 +111,22 @@ async def test_gather_discovered_api_info_stores_read_only_probe_results(capsys)
     client = DummyClient()
     client.get_mode_rename = AsyncMock(return_value={"optical": "TV"})
     client.get_sound_card_mode_support_list = AsyncMock(return_value=[{"mode": "usb"}])
+    client.get_graphic_eq_bands = AsyncMock(
+        return_value=GraphicEQSettings(name="Flat", bands=[GraphicEQBand(name="band31hz", gain=0.0)])
+    )
     diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
 
     await diagnostics._gather_discovered_api_info()
 
     result = diagnostics.report["discovered_apis"]
     assert result["getAudioInputEnable"]["supported"] is False
+    assert result["getAudioInputCapbility"]["supported"] is False
     assert result["getModeRename"]["supported"] is True
     assert result["getModeRename"]["value"] == {"optical": "TV"}
     assert result["getSoundCardModeSupportList"]["supported"] is True
+    assert result["Eq10HP"]["supported"] is True
+    assert result["Eq10HP"]["value"]["name"] == "Flat"
+    assert result["RoomCorrGet"]["supported"] is True
     assert "Probing discovered WiiM APIs" in capsys.readouterr().out
 
 
@@ -161,3 +173,46 @@ async def test_channel_balance_feature_skipped_without_capability():
 
     assert result["supported"] is False
     client.get_channel_balance.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_graphic_eq_feature_supported():
+    """_test_graphic_eq summarizes read-only graphic EQ state."""
+    client = DummyClient()
+    client.capabilities = {**client.capabilities, "supports_peq": True}
+    client.get_graphic_eq_bands = AsyncMock(
+        return_value=GraphicEQSettings(
+            enabled=True,
+            name="Acoustic",
+            bands=[GraphicEQBand(name="band31hz", gain=5.0)],
+        )
+    )
+    client.get_graphic_eq_preset_list = AsyncMock(return_value={"custom": [], "preset": ["Flat", "Acoustic"]})
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    result = await diagnostics._test_graphic_eq()
+
+    assert result["supported"] is True
+    assert result["name"] == "Acoustic"
+    assert result["band_count"] == 1
+    assert result["preset_names"] == ["Flat", "Acoustic"]
+
+
+@pytest.mark.asyncio
+async def test_room_correction_feature_supported():
+    """_test_room_correction summarizes read-only room correction state."""
+    client = DummyClient()
+    client.capabilities = {**client.capabilities, "supports_peq": True}
+    client.get_room_correction = AsyncMock(
+        return_value=RoomCorrectionSettings(
+            enabled=False,
+            source_name="default",
+        )
+    )
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    result = await diagnostics._test_room_correction()
+
+    assert result["supported"] is True
+    assert result["enabled"] is False
+    assert result["source_name"] == "default"

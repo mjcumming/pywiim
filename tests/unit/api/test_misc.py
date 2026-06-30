@@ -66,6 +66,47 @@ class TestMiscAPI:
         assert await TestClient().get_audio_input_enable() is None
 
     @pytest.mark.asyncio
+    async def test_get_audio_input_capability(self):
+        """Test getAudioInputCapbility model parsing."""
+        from pywiim.api.constants import API_ENDPOINT_GET_AUDIO_INPUT_CAPABILITY
+        from pywiim.api.misc import MiscAPI
+
+        requests = []
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                return ApiResponse(
+                    parsed={
+                        "ver": "1.0",
+                        "audioInput": [
+                            {"mode": "wifi"},
+                            {"mode": "line-in"},
+                            {"mode": "bluetooth"},
+                        ],
+                    },
+                    raw=None,
+                )
+
+        result = await TestClient().get_audio_input_capability()
+
+        assert requests == [API_ENDPOINT_GET_AUDIO_INPUT_CAPABILITY]
+        assert result is not None
+        assert result.version == "1.0"
+        assert [item.mode for item in result.audio_input] == ["wifi", "line-in", "bluetooth"]
+
+    @pytest.mark.asyncio
+    async def test_get_audio_input_capability_unsupported(self):
+        """Unsupported getAudioInputCapbility returns None."""
+        from pywiim.api.misc import MiscAPI
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                return ApiResponse(parsed={"raw": "unknown command", "error": "unsupported_command"}, raw=None)
+
+        assert await TestClient().get_audio_input_capability() is None
+
+    @pytest.mark.asyncio
     async def test_get_mode_rename(self):
         """Test getModeRename dynamic map parsing."""
         from pywiim.api.constants import API_ENDPOINT_GET_MODE_RENAME
