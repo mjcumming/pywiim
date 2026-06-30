@@ -194,7 +194,7 @@ class DeviceDiagnostics:
             def serialize_probe_value(item: Any) -> Any:
                 if hasattr(item, "model_dump"):
                     return item.model_dump()
-                if is_dataclass(item):
+                if is_dataclass(item) and not isinstance(item, type):
                     return asdict(item)
                 return item
 

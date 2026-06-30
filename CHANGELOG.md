@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.19] - 2026-06-30
+
 ### Added
 - **More read-only WiiM daily-use APIs** — `WiiMClient` now exposes
   `get_audio_input_capability()` for the firmware-spelled `getAudioInputCapbility`,

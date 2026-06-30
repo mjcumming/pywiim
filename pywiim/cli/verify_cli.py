@@ -838,8 +838,7 @@ class FeatureTester:
             graphic_eq = await self.client.get_graphic_eq_bands()
             self.results["passed"].append("advanced_eq: get_graphic_eq_bands")
             print(
-                "   ✓ get_graphic_eq_bands "
-                f"({len(graphic_eq.bands)} bands, preset={graphic_eq.name or 'Unknown'})"
+                "   ✓ get_graphic_eq_bands " f"({len(graphic_eq.bands)} bands, preset={graphic_eq.name or 'Unknown'})"
             )
             self._print_data(
                 "Graphic EQ",
