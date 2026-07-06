@@ -44,7 +44,7 @@ from .api.subwoofer import is_valid_subwoofer_lpf_dict
 from .exceptions import WiiMError
 from .model_names import is_known_wiim_model, is_wiim_12v_trigger_model, is_wiim_ultra
 from .models import DeviceInfo
-from .normalize import normalize_vendor
+from .normalize import canonical_source_key, normalize_vendor
 from .profiles import detect_audio_pro_generation, detect_vendor, get_device_profile
 
 _LOGGER = logging.getLogger(__name__)
@@ -149,6 +149,63 @@ async def _probe_supports_subwoofer(client: Any, device_info: DeviceInfo, capabi
         last_err,
     )
     return None
+
+
+async def _probe_wiim_input_metadata(client: Any, capabilities: dict[str, Any]) -> None:
+    """Probe WiiM-only input metadata and store it as a source overlay.
+
+    Populates (WiiM devices only, best-effort):
+
+    - ``wiim_input_capability``: canonical ids the device reports as physical
+      inputs (``getAudioInputCapbility``) — used to fill gaps in enumeration.
+    - ``wiim_input_enable``: ``{canonical_id: bool}`` from ``getAudioInputEnable``
+      — lets enumeration hide inputs the user disabled in the WiiM app.
+    - ``source_rename``: ``{canonical_id: label}`` from ``getModeRename`` — user
+      custom labels overlaid on the stable ids (never a replacement for identity).
+
+    These are read-only WiiM endpoints absent on most LinkPlay/OEM devices, so
+    the probe is skipped for non-WiiM devices and any failing endpoint is simply
+    left out (no overlay → today's behavior is preserved).
+    """
+    if not capabilities.get("is_wiim_device"):
+        return
+
+    host = getattr(client, "host", "?")
+
+    try:
+        capability = await client.get_audio_input_capability()
+        if capability is not None and capability.audio_input:
+            ids = [canonical_source_key(item.mode) for item in capability.audio_input if item.mode]
+            capabilities["wiim_input_capability"] = [i for i in ids if i]
+    except WiiMError as err:
+        _LOGGER.debug("getAudioInputCapbility probe failed for host=%s: %s", host, err)
+
+    try:
+        enable = await client.get_audio_input_enable()
+        if enable is not None and enable.audio_input:
+            enable_map: dict[str, bool] = {}
+            for item in enable.audio_input:
+                key = canonical_source_key(item.mode)
+                if key:
+                    enable_map[key] = item.enable
+            if enable_map:
+                capabilities["wiim_input_enable"] = enable_map
+    except WiiMError as err:
+        _LOGGER.debug("getAudioInputEnable probe failed for host=%s: %s", host, err)
+
+    try:
+        rename = await client.get_mode_rename()
+        if rename:
+            rename_map: dict[str, str] = {}
+            for mode, label in rename.items():
+                key = canonical_source_key(mode)
+                label_str = str(label).strip()
+                if key and label_str:
+                    rename_map[key] = label_str
+            if rename_map:
+                capabilities["source_rename"] = rename_map
+    except WiiMError as err:
+        _LOGGER.debug("getModeRename probe failed for host=%s: %s", host, err)
 
 
 __all__ = [
@@ -462,6 +519,10 @@ class WiiMCapabilities:
 
         # Subwoofer (getSubLPF) — WiiM-only read probe; same endpoint as get_subwoofer_status_raw()
         capabilities["supports_subwoofer"] = await _probe_supports_subwoofer(client, device_info, capabilities)
+
+        # WiiM-only input metadata (capability list / enable flags / custom labels).
+        # Read-only overlay on stable source ids; absent endpoints leave enumeration unchanged.
+        await _probe_wiim_input_metadata(client, capabilities)
 
         # Get device profile for profile-specific settings (like reboot command)
         # Profile provides device-specific command variations

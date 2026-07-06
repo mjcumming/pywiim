@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from ..api.constants import API_ENDPOINT_GET_CHANNEL_BALANCE
 from ..capabilities import _channel_balance_probe_success
 from ..exceptions import WiiMError
+from ..normalize import source_rename_reverse
 
 if TYPE_CHECKING:
     from . import Player
@@ -91,6 +92,16 @@ class AudioConfiguration:
             return source
 
         source_lower = source.lower().strip()
+
+        # Resolve a user custom label (getModeRename) back to its canonical id so
+        # selecting the renamed source (e.g. "TV") still switches the right input.
+        # Canonical/normalized names below keep working, so existing automations
+        # that pass "Optical In" / "optical" are unaffected.
+        rename_map = self.player.client.capabilities.get("source_rename") if self.player.client else None
+        resolved_id = source_rename_reverse(rename_map).get(source_lower)
+        if resolved_id:
+            source = resolved_id
+            source_lower = resolved_id.lower()
 
         # Handle "Network" display name mapping back to "wifi"
         if source_lower == "network":

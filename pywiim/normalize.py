@@ -10,7 +10,112 @@ from typing import Any
 
 from .models import DeviceInfo
 
-__all__ = ["normalize_device_info", "normalize_vendor"]
+__all__ = [
+    "HARDWARE_SOURCE_KEYS",
+    "canonical_source_key",
+    "normalize_device_info",
+    "normalize_vendor",
+    "source_rename_reverse",
+]
+
+# Canonical ids that represent selectable physical inputs (as opposed to
+# streaming services / virtual sources). Shared by source enumeration, the
+# catalog, and the WiiM input-metadata overlay.
+HARDWARE_SOURCE_KEYS: set[str] = {
+    "network",
+    "wifi",
+    "bluetooth",
+    "line_in",
+    "line_in_2",
+    "aux",
+    "optical",
+    "coaxial",
+    "usb",
+    "hdmi",
+    "phono",
+    "rca",
+}
+
+
+def source_rename_reverse(rename_map: dict[str, str] | None) -> dict[str, str]:
+    """Build a ``{lowercased label: canonical id}`` lookup from ``getModeRename``.
+
+    Firmware can point several mode keys at the same label (e.g. both ``optical``
+    and ``SPDIF-In`` renamed to "Optical Mike"). On such collisions we keep the
+    canonical hardware id (``optical``) so the label resolves back to a real,
+    selectable input rather than an unknown alias.
+    """
+    reverse: dict[str, str] = {}
+    for cid, label in (rename_map or {}).items():
+        key = str(label).strip().lower()
+        if not key:
+            continue
+        if key not in reverse or cid in HARDWARE_SOURCE_KEYS:
+            reverse[key] = cid
+    return reverse
+
+
+def canonical_source_key(source_name: str) -> str:
+    """Normalize a source display name or device mode string to a canonical key.
+
+    Accepts UI display names ("Line In"), device switchmode strings ("line-in",
+    "HDMI"), and discovered-API mode strings (e.g. from ``getAudioInputEnable``)
+    and maps them to the stable ids used by ``Player.source_catalog`` (e.g.
+    ``line_in``, ``hdmi``). This is the single source of truth for source-id
+    normalization; both source enumeration and the WiiM input-capability overlay
+    resolve through it so their ids always agree.
+    """
+    source_lower = source_name.strip().lower()
+    if not source_lower:
+        return ""
+
+    # Direct mappings for UI display names
+    direct_map = {
+        "network": "network",
+        "wifi": "network",
+        "wi-fi": "network",
+        "ethernet": "network",
+        "line in": "line_in",
+        "line in 2": "line_in_2",
+        "aux in": "aux",
+        "optical in": "optical",
+        "coaxial": "coaxial",
+        "usb": "usb",
+        "hdmi": "hdmi",
+        "phono": "phono",
+        "rca": "rca",
+        "airplay": "airplay",
+        "spotify": "spotify",
+        "amazon music": "amazon",
+        "amazon": "amazon",
+        "tidal": "tidal",
+        "qobuz": "qobuz",
+        "deezer": "deezer",
+        "pandora": "pandora",
+        "tunein": "tunein",
+        "iheartradio": "iheartradio",
+        "dlna": "dlna",
+        "bluetooth": "bluetooth",
+    }
+    if source_lower in direct_map:
+        return direct_map[source_lower]
+
+    # Fallback: alphanumeric simplification for resilient matching
+    simple = "".join(ch for ch in source_lower if ch.isalnum())
+    simple_map = {
+        "linein": "line_in",
+        "linein2": "line_in_2",
+        "auxin": "aux",
+        "opticalin": "optical",
+        "coaxialin": "coaxial",
+        "amazonmusic": "amazon",
+        "iheartradio": "iheartradio",
+        "airplay": "airplay",
+    }
+    if simple in simple_map:
+        return simple_map[simple]
+
+    return source_lower.replace(" ", "_").replace("-", "_")
 
 
 def normalize_device_info(device_info: DeviceInfo) -> dict[str, Any]:

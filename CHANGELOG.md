@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-07-06
+
+### Added
+- **Custom input labels and accurate input lists (WiiM)** — source enumeration now
+  consumes the read-only WiiM app APIs discovered in 2.2.18. On WiiM devices,
+  `Player.available_sources` / `source_catalog` overlay:
+  - **`getModeRename`** — user custom labels (e.g. Optical renamed "Optical Mike")
+    are shown as the source display name while the stable id stays canonical
+    (`optical`). `set_source()` resolves the custom label, the canonical name, and
+    the previous normalized name ("Optical In"), so existing automations keep working.
+  - **`getAudioInputEnable`** — inputs the user disabled in the WiiM app are hidden
+    from the source list (the currently active source is always kept for state display).
+  - **`getAudioInputCapbility`** — the device's authoritative input list fills gaps
+    left by `plm_support`/`InputList` guessing.
+
+  These are read-only, WiiM-only overlays probed once at connect. Non-WiiM
+  LinkPlay/OEM devices return no data and keep the existing enumeration behavior
+  unchanged. Firmware that points several mode keys at one label (e.g. `optical`
+  and `SPDIF-In`) resolves to the canonical hardware id. Addresses
+  [mjcumming/wiim#257](https://github.com/mjcumming/wiim/issues/257).
+- **`normalize.canonical_source_key()` / `source_rename_reverse()`** — shared, pure
+  source-id normalization helpers so enumeration, the catalog, and the input overlay
+  agree on ids.
+
 ## [2.2.19] - 2026-06-30
 
 ### Added

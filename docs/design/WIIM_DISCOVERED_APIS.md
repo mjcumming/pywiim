@@ -4,17 +4,18 @@ This note records WiiM HTTP APIs discovered from app traffic and reported in
 [pywiim issue #20](https://github.com/mjcumming/pywiim/issues/20). Treat these
 as WiiM-specific until real-device testing proves broader LinkPlay/OEM support.
 
-pywiim exposes these endpoints as read-only helpers first. Do not wire them into
-source selection, audio-output selection, or Home Assistant behavior until the
-payloads have been tested across real devices and firmware versions.
+pywiim exposes these endpoints as read-only helpers first. The three input
+endpoints below are now consumed as a WiiM-only overlay on source enumeration
+(verified on a real WiiM device); the others remain diagnostics-only until their
+payloads are tested across more devices and firmware versions.
 
 ## Endpoint Summary
 
 | Command | pywiim helper | Model | Current use |
 | --- | --- | --- | --- |
-| `getAudioInputEnable` | `client.get_audio_input_enable()` | `AudioInputEnable` | Read-only input enable metadata |
-| `getAudioInputCapbility` | `client.get_audio_input_capability()` | `AudioInputCapability` | Read-only input capability metadata |
-| `getModeRename` | `client.get_mode_rename()` | `dict[str, str]` | Read-only user source-label map |
+| `getAudioInputEnable` | `client.get_audio_input_enable()` | `AudioInputEnable` | Enable-filter overlay: hides user-disabled inputs from `available_sources` |
+| `getAudioInputCapbility` | `client.get_audio_input_capability()` | `AudioInputCapability` | Authoritative input list: gap-fills enumeration missed by `plm_support`/`InputList` |
+| `getModeRename` | `client.get_mode_rename()` | `dict[str, str]` | Custom label overlay on `source_catalog` names (stable ids preserved) |
 | `GetAcousticCapability` | `client.get_acoustic_capability()` | `AcousticCapability` | Read-only acoustic capability blocks |
 | `getAllRoutines` | `client.get_all_routines()` | `RoutineList` | Read-only routine list |
 | `getSoundCardModeSupportList` | `client.get_sound_card_mode_support_list()` | `list[SoundCardModeSupport]` | Read-only output hardware metadata |
@@ -41,9 +42,9 @@ Example shape:
 }
 ```
 
-Possible later use: enrich `source_catalog` with per-device input enablement.
-This should be an overlay on stable source IDs and profile/hardware knowledge,
-not a replacement for source identity.
+Implemented: overlaid on stable source ids at connect (`wiim_input_enable` in
+`capabilities`). `available_sources` drops inputs with `enable=0`, except the
+currently active source, which stays visible for correct state display.
 
 ## `getAudioInputCapbility`
 
@@ -64,9 +65,10 @@ Example shape:
 }
 ```
 
-Possible later use: fallback or enrichment source for `source_catalog` when
-`InputList` is absent. Treat modes as raw device labels and normalize through
-pywiim's existing source normalization before any user-facing behavior.
+Implemented: gap-fills `available_sources` with authoritative physical inputs
+that `plm_support`/`InputList` enumeration missed (`wiim_input_capability` in
+`capabilities`). Modes are normalized through `canonical_source_key()` and deduped
+by canonical id before use.
 
 ## `getModeRename`
 
@@ -82,9 +84,12 @@ Example shape:
 
 Firmware may return plain `Failed` when no input has been renamed.
 
-Possible later use: add user-facing label metadata to source catalog entries.
-Do not use renamed labels as stable source IDs. For example, if the user names
-Optical "Phono", the stable source ID remains `optical`.
+Implemented: overlaid as the display `name` on `source_catalog` entries and in
+`available_sources` (`source_rename` in `capabilities`). Stable ids are never
+changed — if the user names Optical "Phono", the id stays `optical`. `set_source()`
+resolves the custom label back to the canonical id. When firmware points several
+mode keys at one label (e.g. `optical` and `SPDIF-In` → "Optical Mike"), the
+canonical hardware id wins (`source_rename_reverse()`).
 
 ## `GetAcousticCapability`
 

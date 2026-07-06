@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 
 from ..device_capabilities import filter_plm_inputs, get_device_inputs
 from ..metadata import is_valid_image_url, is_valid_metadata_value
+from ..normalize import HARDWARE_SOURCE_KEYS as _HARDWARE_SOURCE_KEYS
+from ..normalize import canonical_source_key, source_rename_reverse
 from .source_capabilities import SourceCapability, get_source_capabilities
 
 if TYPE_CHECKING:
@@ -27,21 +29,6 @@ _KNOWN_SERVICE_SOURCES: tuple[tuple[str, str], ...] = (
     ("iheartradio", "iHeartRadio"),
     ("dlna", "DLNA"),
 )
-
-_HARDWARE_SOURCE_KEYS: set[str] = {
-    "network",
-    "wifi",
-    "bluetooth",
-    "line_in",
-    "line_in_2",
-    "aux",
-    "optical",
-    "coaxial",
-    "usb",
-    "hdmi",
-    "phono",
-    "rca",
-}
 
 
 class PlayerProperties:
@@ -797,6 +784,14 @@ class PlayerProperties:
         Returns:
             Formatted source name (e.g., "AirPlay", "Line In", "Bluetooth")
         """
+        # User custom labels (getModeRename) overlay the display name for the
+        # matching physical input, while the stable id is unchanged elsewhere.
+        rename_map = self._source_rename_map()
+        if rename_map:
+            label = rename_map.get(canonical_source_key(source))
+            if label:
+                return label
+
         # Special handling for specific sources with non-standard capitalization
         source_lower = source.lower()
         if source_lower == "airplay":
@@ -1188,67 +1183,68 @@ class PlayerProperties:
         if "wifi" not in all_sources_lower and "ethernet" not in all_sources_lower:
             all_sources.append("wifi")
 
+        # WiiM-only overlay: fill gaps from the device's authoritative input-capability
+        # list and hide inputs the user disabled in the WiiM app. No-op when the probes
+        # were unavailable (non-WiiM devices), preserving the heuristic behaviour above.
+        all_sources = self._apply_wiim_input_overlay(all_sources, current_source)
+
         # Normalize source names to Title Case format to match source property
         # This ensures Home Assistant validation works correctly (current source matches available_sources)
+        # _normalize_source_name also applies user custom labels (getModeRename) as an overlay.
         normalized_sources = []
         for source in all_sources:
             normalized_sources.append(self._normalize_source_name(source))
 
         return normalized_sources
 
+    def _source_rename_map(self) -> dict[str, str]:
+        """User custom source labels from ``getModeRename`` ({canonical_id: label})."""
+        if not self.player.client:
+            return {}
+        rename = self.player.client.capabilities.get("source_rename")
+        return rename if isinstance(rename, dict) else {}
+
+    def _apply_wiim_input_overlay(self, sources: list[str], current_source: str | None) -> list[str]:
+        """Overlay WiiM input-capability and enable metadata onto the source list.
+
+        - Gap-fill: append authoritative physical inputs from ``getAudioInputCapbility``
+          that enumeration missed (deduped by canonical id).
+        - Enable-filter: drop inputs the user disabled via ``getAudioInputEnable``,
+          but never the currently active source (so state display stays correct).
+
+        Returns the list unchanged when neither probe produced data.
+        """
+        caps = self.player.client.capabilities if self.player.client else {}
+        capability_ids = caps.get("wiim_input_capability")
+        enable_map = caps.get("wiim_input_enable")
+        if not capability_ids and not enable_map:
+            return sources
+
+        current_key = canonical_source_key(current_source) if current_source else None
+        present_keys = {canonical_source_key(s) for s in sources}
+
+        result = list(sources)
+
+        # Gap-fill authoritative physical inputs that enumeration missed.
+        for cid in capability_ids or []:
+            key = canonical_source_key(cid)
+            if key in _HARDWARE_SOURCE_KEYS and key not in present_keys:
+                result.append(key)
+                present_keys.add(key)
+
+        # Hide inputs the user disabled, but keep the active source visible.
+        if enable_map:
+            result = [
+                s
+                for s in result
+                if enable_map.get(canonical_source_key(s)) is not False or canonical_source_key(s) == current_key
+            ]
+
+        return result
+
     def _catalog_source_key(self, source_name: str) -> str:
         """Normalize a source display name to canonical key."""
-        source_lower = source_name.strip().lower()
-        if not source_lower:
-            return ""
-
-        # Direct mappings for UI display names
-        direct_map = {
-            "network": "network",
-            "wifi": "network",
-            "wi-fi": "network",
-            "ethernet": "network",
-            "line in": "line_in",
-            "line in 2": "line_in_2",
-            "aux in": "aux",
-            "optical in": "optical",
-            "coaxial": "coaxial",
-            "usb": "usb",
-            "hdmi": "hdmi",
-            "phono": "phono",
-            "rca": "rca",
-            "airplay": "airplay",
-            "spotify": "spotify",
-            "amazon music": "amazon",
-            "amazon": "amazon",
-            "tidal": "tidal",
-            "qobuz": "qobuz",
-            "deezer": "deezer",
-            "pandora": "pandora",
-            "tunein": "tunein",
-            "iheartradio": "iheartradio",
-            "dlna": "dlna",
-            "bluetooth": "bluetooth",
-        }
-        if source_lower in direct_map:
-            return direct_map[source_lower]
-
-        # Fallback: alphanumeric simplification for resilient matching
-        simple = "".join(ch for ch in source_lower if ch.isalnum())
-        simple_map = {
-            "linein": "line_in",
-            "linein2": "line_in_2",
-            "auxin": "aux",
-            "opticalin": "optical",
-            "coaxialin": "coaxial",
-            "amazonmusic": "amazon",
-            "iheartradio": "iheartradio",
-            "airplay": "airplay",
-        }
-        if simple in simple_map:
-            return simple_map[simple]
-
-        return source_lower.replace(" ", "_").replace("-", "_")
+        return canonical_source_key(source_name)
 
     def _catalog_source_kind(self, source_key: str) -> str:
         """Return catalog kind for a canonical source key."""
@@ -1310,8 +1306,11 @@ class PlayerProperties:
         current_key = current_id if current_id else None
 
         # Start with device-available sources (hardware + active source).
+        # Resolve ids through the rename overlay so a user-renamed input (name
+        # "TV") keeps its stable id ("optical") instead of deriving "tv".
+        reverse_rename = source_rename_reverse(self._source_rename_map())
         for source_name in self.available_sources:
-            source_id = self._catalog_source_key(source_name)
+            source_id = reverse_rename.get(source_name.strip().lower()) or self._catalog_source_key(source_name)
             if not source_id or source_id in seen_ids:
                 continue
             entry = self._catalog_entry(
