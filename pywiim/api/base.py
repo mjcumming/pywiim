@@ -489,7 +489,15 @@ class BaseWiiMClient:
                     except Exception:  # noqa: BLE001
                         pass  # Device info not available, continue without it
 
-                    raise WiiMRequestError(
+                    error_cls = (
+                        WiiMConnectionError
+                        if isinstance(
+                            err,
+                            (aiohttp.ClientConnectorError, aiohttp.ServerDisconnectedError, WiiMConnectionError),
+                        )
+                        else WiiMRequestError
+                    )
+                    raise error_cls(
                         f"Request failed after {retry_count} attempts: {err}",
                         endpoint=endpoint,
                         attempts=retry_count,

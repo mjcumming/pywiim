@@ -282,6 +282,20 @@ class TestGen1Detection:
         profile = get_device_profile(device_info)
         assert profile.grouping.uses_wifi_direct is True
 
+    def test_gen1_override_preserves_vendor_profile_fields(self):
+        """Gen1 override must carry forward profile fields, not rebuild a subset."""
+        device_info = DeviceInfo(
+            uuid="test",
+            name="Old Arylic Speaker",
+            model="Arylic Up2Stream",
+            wmrm_version="2.0",
+        )
+        profile = get_device_profile(device_info)
+        assert profile.grouping.uses_wifi_direct is True
+        assert profile.vendor == "arylic"
+        assert profile.loop_mode_scheme == "arylic"
+        assert profile.connection.preferred_ports == PROFILES["arylic"].connection.preferred_ports
+
     def test_gen2_by_firmware(self):
         """Gen2+ detected by new firmware version."""
         device_info = DeviceInfo(

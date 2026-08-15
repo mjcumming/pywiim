@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-08-15
+
+### Fixed
+- **Connect failures after retries** — exhausted `ClientConnectorError` / disconnect retries now raise `WiiMConnectionError` instead of a generic `WiiMRequestError`, so integrations can mark powered-off devices unavailable (wiim #259).
+- **Stale metadata leaking through `_status_field`** — when the synchronizer has resolved title/artist/album/art to no value, do not fall back to leftover firmware fields still sitting on the raw status model. Source-change clears now leave an explicit None so that fallback cannot reopen (wiim #263).
+- **Gen1 profile override** — use `dataclasses.replace()` so extra DeviceProfile fields are not dropped back to defaults.
+
 ## [2.3.1] - 2026-08-15
 
 ### Fixed

@@ -520,18 +520,7 @@ def get_device_profile(device_info: DeviceInfo) -> DeviceProfile:
                 device_info.firmware,
             )
             # Return a modified profile with WiFi Direct enabled
-            return DeviceProfile(
-                vendor=profile.vendor,
-                generation=profile.generation,
-                display_name=profile.display_name,
-                loop_mode_scheme=profile.loop_mode_scheme,
-                state_sources=profile.state_sources,
-                connection=profile.connection,
-                endpoints=profile.endpoints,
-                grouping=GroupingConfig(
-                    uses_wifi_direct=True,
-                ),
-            )
+            return replace(profile, grouping=GroupingConfig(uses_wifi_direct=True))
 
         return profile
 
@@ -553,17 +542,11 @@ def get_device_profile(device_info: DeviceInfo) -> DeviceProfile:
             device_info.wmrm_version,
             device_info.firmware,
         )
-        return DeviceProfile(
-            vendor=profile.vendor,
+        return replace(
+            profile,
             generation="gen1",
             display_name=f"{profile.display_name} (Gen1)",
-            loop_mode_scheme=profile.loop_mode_scheme,
-            state_sources=profile.state_sources,
-            connection=profile.connection,
-            endpoints=profile.endpoints,
-            grouping=GroupingConfig(
-                uses_wifi_direct=True,
-            ),
+            grouping=GroupingConfig(uses_wifi_direct=True),
         )
 
     return profile

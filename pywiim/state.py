@@ -951,10 +951,17 @@ class StateSynchronizer:
         Firmware often keeps the previous source's metadata in getPlayerStatusEx
         (Spotify → network stream). Clearing here prevents a permanently stale track.
         """
+        now = time.time()
         for field_name in ("title", "artist", "album", "image_url", "duration"):
             self._http_state.pop(field_name, None)
             self._upnp_state.pop(field_name, None)
-            setattr(self._merged_state, field_name, None)
+            # Keep a resolved-to-None field so Player._status_field does not
+            # fall back to leftover firmware values on _status_model (#263).
+            setattr(
+                self._merged_state,
+                field_name,
+                TimestampedField(value=None, source="http", timestamp=now),
+            )
 
     def _should_clear_metadata(self) -> bool:
         """Determine if metadata should be cleared.

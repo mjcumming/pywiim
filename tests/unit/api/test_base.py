@@ -485,7 +485,7 @@ class TestBaseWiiMClientRequest:
         with patch.object(client, "_get_ssl_context", new_callable=AsyncMock) as mock_ssl:
             mock_ssl.return_value = None
             with patch("asyncio.sleep", new_callable=AsyncMock):  # Skip actual sleep
-                with pytest.raises(WiiMRequestError) as exc_info:
+                with pytest.raises(WiiMConnectionError) as exc_info:
                     await client._request("/api/status")
 
                 # Error message may vary, but should indicate failure
@@ -609,7 +609,7 @@ class TestBaseWiiMClientRequest:
         with patch.object(client, "_get_ssl_context", new_callable=AsyncMock) as mock_ssl:
             mock_ssl.return_value = None
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                with pytest.raises(WiiMRequestError):
+                with pytest.raises(WiiMConnectionError):
                     await client._request("/api/status")
 
                 stats = client.api_stats
@@ -637,7 +637,7 @@ class TestBaseWiiMClientRequest:
         with patch.object(client, "_get_ssl_context", new_callable=AsyncMock) as mock_ssl:
             mock_ssl.return_value = None
             with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-                with pytest.raises(WiiMRequestError):
+                with pytest.raises(WiiMConnectionError):
                     await client._request("/api/status")
 
                 # Should have called sleep for backoff

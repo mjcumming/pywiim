@@ -238,11 +238,22 @@ class PlayerProperties:
     # === Media Metadata ===
 
     def _status_field(self, *names: str) -> str | None:
-        """Return the first non-empty attribute from merged state or cached status."""
-        # First try merged state (combines HTTP + UPnP)
-        merged = self.player._state_synchronizer.get_merged_state()
+        """Return the first non-empty attribute from merged state or cached status.
+
+        Only fall back to the raw cached status for names the synchronizer has
+        never resolved. If it resolved a name to no value (live stream, source
+        change), that decision must not be overridden by leftover firmware
+        fields still sitting on ``_status_model`` (wiim #263).
+        """
+        state_obj = self.player._state_synchronizer.get_state_object()
+        names_unresolved_by_synchronizer: list[str] = []
         for n in names:
-            val = merged.get(n)
+            field = getattr(state_obj, n, None)
+            if field is None:
+                names_unresolved_by_synchronizer.append(n)
+                continue
+
+            val = field.value
             if val is not None:
                 # Field-aware filtering: artwork fields must be valid URLs,
                 # other metadata must be non-placeholder values.
@@ -269,11 +280,18 @@ class PlayerProperties:
                 if val not in (None, ""):
                     return str(val) if val is not None else None
 
-        # Fallback to cached status if synchronizer has no data yet
-        if self.player._status_model is None:
+        # Fallback to cached status only before the first merge. After that the
+        # raw status model is a leftover firmware snapshot and must not reopen
+        # fields the synchronizer already decided are empty (wiim #263).
+        if (
+            self.player._status_model is None
+            or not names_unresolved_by_synchronizer
+            or state_obj.http_last_update is not None
+            or state_obj.upnp_last_update is not None
+        ):
             return None
 
-        for n in names:
+        for n in names_unresolved_by_synchronizer:
             if hasattr(self.player._status_model, n):
                 val = getattr(self.player._status_model, n)
                 if n in {"image_url", "entity_picture", "cover_url"}:

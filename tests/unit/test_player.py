@@ -2202,6 +2202,34 @@ class TestPlayerMediaMetadata:
         assert player.media_title == "Test Song"
 
     @pytest.mark.asyncio
+    async def test_media_title_prefers_synchronizer_none_over_stale_status_model(self, mock_client):
+        """A title the synchronizer resolved to None must win over leftover status (#263)."""
+        from pywiim.player import Player
+
+        player = Player(mock_client)
+        player._status_model = PlayerStatus(title="Stale Old Title", play_state="play")
+        player._state_synchronizer.update_from_http({"play_state": "play", "title": None})
+
+        assert player.media_title is None
+
+    @pytest.mark.asyncio
+    async def test_media_title_cleared_on_source_change_ignores_status_model(self, mock_client):
+        """Firmware leftover title on _status_model must not reappear after source change."""
+        from pywiim.player import Player
+
+        player = Player(mock_client)
+        player._state_synchronizer.update_from_http(
+            {"play_state": "play", "source": "spotify", "title": "Stay There", "duration": 233}
+        )
+        player._status_model = PlayerStatus(title="Stay There", play_state="play", source="wifi")
+        player._state_synchronizer.update_from_http(
+            {"play_state": "play", "source": "wifi", "title": "Stay There", "duration": 0}
+        )
+
+        assert player.media_title is None
+        assert player.media_duration is None
+
+    @pytest.mark.asyncio
     async def test_media_title_url_fallback_skipped_on_line_in(self, mock_client):
         """play_url() filename must not stick after switching to a physical input (#263)."""
         from pywiim.player import Player
