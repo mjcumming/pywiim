@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **UPnP `async_call_action("AVTransport")`** — SOAP service names like `AVTransport` now resolve to `_av_transport_service`. Missing actions raise `Action … not found` instead of a misleading service error (wiim #264).
+- **`supports_queue_add` requires a real enqueue action** — AVTransport without `AddURIToQueue` is not enough. WiiM Pro / Pro Plus use vendor PlayQueue (`CreateQueue`, `AppendTracksInQueueEx`, `PlayQueueWithIndex`) instead; Arylic remains false until that path is proven there (wiim #264).
+- **PlayQueue URL enqueue** — `add_to_queue` / `insert_next` / `play_queue` / `clear_queue` / `remove_from_queue` use PlayQueue SOAP with DIDL `TrackN` metadata when `AddURIToQueue` is missing. HTTP `setPlayerCmd:add` is a no-op on this firmware (wiim #264).
+- **Stop / none map to idle** — HTTP/UPnP `stop` and `stopped` normalize to `idle` instead of `pause`, so integrations can tell a stopped device from a paused one (wiim #259).
+- **Stale metadata after source change** — title/artist/album/art/duration are cleared when the source changes, leftover firmware values are ignored on later polls, and `play_url()` filename fallback is not used for physical inputs or idle (wiim #263).
+- **Reboot command fallback** — if `reboot` returns `unknown command`, try `StartRebootTime:1` then `StartRebootTime:0` and cache the working command (WiiM Amp / current firmware; wiim #260).
+- **Audio Pro C5 / compact `AudioPro` names** — vendor detection now matches `c5` and `AudioPro` without a space so C5 MkII gets the MkII profile (wiim #266).
+
+### Added
+- **`Player.set_main_speaker_bass()` / `Player.main_speaker_bass`** — expose the existing client main-speaker bass filter on the Player API (wiim #265).
+
+### Documentation
+- **PlayQueue enqueue** — ADR 004 exception, HA_CAPABILITIES, HA_INTEGRATION, and API_REFERENCE now describe the WiiM PlayQueue path vs AVTransport `AddURIToQueue`.
+
 ## [2.3.0] - 2026-07-06
 
 ### Added

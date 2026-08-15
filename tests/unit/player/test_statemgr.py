@@ -450,11 +450,12 @@ class TestStateManager:
     @pytest.mark.asyncio
     async def test_refresh_source_changed_fetches_audio_output(self, state_manager, mock_player):
         """Test refresh when source changes, fetches audio output."""
-        mock_status = PlayerStatus(play_state="play", source="bluetooth")
+        mock_status = PlayerStatus(play_state="play", source="bluetooth", title="Old Track", duration=180)
         mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
         TestStateManager._setup_refresh_mocks(mock_player, state_manager)
         type(mock_player.client).capabilities = PropertyMock(return_value={"supports_audio_output": True})
         mock_player.get_audio_output_status = AsyncMock(return_value={"mode": "bluetooth"})
+        mock_player._last_played_url = "http://example.com/song.mp3"
         state_manager._last_source = "wifi"
 
         with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
@@ -463,6 +464,9 @@ class TestStateManager:
             await state_manager.refresh(full=False)
 
         mock_player.get_audio_output_status.assert_called_once()
+        assert mock_player._last_played_url is None
+        assert mock_status.title is None
+        assert mock_status.duration is None
 
     @pytest.mark.asyncio
     async def test_refresh_updates_eq_enabled_from_get_eq_status(self, state_manager, mock_player):

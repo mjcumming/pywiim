@@ -802,8 +802,8 @@ player.supports_display_config    # bool - True if display/LCD on-off and bright
 
 ```python
 player.supports_upnp             # bool - True if UPnP client is available (requires upnp_client parameter)
-player.supports_queue_browse      # bool - True if full queue retrieval is available (WiiM Amp/Ultra + USB only)
-player.supports_queue_add         # bool - True if adding items to queue is supported (most devices with UPnP)
+player.supports_queue_browse      # bool - True if queue retrieval is available (ContentDirectory or PlayQueue BrowseQueue)
+player.supports_queue_add         # bool - True if AddURIToQueue or PlayQueue enqueue actions are advertised
 player.supports_queue_count       # bool - Always True - queue count/position available via HTTP API
 ```
 
@@ -1760,6 +1760,8 @@ await client.set_subwoofer_delay(50)
 # Control bass to main speakers
 await client.set_main_speaker_bass(True)   # Bass sent to mains
 await client.set_main_speaker_bass(False)  # Bass filtered from mains
+# Player wrapper (preferred for HA): await player.set_main_speaker_bass(True)
+# Read cached state: player.main_speaker_bass → True when mains receive bass
 
 # Control subwoofer low-pass filter
 await client.set_subwoofer_filter(True)   # Filter active (normal mode)

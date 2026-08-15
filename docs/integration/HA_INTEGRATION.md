@@ -1144,12 +1144,16 @@ The `Player` class uses `StateSynchronizer` to intelligently merge HTTP polling 
 
 ### Overview
 
-Queue management allows adding media to the playback queue instead of replacing the current track. This requires UPnP AVTransport actions, which are only available via the UPnP client.
+Queue management allows adding media to the playback queue instead of replacing the current track. Gate on `player.supports_queue_add`.
+
+WiiM Pro / Pro Plus do **not** implement AVTransport `AddURIToQueue`. On those devices pywiim uses the vendor PlayQueue service (`CreateQueue`, `AppendTracksInQueueEx`, `PlayQueueWithIndex`). HTTP `setPlayerCmd:add` is a no-op. Sonos-style `AddURIToQueue` is still used when the device advertises it.
 
 **Supported Operations:**
 
 - `add_to_queue(url, metadata="")` - Add URL to end of queue
 - `insert_next(url, metadata="")` - Insert URL after current track
+- `play_queue(position)` - Start at a 0-based queue index
+- `remove_from_queue(position)` / `clear_queue()` / `get_queue()`
 - `play_url(url, enqueue="add|next|replace|play")` - Play URL with optional enqueue support
 
 ### Setup

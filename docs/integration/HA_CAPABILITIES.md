@@ -45,8 +45,8 @@ These capabilities depend on UPnP client initialization and service availability
 | Property | Description | Notes |
 |----------|-------------|-------|
 | `player.supports_upnp` | UPnP client is available | Requires `upnp_client` parameter |
-| `player.supports_queue_browse` | Full queue retrieval (ContentDirectory) | WiiM Amp/Ultra + USB only |
-| `player.supports_queue_add` | Add items to queue (AVTransport) | Most devices with UPnP |
+| `player.supports_queue_browse` | Full queue retrieval | ContentDirectory (Amp/Ultra + USB) or PlayQueue `BrowseQueue` (WiiM Pro / Pro Plus) |
+| `player.supports_queue_add` | Add items to queue | `AddURIToQueue` **or** PlayQueue `CreateQueue` + `AppendTracksInQueueEx` + `PlayQueueWithIndex` |
 | `player.supports_queue_count` | Queue count/position (HTTP API) | Always `True` |
 
 ### Transport Capabilities
@@ -114,7 +114,7 @@ else:
 
 **Design rationale:** pywiim exposes the full state including `"buffering"` to give integrations maximum flexibility. The integration can choose whether to show a loading indicator during buffering/transitioning states, or collapse them to "playing" for simpler UX.
 
-**Note:** The "stop" state is normalized to "pause" for modern UX (both indicate media is loaded but not playing, position is maintained). Use `is_paused` to check for both paused and stopped states.
+**Note:** HTTP/UPnP `"stop"` and `"stopped"` normalize to `"idle"`. Use `is_paused` only for a true pause (media loaded, position held) and `is_idle` after stop or when no media is loaded.
 
 ### Safe Accessor Properties
 
@@ -279,7 +279,7 @@ def extra_state_attributes(self) -> dict[str, Any]:
 
 | Method | Description | Requirements |
 |--------|-------------|--------------|
-| `get_queue()` | Get queue contents with metadata | `supports_queue_browse` |
+| `get_queue()` | Get queue contents with metadata | `supports_queue_browse` (ContentDirectory or PlayQueue) |
 | `play_queue(position)` | Play from queue position | `supports_queue_add` |
 | `add_to_queue(url)` | Add to end of queue | `supports_queue_add` |
 | `insert_next(url)` | Insert after current track | `supports_queue_add` |

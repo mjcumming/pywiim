@@ -249,12 +249,12 @@ HTTP API returns various value formats that need normalization:
 **Raw Values:**
 - `"play"`, `"playing"` → normalized to `"play"`
 - `"pause"`, `"paused"` → normalized to `"pause"`
-- `"stop"`, `"stopped"` → normalized to `"pause"` (modern UX: stop == pause)
+- `"stop"`, `"stopped"` → normalized to `"idle"`
 - `"none"` → normalized to `"idle"` (no media loaded)
 - `"load"`, `"loading"`, `"transitioning"`, `"buffering"` → normalized to `"buffering"`
 
-**Rationale for stop→pause mapping:**
-Modern streaming devices maintain playback position whether "paused" or "stopped". Users think in terms of "playing" vs "not playing", not three separate states. This aligns with Home Assistant conventions (no STATE_STOPPED) and Sonos behavior.
+**Rationale for stop→idle mapping:**
+Home Assistant has no `STATE_STOPPED`. A true pause (media loaded, position held) stays `pause`; a stop or empty transport is `idle` so automations can tell the device is finished rather than paused.
 
 #### Device-Specific Behavior
 

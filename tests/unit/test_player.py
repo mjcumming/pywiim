@@ -724,10 +724,10 @@ class TestPlayerPlaybackControl:
         # Verify API was called
         mock_client.stop.assert_called_once()
         # Verify optimistic state update
-        assert player._status_model.play_state == "stop"
-        # Verify state synchronizer updated (stop is normalized to pause for modern UX)
+        assert player._status_model.play_state == "idle"
+        # Verify state synchronizer updated (stop is normalized to idle)
         merged = player._state_synchronizer.get_merged_state()
-        assert merged["play_state"] == "pause"  # "stop" normalized to "pause" by design
+        assert merged["play_state"] == "idle"
         # Verify callback was triggered
         assert len(callback_called) == 1
 
@@ -964,6 +964,133 @@ class TestPlayerPlaybackControl:
         )
         # Should not call HTTP API (play_url is not mocked in this test)
         # The UPnP path doesn't call client.play_url()
+
+    def _playqueue_upnp(self):
+        from pywiim.upnp.client import UpnpClient
+
+        mock_upnp = MagicMock(spec=UpnpClient)
+        mock_upnp.async_call_action = AsyncMock(return_value={})
+        mock_upnp.av_transport = MagicMock()
+        mock_upnp.av_transport.actions = {"Play": object(), "Stop": object()}
+        mock_upnp.play_queue = MagicMock()
+        mock_upnp.play_queue.actions = {
+            "CreateQueue": object(),
+            "AppendTracksInQueueEx": object(),
+            "PlayQueueWithIndex": object(),
+            "BrowseQueue": object(),
+            "DeleteQueue": object(),
+            "RemoveTracksInQueue": object(),
+            "GetQueueIndex": object(),
+        }
+        mock_upnp.content_directory = None
+        return mock_upnp
+
+    @pytest.mark.asyncio
+    async def test_add_to_queue_uses_playqueue_when_no_add_uri(self, mock_client):
+        """WiiM PlayQueue path is used when AddURIToQueue is missing (issue #264)."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        mock_upnp.async_call_action = AsyncMock(
+            side_effect=[
+                RuntimeError("GeneratePlayListInQueueToXMLString failed"),
+                {},
+                {},
+            ]
+        )
+        player = Player(mock_client, upnp_client=mock_upnp)
+        await player.add_to_queue("https://example.com/song.mp3")
+
+        actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
+        assert actions == ["BrowseQueue", "CreateQueue", "AppendTracksInQueueEx"]
+        append_args = mock_upnp.async_call_action.await_args_list[2].args[2]
+        assert "https://example.com/song.mp3" in append_args["QueueContext"]
+        assert append_args["Action"] == ""
+
+    @pytest.mark.asyncio
+    async def test_add_to_queue_playqueue_skips_create_when_browse_ok(self, mock_client):
+        """Existing CurrentQueue is appended to without CreateQueue."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        mock_upnp.async_call_action = AsyncMock(return_value={"QueueContext": "<PlayList/>"})
+        player = Player(mock_client, upnp_client=mock_upnp)
+        await player.add_to_queue("https://example.com/two.mp3")
+
+        actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
+        assert actions == ["BrowseQueue", "AppendTracksInQueueEx"]
+
+    @pytest.mark.asyncio
+    async def test_insert_next_uses_playqueue_index(self, mock_client):
+        """insert_next uses GetQueueIndex then AppendTracksInQueueEx."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+
+        async def _call(service, action, arguments=None):
+            if action == "GetQueueIndex":
+                return {"CurrentIndex": 2}
+            return {}
+
+        mock_upnp.async_call_action = AsyncMock(side_effect=_call)
+        player = Player(mock_client, upnp_client=mock_upnp)
+        await player.insert_next("https://example.com/next.mp3")
+
+        actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
+        assert "GetQueueIndex" in actions
+        assert "AppendTracksInQueueEx" in actions
+        append_args = mock_upnp.async_call_action.await_args_list[-1].args[2]
+        assert append_args["StartIndex"] == 2
+
+    @pytest.mark.asyncio
+    async def test_play_queue_uses_playqueue_with_index(self, mock_client):
+        """play_queue uses 1-based PlayQueueWithIndex on WiiM firmware."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        player = Player(mock_client, upnp_client=mock_upnp)
+        await player.play_queue(2)
+
+        mock_upnp.async_call_action.assert_called_once_with(
+            "play_queue",
+            "PlayQueueWithIndex",
+            {"QueueName": "CurrentQueue", "Index": 3},
+        )
+
+    @pytest.mark.asyncio
+    async def test_clear_and_remove_use_playqueue(self, mock_client):
+        """clear_queue and remove_from_queue use PlayQueue actions."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        player = Player(mock_client, upnp_client=mock_upnp)
+        await player.clear_queue()
+        await player.remove_from_queue(0)
+
+        actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
+        assert actions == ["DeleteQueue", "RemoveTracksInQueue"]
+        remove_args = mock_upnp.async_call_action.await_args_list[1].args[2]
+        assert remove_args["RangStart"] == 1
+        assert remove_args["RangEnd"] == 1
+
+    @pytest.mark.asyncio
+    async def test_get_queue_uses_playqueue_browse(self, mock_client):
+        """get_queue parses PlayQueue BrowseQueue XML."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        mock_upnp.async_call_action = AsyncMock(
+            return_value={
+                "QueueContext": (
+                    '<?xml version="1.0"?><PlayList><Tracks>'
+                    "<Track1><URL>https://example.com/a.mp3</URL></Track1>"
+                    "</Tracks></PlayList>"
+                )
+            }
+        )
+        player = Player(mock_client, upnp_client=mock_upnp)
+        items = await player.get_queue()
+        assert items == [{"media_content_id": "https://example.com/a.mp3", "position": 0}]
 
 
 class TestPlayerErrorHandling:
@@ -2075,6 +2202,20 @@ class TestPlayerMediaMetadata:
         assert player.media_title == "Test Song"
 
     @pytest.mark.asyncio
+    async def test_media_title_url_fallback_skipped_on_line_in(self, mock_client):
+        """play_url() filename must not stick after switching to a physical input (#263)."""
+        from pywiim.player import Player
+
+        player = Player(mock_client)
+        player._last_played_url = "https://example.com/SoundHelix-Song-1.mp3"
+        player._status_model = PlayerStatus(play_state="play", source="line_in", title=None)
+        player._state_synchronizer.update_from_http(
+            {"play_state": "play", "source": "line_in", "title": None}
+        )
+
+        assert player.media_title is None
+
+    @pytest.mark.asyncio
     async def test_media_artist(self, mock_client):
         """Test getting media artist."""
         from pywiim.player import Player
@@ -2147,13 +2288,13 @@ class TestPlayerMediaMetadata:
 
         player = Player(mock_client)
 
-        # Test paused state (note: "stop" is normalized to "pause" for modern UX)
-        for state in ["pause", "stop"]:
+        # Test paused state
+        for state in ["pause", "paused"]:
             player._state_synchronizer.update_from_http({"play_state": state})
             assert player.is_paused is True, f"Expected is_paused=True for state '{state}'"
 
-        # Test non-paused states
-        for state in ["play", "idle", "buffering"]:
+        # Test non-paused states (stop normalizes to idle)
+        for state in ["play", "idle", "stop", "buffering"]:
             player._state_synchronizer.update_from_http({"play_state": state})
             assert player.is_paused is False, f"Expected is_paused=False for state '{state}'"
 
@@ -2164,13 +2305,13 @@ class TestPlayerMediaMetadata:
 
         player = Player(mock_client)
 
-        # Test idle states (note: "stop" is normalized to "pause", not idle)
-        for state in ["idle", "none"]:
+        # Test idle states (stop/none normalize to idle)
+        for state in ["idle", "none", "stop"]:
             player._state_synchronizer.update_from_http({"play_state": state})
             assert player.is_idle is True, f"Expected is_idle=True for state '{state}'"
 
-        # Test non-idle states (including "stop" which becomes "pause")
-        for state in ["play", "pause", "stop", "buffering"]:
+        # Test non-idle states
+        for state in ["play", "pause", "buffering"]:
             player._state_synchronizer.update_from_http({"play_state": state})
             assert player.is_idle is False, f"Expected is_idle=False for state '{state}'"
 
@@ -2207,11 +2348,11 @@ class TestPlayerMediaMetadata:
         player._state_synchronizer.update_from_http({"play_state": "play"})
         assert player.state == "playing"
 
-        # Test paused state (including "stop" which normalizes to "pause")
+        # Test paused vs stopped (stop normalizes to idle)
         player._state_synchronizer.update_from_http({"play_state": "pause"})
         assert player.state == "paused"
         player._state_synchronizer.update_from_http({"play_state": "stop"})
-        assert player.state == "paused"
+        assert player.state == "idle"
 
         # Test idle state
         player._state_synchronizer.update_from_http({"play_state": "idle"})
@@ -5561,9 +5702,53 @@ class TestPlayerCapabilities:
 
         player._upnp_client = mock_upnp
 
+        mock_upnp.av_transport.actions = {"AddURIToQueue": object()}
+
         assert player.supports_upnp is True
-        assert player.supports_queue_add is True  # AVTransport available
+        assert player.supports_queue_add is True  # AddURIToQueue advertised
         assert player.supports_queue_browse is False  # No ContentDirectory
+
+    def test_supports_queue_add_requires_add_uri_action(self, mock_client):
+        """AVTransport without AddURIToQueue is not queue-add capable (issue #264)."""
+        from unittest.mock import MagicMock
+
+        from pywiim.player import Player
+
+        player = Player(mock_client)
+        mock_upnp = MagicMock()
+        mock_upnp.av_transport = MagicMock()
+        mock_upnp.av_transport.actions = {
+            "SetAVTransportURI": object(),
+            "Play": object(),
+            "Stop": object(),
+        }
+        player._upnp_client = mock_upnp
+
+        assert player.supports_upnp is True
+        assert player.supports_queue_add is False
+
+    def test_supports_queue_add_with_playqueue_actions(self, mock_client):
+        """PlayQueue enqueue actions enable supports_queue_add (issue #264)."""
+        from unittest.mock import MagicMock
+
+        from pywiim.player import Player
+
+        player = Player(mock_client)
+        mock_upnp = MagicMock()
+        mock_upnp.av_transport = MagicMock()
+        mock_upnp.av_transport.actions = {"Play": object()}
+        mock_upnp.play_queue = MagicMock()
+        mock_upnp.play_queue.actions = {
+            "CreateQueue": object(),
+            "AppendTracksInQueueEx": object(),
+            "PlayQueueWithIndex": object(),
+            "BrowseQueue": object(),
+        }
+        mock_upnp.content_directory = None
+        player._upnp_client = mock_upnp
+
+        assert player.supports_queue_add is True
+        assert player.supports_queue_browse is True
 
     def test_supports_queue_browse_with_content_directory(self, mock_client):
         """Test supports_queue_browse when ContentDirectory is available."""
@@ -6139,3 +6324,34 @@ class TestPlayerStateTransitions:
         assert player.available is True
         assert player._status_model.play_state == "pause"
         assert player._status_model.volume == 60
+
+
+class TestPlayerMainSpeakerBass:
+    """Player wrapper for main-speaker bass (issue #265)."""
+
+    @pytest.mark.asyncio
+    async def test_set_main_speaker_bass_updates_cache(self, mock_client):
+        """Test set_main_speaker_bass calls client and caches inverted main_filter."""
+        from pywiim.player import Player
+
+        mock_client.set_main_speaker_bass = AsyncMock()
+        player = Player(mock_client)
+        player._subwoofer_status = {"status": 1, "main_filter": 1}
+
+        await player.set_main_speaker_bass(True)
+
+        mock_client.set_main_speaker_bass.assert_called_once_with(True)
+        assert player._subwoofer_status["main_filter"] == 0
+        assert player.main_speaker_bass is True
+
+        await player.set_main_speaker_bass(False)
+        assert player._subwoofer_status["main_filter"] == 1
+        assert player.main_speaker_bass is False
+
+    def test_main_speaker_bass_none_without_status(self, mock_client):
+        """Property is None until subwoofer status has been read."""
+        from pywiim.player import Player
+
+        player = Player(mock_client)
+        player._subwoofer_status = None
+        assert player.main_speaker_bass is None

@@ -205,7 +205,7 @@ class TestPlayerStatus:
         assert status4.play_state == "pause"
 
         status5 = PlayerStatus(play_status="stop")
-        assert status5.play_state == "pause"  # Modern UX: stop normalizes to pause
+        assert status5.play_state == "idle"
 
     def test_player_status_duration_normalization(self):
         """Test PlayerStatus duration normalization (0 -> None)."""

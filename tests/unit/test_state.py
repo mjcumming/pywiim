@@ -24,13 +24,13 @@ class TestNormalizePlayState:
         """Test normalizing standard play states."""
         assert normalize_play_state("play") == "play"
         assert normalize_play_state("pause") == "pause"
-        assert normalize_play_state("stop") == "pause"  # Modern UX: stop maps to pause
+        assert normalize_play_state("stop") == "idle"
 
     def test_normalize_play_state_variations(self):
         """Test normalizing play state variations."""
         assert normalize_play_state("playing") == "play"
         assert normalize_play_state("paused") == "pause"
-        assert normalize_play_state("stopped") == "pause"  # Modern UX: stopped maps to pause
+        assert normalize_play_state("stopped") == "idle"
         assert normalize_play_state("idle") == "idle"
 
     def test_normalize_play_state_upnp(self):
@@ -901,3 +901,58 @@ class TestStateSynchronizerWithProfile:
         # This tests that conflict resolution handles empty propagated values correctly
         assert merged["title"] == "Existing Track"
         assert merged["artist"] == "Existing Artist"
+
+    def test_explicit_none_title_clears_previous(self):
+        """Fresh HTTP Unknown/None must clear the previous title (issue #263)."""
+        from pywiim.profiles import PROFILES
+
+        sync = StateSynchronizer(profile=PROFILES["wiim"])
+        now = time.time()
+        sync.update_from_http(
+            {"play_state": "play", "source": "bluetooth", "title": "Old Song", "artist": "Old Artist"},
+            timestamp=now,
+        )
+        assert sync.get_merged_state()["title"] == "Old Song"
+
+        sync.update_from_http(
+            {"play_state": "play", "source": "bluetooth", "title": None, "artist": None},
+            timestamp=now + 1,
+        )
+        merged = sync.get_merged_state()
+        assert merged.get("title") in (None, "")
+        assert merged.get("artist") in (None, "")
+
+    def test_source_change_drops_stale_firmware_metadata(self):
+        """Firmware often keeps Spotify title after switching to a stream (issue #263)."""
+        from pywiim.profiles import PROFILES
+
+        sync = StateSynchronizer(profile=PROFILES["wiim"])
+        now = time.time()
+        sync.update_from_http(
+            {"play_state": "play", "source": "spotify", "title": "Spotify Track", "duration": 180},
+            timestamp=now,
+        )
+        sync.update_from_http(
+            {"play_state": "play", "source": "wifi", "title": "Spotify Track", "duration": 0},
+            timestamp=now + 1,
+        )
+        merged = sync.get_merged_state()
+        assert merged.get("title") in (None, "")
+        assert merged.get("duration") in (None, 0)
+
+        # Next poll still has leftover firmware title/duration — must not come back
+        sync.update_from_http(
+            {"play_state": "play", "source": "wifi", "title": "Spotify Track", "duration": 180},
+            timestamp=now + 2,
+        )
+        merged = sync.get_merged_state()
+        assert merged.get("title") in (None, "")
+        assert merged.get("duration") in (None, 0)
+
+        # A genuinely new track after the switch is allowed through
+        sync.update_from_http(
+            {"play_state": "play", "source": "wifi", "title": "New Stream", "duration": 240},
+            timestamp=now + 3,
+        )
+        merged = sync.get_merged_state()
+        assert merged.get("title") == "New Stream"

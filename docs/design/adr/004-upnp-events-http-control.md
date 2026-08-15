@@ -22,6 +22,12 @@ We use a **single control path** and a **single event path**:
 2. **UPnP for notifications only**: Subscribe to UPnP services to get real-time state updates; merge those into library state (e.g. via StateSynchronizer).
 3. **HTTP remains authoritative for control**: If UPnP subscription fails or is unavailable, the application still has full control via HTTP and can rely on HTTP polling for state sync.
 
+### Exception: PlayQueue URL enqueue (2026-08)
+
+HTTP cannot incrementally enqueue a URL. `setPlayerCmd:add:<url>` returns `OK` and does nothing; `plicount` stays 0. WiiM Pro / Pro Plus also omit AVTransport `AddURIToQueue`.
+
+The **only** working control path for `enqueue: add` / `play_queue` on that firmware is the vendor UPnP PlayQueue service (`CreateQueue`, `AppendTracksInQueueEx`, `PlayQueueWithIndex`, `DeleteQueue`). That is an explicit exception to “no UPnP for control,” limited to URL queue management. Playback, volume, source, EQ, and groups stay on HTTP.
+
 ### Out of scope
 - How we merge UPnP events with HTTP state (freshness, priority) is documented in ARCHITECTURE_DATA_FLOW and STATE_MANAGEMENT; this ADR only fixes the split between control (HTTP) and events (UPnP).
 

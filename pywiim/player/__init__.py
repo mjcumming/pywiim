@@ -522,6 +522,22 @@ class Player(PlayerBase):
         if self._on_state_changed:
             self._on_state_changed()
 
+    async def set_main_speaker_bass(self, enabled: bool) -> None:
+        """Enable or disable bass output to the main speakers.
+
+        When disabled, frequencies below the crossover go only to the subwoofer.
+        When enabled, bass is also sent to the main speakers.
+
+        Args:
+            enabled: True to send bass to main speakers, False to filter it out.
+        """
+        await self.client.set_main_speaker_bass(enabled)
+        if self._subwoofer_status:
+            # API uses inverted logic: main_filter=1 means bass filtered from mains
+            self._subwoofer_status["main_filter"] = 0 if enabled else 1
+        if self._on_state_changed:
+            self._on_state_changed()
+
     # === Display (WiiM Ultra; ADR 005) ===
 
     async def set_display_enabled(
@@ -1235,6 +1251,20 @@ class Player(PlayerBase):
         return self.client.capabilities.get("supports_subwoofer") is True
 
     @property
+    def main_speaker_bass(self) -> bool | None:
+        """Whether bass is sent to the main speakers.
+
+        Returns:
+            True if mains receive bass, False if the main-speaker bass filter
+            is active, None if subwoofer status has not been read.
+        """
+        if self._subwoofer_status is None:
+            return None
+        if "main_filter" not in self._subwoofer_status:
+            return None
+        return int(self._subwoofer_status.get("main_filter", 0)) == 0
+
+    @property
     def supports_trigger_out(self) -> bool:
         """Whether 12V trigger output is supported (WiiM Ultra / Pro / Pro Plus)."""
         if not self.client:
@@ -1377,18 +1407,19 @@ class Player(PlayerBase):
 
     @property
     def supports_queue_browse(self) -> bool:
-        """Whether full queue retrieval is available (UPnP ContentDirectory).
+        """Whether full queue retrieval is available.
 
-        Only available on WiiM Amp and Ultra when a USB drive is connected.
-        Most WiiM devices (Mini, Pro, Pro Plus) do not support this.
+        True for ContentDirectory (Amp/Ultra + USB) or PlayQueue BrowseQueue
+        (WiiM Pro / Pro Plus after a queue has been created).
         """
         return self._properties.supports_queue_browse
 
     @property
     def supports_queue_add(self) -> bool:
-        """Whether adding items to queue is supported (UPnP AVTransport).
+        """Whether adding items to queue is supported.
 
-        Available on most devices with UPnP support.
+        True for AVTransport AddURIToQueue or PlayQueue
+        CreateQueue/AppendTracksInQueueEx/PlayQueueWithIndex.
         """
         return self._properties.supports_queue_add
 

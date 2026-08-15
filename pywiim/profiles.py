@@ -387,10 +387,10 @@ def detect_vendor(device_info: DeviceInfo) -> str:
     if "arylic" in name_lower or "up2stream" in name_lower:
         return "arylic"
 
-    # Audio Pro devices
-    if any(pro in model_lower for pro in ["audio pro", "addon", "a10", "a15", "a28", "c10"]):
+    # Audio Pro devices (include compact names like "AudioPro C5MkII" and C5/C10)
+    if any(pro in model_lower for pro in ["audio pro", "audiopro", "addon", "a10", "a15", "a28", "c10", "c5"]):
         return "audio_pro"
-    if "audio pro" in name_lower or "addon" in name_lower:
+    if "audio pro" in name_lower or "audiopro" in name_lower or "addon" in name_lower:
         return "audio_pro"
 
     # Firmware-based fallback for Audio Pro devices with non-standard model strings
@@ -421,7 +421,7 @@ def detect_audio_pro_generation(device_info: DeviceInfo) -> str:
         return "w_generation"
 
     # For known Audio Pro model strings, try firmware to distinguish MkII from W-gen
-    if any(model in model_lower for model in ["a10", "a15", "a28", "c10", "audio pro"]):
+    if any(model in model_lower for model in ["a10", "a15", "a28", "c10", "c5", "audio pro", "audiopro"]):
         if device_info.firmware:
             firmware_lower = device_info.firmware.lower()
             if re.search(_MKII_FIRMWARE_RE, firmware_lower):

@@ -19,7 +19,7 @@ This differs from some other implementations (like [WiiM Play](https://github.co
 - Track metadata updates (title/artist/album/artwork)
 - Position updates
 
-❌ **What We DON'T Use UPnP For**:
+❌ **What We DON'T Use UPnP For** (except PlayQueue URL enqueue — ADR 004):
 - Playback control (play, pause, stop, next, previous)
 - Volume control
 - Source selection
@@ -28,7 +28,7 @@ This differs from some other implementations (like [WiiM Play](https://github.co
 - Group management
 - Any device configuration
 
-**All control operations use the HTTP API** (`/httpapi.asp?command=...`)
+**Almost all control uses the HTTP API** (`/httpapi.asp?command=...`). URL queue add/next/play-at-index/clear on WiiM Pro / Pro Plus uses PlayQueue SOAP because HTTP enqueue is a no-op.
 
 ## Architecture
 

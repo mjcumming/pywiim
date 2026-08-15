@@ -670,6 +670,13 @@ class StateManager:
             self._last_source = current_source
         elif source_changed:
             self._last_source = current_source
+            # play_url() filename fallback must not survive a source switch (#263)
+            self.player._last_played_url = None
+            if status:
+                status.title = None
+                status.artist = None
+                status.album = None
+                status.duration = None
 
         # Check if we need to enrich metadata (title/artist are Unknown - common with Bluetooth AVRCP)
         status_title = status.title if status else None

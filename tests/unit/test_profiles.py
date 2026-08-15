@@ -92,10 +92,23 @@ class TestVendorDetection:
 
     def test_audio_pro_variants(self):
         """Audio Pro variants detected correctly."""
-        for model in ["Addon C10", "A10", "A15", "A28", "Audio Pro"]:
+        for model in ["Addon C10", "A10", "A15", "A28", "Audio Pro", "C5 MKII", "C5MkII"]:
             device_info = DeviceInfo(uuid="test", name="Test", model=model)
             profile = get_device_profile(device_info)
             assert profile.vendor == "audio_pro", f"Failed for model: {model}"
+
+    def test_audio_pro_c5_mkii_model(self):
+        """C5 MkII model string is Audio Pro MkII (issue #266)."""
+        device_info = DeviceInfo(uuid="test", name="AudioPro C5MkII Bad WC OG", model="C5MkII")
+        profile = get_device_profile(device_info)
+        assert profile.vendor == "audio_pro"
+        assert profile.generation == "mkii"
+
+    def test_audio_pro_compact_name_without_space(self):
+        """AudioPro (no space) in the device name is still Audio Pro."""
+        device_info = DeviceInfo(uuid="test", name="AudioPro Living Room", model="smart_audio")
+        profile = get_device_profile(device_info)
+        assert profile.vendor == "audio_pro"
 
     def test_linkplay_generic_fallback(self):
         """Unknown devices default to linkplay_generic."""

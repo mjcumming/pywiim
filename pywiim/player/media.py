@@ -9,6 +9,14 @@ from typing import TYPE_CHECKING, Any, Literal
 from xml.etree import ElementTree as ET
 
 from ..exceptions import WiiMError
+from ..upnp.playqueue import (
+    CURRENT_QUEUE,
+    build_empty_playlist,
+    build_track_playlist,
+    parse_queue_context,
+    playqueue_supports_enqueue,
+    service_has_action,
+)
 from .source_capabilities import SOURCE_CAPABILITIES, source_supports_native_notification_prompt
 
 if TYPE_CHECKING:
@@ -175,9 +183,9 @@ class MediaControl:
         # Call API (raises on failure)
         await self.player.client.stop()
 
-        # Update cached state immediately (optimistic)
+        # Update cached state immediately (optimistic). "stop" normalizes to idle.
         if self.player._status_model:
-            self.player._status_model.play_state = "stop"
+            self.player._status_model.play_state = "idle"
 
         # Update state synchronizer (for immediate property reads)
         self.player._state_synchronizer.update_from_http({"play_state": "stop"})
@@ -393,8 +401,19 @@ class MediaControl:
 
         return result
 
+    def _use_playqueue_enqueue(self) -> bool:
+        """Prefer vendor PlayQueue when AVTransport has no AddURIToQueue."""
+        upnp = self.player._upnp_client
+        if not upnp:
+            return False
+        if service_has_action(upnp.av_transport, "AddURIToQueue"):
+            return False
+        return playqueue_supports_enqueue(upnp.play_queue)
+
     async def add_to_queue(self, url: str, metadata: str = "") -> None:
         """Add URL to end of queue (requires UPnP client).
+
+        Uses PlayQueue on WiiM firmware that lacks AVTransport AddURIToQueue.
 
         Args:
             url: URL to add to queue.
@@ -402,6 +421,10 @@ class MediaControl:
         """
         if not self.player._upnp_client:
             raise WiiMError("Queue management requires UPnP client.")
+
+        if self._use_playqueue_enqueue():
+            await self._playqueue_add(url, metadata)
+            return
 
         await self.player._upnp_client.async_call_action(
             "AVTransport",
@@ -425,6 +448,10 @@ class MediaControl:
         if not self.player._upnp_client:
             raise WiiMError("Queue management requires UPnP client.")
 
+        if self._use_playqueue_enqueue():
+            await self._playqueue_insert_next(url, metadata)
+            return
+
         await self.player._upnp_client.async_call_action(
             "AVTransport",
             "InsertURIToQueue",
@@ -442,6 +469,74 @@ class MediaControl:
             await self.add_to_queue(url)
         elif enqueue == "next":
             await self.insert_next(url)
+
+    async def _playqueue_call(self, action: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Call a PlayQueue action."""
+        upnp = self.player._upnp_client
+        if not upnp:
+            raise WiiMError("Queue management requires UPnP client.")
+        return await upnp.async_call_action("play_queue", action, arguments)
+
+    async def _playqueue_ensure(self) -> None:
+        """Create CurrentQueue if BrowseQueue says it does not exist."""
+        try:
+            await self._playqueue_call("BrowseQueue", {"QueueName": CURRENT_QUEUE})
+        except Exception:
+            await self._playqueue_call(
+                "CreateQueue",
+                {"QueueContext": build_empty_playlist()},
+            )
+
+    async def _playqueue_append(
+        self,
+        url: str,
+        metadata: str = "",
+        *,
+        start_index: int = 0,
+        play: int = 0,
+    ) -> None:
+        """Append one track via AppendTracksInQueueEx."""
+        await self._playqueue_call(
+            "AppendTracksInQueueEx",
+            {
+                "QueueContext": build_track_playlist(url, metadata),
+                "Direction": 1,
+                "StartIndex": start_index,
+                "Play": play,
+                "Action": "",
+            },
+        )
+
+    async def _playqueue_add(self, url: str, metadata: str = "") -> None:
+        """Add URL to the end of CurrentQueue without starting playback."""
+        await self._playqueue_ensure()
+        await self._playqueue_append(url, metadata)
+        _LOGGER.debug("Added URL to PlayQueue on %s", self.player.host)
+
+    async def _playqueue_insert_next(self, url: str, metadata: str = "") -> None:
+        """Insert URL after the current PlayQueue index."""
+        await self._playqueue_ensure()
+        start_index = 1
+        try:
+            result = await self._playqueue_call("GetQueueIndex", {"QueueName": CURRENT_QUEUE})
+            current = result.get("CurrentIndex")
+            if current is not None:
+                start_index = int(current)
+        except Exception as err:
+            _LOGGER.debug("GetQueueIndex failed on %s, appending after index 1: %s", self.player.host, err)
+        await self._playqueue_append(url, metadata, start_index=start_index)
+        _LOGGER.debug("Inserted URL next in PlayQueue on %s", self.player.host)
+
+    async def _playqueue_get(self) -> list[dict[str, Any]]:
+        """Browse CurrentQueue and parse Track entries."""
+        try:
+            result = await self._playqueue_call("BrowseQueue", {"QueueName": CURRENT_QUEUE})
+        except Exception as err:
+            _LOGGER.debug("PlayQueue BrowseQueue empty or failed on %s: %s", self.player.host, err)
+            return []
+        items = parse_queue_context((result or {}).get("QueueContext", "") or "")
+        _LOGGER.debug("Retrieved %d PlayQueue items from %s", len(items), self.player.host)
+        return items
 
     async def play_preset(self, preset: int, index: int | None = None) -> None:
         """Play a preset by number, optionally starting at a track index.
@@ -705,6 +800,9 @@ class MediaControl:
         if not self.player._upnp_client:
             raise WiiMError("Queue retrieval requires UPnP client.")
 
+        if self._use_playqueue_enqueue():
+            return await self._playqueue_get()
+
         try:
             # Browse queue using ContentDirectory service
             result = await self.player._upnp_client.browse_queue(
@@ -747,6 +845,27 @@ class MediaControl:
 
         if queue_position < 0:
             raise WiiMError(f"Invalid queue position: {queue_position} (must be >= 0)")
+
+        if self._use_playqueue_enqueue():
+            try:
+                await self._playqueue_call(
+                    "PlayQueueWithIndex",
+                    {"QueueName": CURRENT_QUEUE, "Index": queue_position + 1},
+                )
+                _LOGGER.debug(
+                    "Started PlayQueue playback at position %d on %s",
+                    queue_position,
+                    self.player.host,
+                )
+                return
+            except Exception as err:
+                _LOGGER.warning(
+                    "Failed to play PlayQueue position %d on %s: %s",
+                    queue_position,
+                    self.player.host,
+                    err,
+                )
+                raise WiiMError(f"Failed to play queue position {queue_position}: {err}") from err
 
         try:
             # Use Seek with TRACK_NR unit to jump to queue position
@@ -794,6 +913,33 @@ class MediaControl:
         if queue_position < 0:
             raise WiiMError(f"Invalid queue position: {queue_position} (must be >= 0)")
 
+        if self._use_playqueue_enqueue():
+            index = queue_position + 1
+            try:
+                await self._playqueue_call(
+                    "RemoveTracksInQueue",
+                    {
+                        "QueueName": CURRENT_QUEUE,
+                        "RangStart": index,
+                        "RangEnd": index,
+                        "Action": "",
+                    },
+                )
+                _LOGGER.debug(
+                    "Removed PlayQueue item at position %d from %s",
+                    queue_position,
+                    self.player.host,
+                )
+                return
+            except Exception as err:
+                _LOGGER.warning(
+                    "Failed to remove PlayQueue position %d on %s: %s",
+                    queue_position,
+                    self.player.host,
+                    err,
+                )
+                raise WiiMError(f"Failed to remove queue position {queue_position}: {err}") from err
+
         try:
             # RemoveTrackFromQueue uses ObjectID which is typically "Q:0/position"
             # UPnP uses 1-based track numbers
@@ -834,6 +980,15 @@ class MediaControl:
         """
         if not self.player._upnp_client:
             raise WiiMError("Queue management requires UPnP client.")
+
+        if self._use_playqueue_enqueue():
+            try:
+                await self._playqueue_call("DeleteQueue", {"QueueName": CURRENT_QUEUE})
+                _LOGGER.debug("Cleared PlayQueue on %s", self.player.host)
+                return
+            except Exception as err:
+                _LOGGER.warning("Failed to clear PlayQueue on %s: %s", self.player.host, err)
+                raise WiiMError(f"Failed to clear queue: {err}") from err
 
         try:
             await self.player._upnp_client.async_call_action(

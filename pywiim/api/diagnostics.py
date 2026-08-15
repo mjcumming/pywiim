@@ -11,6 +11,21 @@ from .constants import API_ENDPOINT_DEBUG_INFO
 
 _LOGGER = logging.getLogger(__name__)
 
+# Tried after the profile/capability command if the device returns "unknown command".
+# WiiM Amp (and some current WiiM firmware) rejects `reboot` and accepts StartRebootTime:1.
+# Audio Pro devices use StartRebootTime:0.
+_REBOOT_FALLBACKS = ("StartRebootTime:1", "StartRebootTime:0", "reboot")
+
+
+def _is_unknown_reboot_command(resp: Any) -> bool:
+    """Return True when the device rejected the reboot command as unknown."""
+    if resp is None:
+        return False
+    raw = getattr(resp, "raw", None)
+    parsed = getattr(resp, "parsed", None)
+    text = str(raw if raw not in (None, "") else parsed or "").lower()
+    return "unknown command" in text
+
 
 class DiagnosticsAPI:
     """Low-level device maintenance helpers.
@@ -27,51 +42,74 @@ class DiagnosticsAPI:
         even if the device stops responding.
 
         The reboot command varies by device:
-        - WiiM devices: "reboot"
+        - WiiM devices (legacy): "reboot"
+        - WiiM Amp / current WiiM firmware: "StartRebootTime:1"
         - Audio Pro devices: "StartRebootTime:0"
 
-        The correct command is determined from device capabilities/profile.
-        See: https://github.com/mjcumming/wiim/issues/177
+        The first command comes from device capabilities/profile. If the device
+        returns "unknown command", remaining fallbacks are tried and the working
+        command is cached on the client. See: https://github.com/mjcumming/wiim/issues/260
 
         Raises:
             WiiMError: If the request fails before the device reboots.
         """
-        try:
-            # Get reboot command from capabilities (set from device profile)
-            # Default to "reboot" for WiiM and most LinkPlay devices
-            reboot_command = self._capabilities.get("reboot_command", "reboot")  # type: ignore[attr-defined]
-            endpoint = f"/httpapi.asp?command={reboot_command}"
+        primary = self._capabilities.get("reboot_command", "reboot")  # type: ignore[attr-defined]
+        commands: list[str] = [primary]
+        for fallback in _REBOOT_FALLBACKS:
+            if fallback not in commands:
+                commands.append(fallback)
 
-            _LOGGER.debug("Sending reboot command: %s", reboot_command)
+        last_err: Exception | None = None
+        for command in commands:
+            endpoint = f"/httpapi.asp?command={command}"
+            _LOGGER.debug("Sending reboot command: %s", command)
+            try:
+                resp = await self._request_reboot(endpoint)
+            except Exception as err:
+                last_err = err
+                error_str = str(err).lower()
+                if "unknown command" in error_str:
+                    _LOGGER.debug("Reboot command %s not supported, trying fallback", command)
+                    continue
+                # Connection drop / empty body: command was likely accepted
+                _LOGGER.info("Reboot command sent to device (device may not respond): %s", err)
+                return
 
-            # Send reboot command - device may not respond after this
-            # Use a custom request method that handles empty responses gracefully
-            await self._request_reboot(endpoint)
-        except Exception as err:
-            # Reboot commands often don't return proper responses
-            # Log the attempt but don't fail the service call
-            _LOGGER.info("Reboot command sent to device (device may not respond): %s", err)
-            # Don't re-raise - reboot command was sent successfully
+            if _is_unknown_reboot_command(resp):
+                _LOGGER.debug("Reboot command %s returned unknown command, trying fallback", command)
+                continue
 
-    async def _request_reboot(self, endpoint: str) -> None:
+            if command != primary:
+                self._capabilities["reboot_command"] = command  # type: ignore[attr-defined]
+                _LOGGER.info("Reboot command %s succeeded; cached for this device", command)
+            return
+
+        if last_err:
+            _LOGGER.info("Reboot command sent to device (device may not respond): %s", last_err)
+
+    async def _request_reboot(self, endpoint: str) -> Any:
         """Special request method for reboot that handles empty responses gracefully.
 
         Args:
             endpoint: The reboot endpoint to call.
+
+        Returns:
+            ApiResponse from the device, or None when the device dropped the
+            connection after accepting the command.
 
         Raises:
             WiiMError: If the request fails for reasons other than expected reboot behavior.
         """
         try:
             # Try to send the reboot command
-            await self._request(endpoint)  # type: ignore[attr-defined]
+            return await self._request(endpoint)  # type: ignore[attr-defined]
         except Exception as err:
             # If the request fails due to parsing issues (common with reboot),
             # we still consider it successful since the command was sent
             error_str = str(err).lower()
             if any(x in error_str for x in ["expecting value", "json decode", "empty response"]):
                 _LOGGER.info("Reboot command sent successfully (device stopped responding as expected)")
-                return
+                return None
             else:
                 # Re-raise other types of errors
                 raise

@@ -9,6 +9,7 @@ from ..device_capabilities import filter_plm_inputs, get_device_inputs
 from ..metadata import is_valid_image_url, is_valid_metadata_value
 from ..normalize import HARDWARE_SOURCE_KEYS as _HARDWARE_SOURCE_KEYS
 from ..normalize import canonical_source_key, source_rename_reverse
+from ..upnp.playqueue import playqueue_supports_enqueue, service_has_action
 from .source_capabilities import SourceCapability, get_source_capabilities
 
 if TYPE_CHECKING:
@@ -184,12 +185,10 @@ class PlayerProperties:
         Returns True when device has no active media. This indicates the device
         is not playing and has no media to resume.
 
-        Note: "stop" states are normalized to "pause" (modern UX), so stopped
-        devices are considered paused, not idle. Use is_paused to check for
-        both paused and stopped states.
+        Note: HTTP/UPnP "stop" and "stopped" normalize to idle.
         """
         state = self.play_state
-        return state is None or state in ("idle", "none")
+        return state is None or state in ("idle", "none", "stop", "stopped")
 
     @property
     def is_buffering(self) -> bool:
@@ -311,6 +310,11 @@ class PlayerProperties:
         if title:
             return title
 
+        # URL filename is only a stand-in for URL playback. Hardware inputs and
+        # idle/stop must not keep showing the last play_url() filename (#263).
+        if self.is_idle or self._is_physical_input_source():
+            return None
+
         # Fallback: extract filename from last played URL
         url = self.player._last_played_url
         if url:
@@ -334,6 +338,26 @@ class PlayerProperties:
                 pass  # Don't let URL parsing errors break title retrieval
 
         return None
+
+    def _is_physical_input_source(self) -> bool:
+        """Return True for passthrough inputs that never use play_url() metadata."""
+        source = (self.source or "").strip().lower().replace("-", "_")
+        return source in {
+            "line_in",
+            "linein",
+            "optical",
+            "coaxial",
+            "coax",
+            "aux",
+            "hdmi",
+            "phono",
+            "rca",
+            "line_in_2",
+            "linein_2",
+            "bluetooth",
+            "usb_dac",
+            "usbdac",
+        }
 
     @property
     def media_artist(self) -> str | None:
@@ -1713,24 +1737,31 @@ class PlayerProperties:
 
     @property
     def supports_queue_browse(self) -> bool:
-        """Whether full queue retrieval is available (UPnP ContentDirectory).
+        """Whether full queue retrieval is available.
 
-        Only available on WiiM Amp and Ultra when a USB drive is connected.
-        Most WiiM devices (Mini, Pro, Pro Plus) do not support this.
+        True when ContentDirectory is present (Amp/Ultra + USB) or when the
+        vendor PlayQueue service can BrowseQueue (WiiM Pro / Pro Plus).
         """
         if not self.player._upnp_client:
             return False
-        return self.player._upnp_client.content_directory is not None
+        if self.player._upnp_client.content_directory is not None:
+            return True
+        return service_has_action(self.player._upnp_client.play_queue, "BrowseQueue")
 
     @property
     def supports_queue_add(self) -> bool:
-        """Whether adding items to queue is supported (UPnP AVTransport).
+        """Whether adding items to queue is supported.
 
-        Available on most devices with UPnP support.
+        True when AVTransport advertises ``AddURIToQueue`` (Sonos-style) or
+        when PlayQueue advertises CreateQueue + AppendTracksInQueueEx +
+        PlayQueueWithIndex (WiiM Pro / Pro Plus). Presence of AVTransport
+        alone is not enough.
         """
         if not self.player._upnp_client:
             return False
-        return self.player._upnp_client.av_transport is not None
+        if service_has_action(self.player._upnp_client.av_transport, "AddURIToQueue"):
+            return True
+        return playqueue_supports_enqueue(self.player._upnp_client.play_queue)
 
     @property
     def supports_queue_count(self) -> bool:

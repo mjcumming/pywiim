@@ -446,6 +446,23 @@ class TestUpnpClient:
         mock_action.async_call.assert_called_once_with(InstanceID=0)
 
     @pytest.mark.asyncio
+    async def test_async_call_action_accepts_avtransport_soap_name(self):
+        """add_to_queue passes 'AVTransport'; that must resolve to _av_transport_service."""
+        from pywiim.upnp.client import UpnpClient
+
+        client = UpnpClient("192.168.1.100", "http://192.168.1.100/description.xml", None)
+        mock_service = MagicMock()
+        mock_action = MagicMock()
+        mock_action.async_call = AsyncMock(return_value={"result": "ok"})
+        mock_service.action = MagicMock(return_value=mock_action)
+        client._av_transport_service = mock_service
+
+        result = await client.async_call_action("AVTransport", "AddURIToQueue", {"InstanceID": 0})
+
+        assert result == {"result": "ok"}
+        mock_action.async_call.assert_called_once_with(InstanceID=0)
+
+    @pytest.mark.asyncio
     async def test_async_call_action_service_not_available(self):
         """Test calling action when service not available."""
         from pywiim.upnp.client import UpnpClient
@@ -468,6 +485,19 @@ class TestUpnpClient:
 
         with pytest.raises(UpnpError, match="Action.*not found"):
             await client.async_call_action("av_transport", "InvalidAction", {})
+
+    @pytest.mark.asyncio
+    async def test_async_call_action_missing_action_keyerror(self):
+        """async_upnp_client raises KeyError when the action is absent from SCPD."""
+        from pywiim.upnp.client import UpnpClient
+
+        client = UpnpClient("192.168.1.100", "http://192.168.1.100/description.xml", None)
+        mock_service = MagicMock()
+        mock_service.action = MagicMock(side_effect=KeyError("AddURIToQueue"))
+        client._av_transport_service = mock_service
+
+        with pytest.raises(UpnpError, match="Action AddURIToQueue not found"):
+            await client.async_call_action("AVTransport", "AddURIToQueue", {})
 
     @pytest.mark.asyncio
     async def test_get_media_info_success(self):

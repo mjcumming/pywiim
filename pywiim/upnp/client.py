@@ -23,6 +23,21 @@ from async_upnp_client.utils import async_get_local_ip
 
 _LOGGER = logging.getLogger(__name__)
 
+# Canonical service-name → instance attribute. Keys are normalized
+# (lowercase, no spaces/underscores) so "AVTransport", "av_transport",
+# and "avtransport" all resolve to the same service.
+_SERVICE_ATTR_MAP: dict[str, str] = {
+    "avtransport": "_av_transport_service",
+    "renderingcontrol": "_rendering_control_service",
+    "contentdirectory": "_content_directory_service",
+    "playqueue": "_play_queue_service",
+}
+
+
+def _normalize_service_key(service_name: str) -> str:
+    """Normalize a UPnP service name for attribute lookup."""
+    return service_name.lower().replace(" ", "").replace("_", "").replace("-", "")
+
 
 class UpnpClient:
     """UPnP client wrapper for WiiM devices using async-upnp-client.
@@ -380,6 +395,16 @@ class UpnpClient:
             finally:
                 self._internal_session = None
 
+    def _get_service(self, service_name: str) -> Any:
+        """Resolve a UPnP service from a human or SOAP service name.
+
+        Accepts ``AVTransport``, ``av_transport``, and ``avtransport``.
+        """
+        service_attr = _SERVICE_ATTR_MAP.get(_normalize_service_key(service_name))
+        if not service_attr:
+            return None
+        return getattr(self, service_attr, None)
+
     @property
     def av_transport(self) -> Any:
         """Get AVTransport service."""
@@ -428,19 +453,9 @@ class UpnpClient:
         Returns:
             Subscription object (for storing and managing callback)
         """
-        # Map service name to attribute name
-        service_attr_map = {
-            "avtransport": "_av_transport_service",
-            "renderingcontrol": "_rendering_control_service",
-            "contentdirectory": "_content_directory_service",
-            "play_queue": "_play_queue_service",
-            "playqueue": "_play_queue_service",
-        }
-        service_attr = service_attr_map.get(service_name.lower())
-        if not service_attr:
+        if _SERVICE_ATTR_MAP.get(_normalize_service_key(service_name)) is None:
             raise UpnpError(f"Service {service_name} not available")
-
-        service = getattr(self, service_attr)
+        service = self._get_service(service_name)
         if not service:
             raise UpnpError(f"Service {service_name} not initialized")
 
@@ -672,14 +687,14 @@ class UpnpClient:
         Returns:
             Action response as dict
         """
-        # Normalize service name for attribute lookup
-        service_name_lower = service_name.lower().replace(" ", "_")
-        service_attr = f"_{service_name_lower}_service"
-        service = getattr(self, service_attr, None)
+        service = self._get_service(service_name)
         if not service:
             raise UpnpError(f"Service {service_name} not available")
 
-        action_obj = service.action(action)
+        try:
+            action_obj = service.action(action)
+        except KeyError as err:
+            raise UpnpError(f"Action {action} not found in {service_name}") from err
         if not action_obj:
             raise UpnpError(f"Action {action} not found in {service_name}")
 

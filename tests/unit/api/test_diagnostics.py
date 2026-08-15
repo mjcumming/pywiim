@@ -54,6 +54,28 @@ class TestDiagnosticsAPI:
         assert "/httpapi.asp?command=reboot" in mock_client._request_reboot.call_args[0][0]
 
     @pytest.mark.asyncio
+    async def test_reboot_falls_back_when_command_unknown(self, mock_client):
+        """WiiM Amp rejects `reboot`; fall back to StartRebootTime:1 (issue #260)."""
+        from pywiim.api.base import ApiResponse
+
+        mock_client._capabilities.pop("reboot_command", None)
+        mock_client._request = AsyncMock(
+            side_effect=[
+                ApiResponse(parsed=None, raw="unknown command"),
+                ApiResponse(parsed=None, raw="OK"),
+            ]
+        )
+
+        await mock_client.reboot()
+
+        assert mock_client._request.call_count == 2
+        first = mock_client._request.call_args_list[0][0][0]
+        second = mock_client._request.call_args_list[1][0][0]
+        assert first.endswith("command=reboot")
+        assert second.endswith("command=StartRebootTime:1")
+        assert mock_client._capabilities["reboot_command"] == "StartRebootTime:1"
+
+    @pytest.mark.asyncio
     async def test_reboot_handles_exception_gracefully(self, mock_client):
         """Test reboot handles exceptions gracefully (device may not respond)."""
         mock_client._request_reboot = AsyncMock(side_effect=Exception("Device stopped responding"))

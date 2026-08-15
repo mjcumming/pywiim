@@ -83,7 +83,7 @@ UPNP_STATE_MAP: dict[str, str] = {
     "playing": "play",
     "paused playback": "pause",
     "paused": "pause",
-    "stopped": "pause",  # Modern UX: stop == pause
+    "stopped": "idle",
     "no media present": "idle",
     "transitioning": "buffering",
     "loading": "buffering",
@@ -96,8 +96,8 @@ STANDARD_PLAY_STATES = {
     "pause": "pause",
     "paused": "pause",
     "paused playback": "pause",
-    "stop": "pause",  # Modern UX: stop == pause (position maintained either way)
-    "stopped": "pause",  # Modern UX: stop == pause (position maintained either way)
+    "stop": "idle",
+    "stopped": "idle",
     "idle": "idle",
     "none": "idle",  # HTTP API uses "none" for idle
     "no media present": "idle",
@@ -252,6 +252,9 @@ class StateSynchronizer:
         self._merged_state = SynchronizedState()
         self._last_merge_time: float = 0.0
         self._profile = profile
+        # Firmware often keeps the previous source's title/duration after a
+        # switch. Ignore those exact leftovers until a new track appears.
+        self._stale_metadata_after_source: dict[str, Any] | None = None
 
     def set_profile(self, profile: DeviceProfile) -> None:
         """Set or update the device profile.
@@ -344,7 +347,7 @@ class StateSynchronizer:
                 timestamp=ts,
             )
 
-        if "duration" in data:
+        if "duration" in data and not self._is_leftover_after_source_change("duration", data.get("duration")):
             self._http_state["duration"] = TimestampedField(
                 value=data.get("duration"),
                 source=source,
@@ -369,19 +372,31 @@ class StateSynchronizer:
                 timestamp=ts,
             )
 
-        # Extract source
+        # Extract source — clear track metadata when the input actually changes
+        source_changed = False
         if "source" in data:
+            new_source = data.get("source")
+            old_field = self._merged_state.source
+            old_source = old_field.value if old_field is not None else None
+            source_changed = self._sources_differ(old_source, new_source)
+            if source_changed:
+                self._remember_stale_metadata(data)
+                self._clear_track_metadata()
             self._http_state["source"] = TimestampedField(
-                value=data.get("source"),
+                value=new_source,
                 source=source,
                 timestamp=ts,
             )
 
+        self._release_stale_guard_if_fresh_track(data)
+
         # Extract metadata (preserve if playing)
-        if force_metadata_update or not self._should_clear_metadata():
+        if not source_changed and (force_metadata_update or not self._should_clear_metadata()):
             for field_name in ["title", "artist", "album", "image_url"]:
                 if field_name in data:
                     value = data.get(field_name)
+                    if self._is_leftover_after_source_change(field_name, value):
+                        continue
                     # Always update if field is present in data (even if None)
                     # This ensures metadata gets populated when available
                     # If value is None/empty, we still update to track that HTTP doesn't have it
@@ -430,7 +445,7 @@ class StateSynchronizer:
                 timestamp=ts,
             )
 
-        if "duration" in data:
+        if "duration" in data and not self._is_leftover_after_source_change("duration", data.get("duration")):
             self._upnp_state["duration"] = TimestampedField(
                 value=data.get("duration"),
                 source="upnp",
@@ -452,19 +467,31 @@ class StateSynchronizer:
                 timestamp=ts,
             )
 
-        # Extract source
+        # Extract source — clear track metadata when the input actually changes
+        source_changed = False
         if "source" in data:
+            new_source = data.get("source")
+            old_field = self._merged_state.source
+            old_source = old_field.value if old_field is not None else None
+            source_changed = self._sources_differ(old_source, new_source)
+            if source_changed:
+                self._remember_stale_metadata(data)
+                self._clear_track_metadata()
             self._upnp_state["source"] = TimestampedField(
-                value=data.get("source"),
+                value=new_source,
                 source="upnp",
                 timestamp=ts,
             )
 
+        self._release_stale_guard_if_fresh_track(data)
+
         # Extract metadata (preserve if playing)
-        if force_metadata_update or not self._should_clear_metadata():
+        if not source_changed and (force_metadata_update or not self._should_clear_metadata()):
             for field_name in ["title", "artist", "album", "image_url"]:
                 if field_name in data:
                     value = data.get(field_name)
+                    if self._is_leftover_after_source_change(field_name, value):
+                        continue
                     # Always update if field is present in data (even if None)
                     # This ensures metadata gets populated when available
                     # If value is None/empty, we still update to track that UPnP doesn't have it
@@ -739,14 +766,16 @@ class StateSynchronizer:
             )
             return fallback
 
-        # Both empty or fallback stale - preserve existing if we have it
-        existing_merged: TimestampedField | None = getattr(self._merged_state, field_name, None)
-        if existing_merged is not None and self._is_valid_metadata_value(existing_merged.value, field_name):
-            _LOGGER.debug(
-                "State merge [profile]: field=%s, preserving existing (both sources empty)",
-                field_name,
-            )
-            return existing_merged
+        # Fresh empty from the preferred source is an explicit clear (Unknown → None).
+        # Only preserve the last good value when the empty update is stale.
+        if not primary_fresh:
+            existing_merged: TimestampedField | None = getattr(self._merged_state, field_name, None)
+            if existing_merged is not None and self._is_valid_metadata_value(existing_merged.value, field_name):
+                _LOGGER.debug(
+                    "State merge [profile]: field=%s, preserving existing (both sources empty, stale)",
+                    field_name,
+                )
+                return existing_merged
 
         # No existing - use primary (even if empty)
         _LOGGER.debug(
@@ -832,14 +861,18 @@ class StateSynchronizer:
                 )
                 return http_field
             else:
-                # Both empty - preserve existing
-                existing_merged: TimestampedField | None = getattr(self._merged_state, field_name, None)
-                if existing_merged is not None and self._is_valid_metadata_value(existing_merged.value, field_name):
-                    _LOGGER.debug(
-                        "State merge [legacy]: field=%s, preserving existing (both sources empty)",
-                        field_name,
-                    )
-                    return existing_merged
+                # Both empty. Fresh empty is an explicit clear (Unknown → None).
+                # Preserve only when both updates are stale (transient gap).
+                if not http_fresh and not upnp_fresh:
+                    existing_merged: TimestampedField | None = getattr(self._merged_state, field_name, None)
+                    if existing_merged is not None and self._is_valid_metadata_value(
+                        existing_merged.value, field_name
+                    ):
+                        _LOGGER.debug(
+                            "State merge [legacy]: field=%s, preserving existing (both sources empty, stale)",
+                            field_name,
+                        )
+                        return existing_merged
                 # Use most recent empty value
                 if upnp_field.timestamp > http_field.timestamp:
                     return upnp_field
@@ -873,6 +906,57 @@ class StateSynchronizer:
             field_name,
         )
         return http_field
+
+    @staticmethod
+    def _sources_differ(old: Any, new: Any) -> bool:
+        """Return True when both values are present and name a different source."""
+        if old is None or new is None:
+            return False
+        old_n = str(old).strip().lower().replace("_", "-").replace(" ", "-")
+        new_n = str(new).strip().lower().replace("_", "-").replace(" ", "-")
+        return bool(old_n and new_n and old_n != new_n)
+
+    def _remember_stale_metadata(self, data: dict[str, Any]) -> None:
+        """Snapshot leftover firmware metadata so later polls cannot re-apply it."""
+        stale: dict[str, set[Any]] = {}
+        for field_name in ("title", "artist", "album", "image_url", "duration"):
+            incoming = data.get(field_name)
+            merged_field = getattr(self._merged_state, field_name, None)
+            merged_val = merged_field.value if merged_field is not None else None
+            values = {v for v in (incoming, merged_val) if v not in (None, "")}
+            stale[field_name] = values
+        self._stale_metadata_after_source = stale
+
+    def _is_leftover_after_source_change(self, field_name: str, value: Any) -> bool:
+        """Return True when firmware is still reporting the pre-switch track."""
+        if not self._stale_metadata_after_source:
+            return False
+        stale_values = self._stale_metadata_after_source.get(field_name) or set()
+        if value in stale_values:
+            return True
+        if field_name != "duration" and not is_valid_metadata_value(value):
+            return True
+        return False
+
+    def _release_stale_guard_if_fresh_track(self, data: dict[str, Any]) -> None:
+        """Drop the leftover-metadata guard once a new title appears."""
+        if not self._stale_metadata_after_source:
+            return
+        new_title = data.get("title")
+        stale_titles = self._stale_metadata_after_source.get("title") or set()
+        if is_valid_metadata_value(new_title) and new_title not in stale_titles:
+            self._stale_metadata_after_source = None
+
+    def _clear_track_metadata(self) -> None:
+        """Drop title/artist/album/art/duration after a source change.
+
+        Firmware often keeps the previous source's metadata in getPlayerStatusEx
+        (Spotify → network stream). Clearing here prevents a permanently stale track.
+        """
+        for field_name in ("title", "artist", "album", "image_url", "duration"):
+            self._http_state.pop(field_name, None)
+            self._upnp_state.pop(field_name, None)
+            setattr(self._merged_state, field_name, None)
 
     def _should_clear_metadata(self) -> bool:
         """Determine if metadata should be cleared.

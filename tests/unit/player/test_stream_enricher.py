@@ -77,7 +77,7 @@ class TestStreamEnricher:
         stream_enricher._last_stream_metadata = None  # Reset state
 
         # Test with play_state="pause" - should return early before checking URL
-        # Note: "stop" gets normalized to "pause" by PlayerStatus, so use "pause" or "idle"
+        # Note: "stop" gets normalized to "idle" by PlayerStatus, so use "pause" or "idle"
         status = PlayerStatus(source="wifi", title="http://example.com/stream.mp3", play_state="pause")
 
         await stream_enricher.enrich_if_needed(status)
