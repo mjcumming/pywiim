@@ -865,9 +865,7 @@ class StateSynchronizer:
                 # Preserve only when both updates are stale (transient gap).
                 if not http_fresh and not upnp_fresh:
                     existing_merged: TimestampedField | None = getattr(self._merged_state, field_name, None)
-                    if existing_merged is not None and self._is_valid_metadata_value(
-                        existing_merged.value, field_name
-                    ):
+                    if existing_merged is not None and self._is_valid_metadata_value(existing_merged.value, field_name):
                         _LOGGER.debug(
                             "State merge [legacy]: field=%s, preserving existing (both sources empty, stale)",
                             field_name,

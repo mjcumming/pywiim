@@ -2209,9 +2209,7 @@ class TestPlayerMediaMetadata:
         player = Player(mock_client)
         player._last_played_url = "https://example.com/SoundHelix-Song-1.mp3"
         player._status_model = PlayerStatus(play_state="play", source="line_in", title=None)
-        player._state_synchronizer.update_from_http(
-            {"play_state": "play", "source": "line_in", "title": None}
-        )
+        player._state_synchronizer.update_from_http({"play_state": "play", "source": "line_in", "title": None})
 
         assert player.media_title is None
 

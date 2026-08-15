@@ -59,13 +59,18 @@ class TestPlaylistXml:
         assert "x=1&amp;y=2" in xml
 
     def test_parse_queue_context_tracks(self) -> None:
-        ctx = """<?xml version="1.0"?>
+        didl = (
+            "&lt;DIDL-Lite xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot; "
+            "xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/&quot;&gt;"
+            "&lt;dc:title&gt;Song 1&lt;/dc:title&gt;&lt;/DIDL-Lite&gt;"
+        )
+        ctx = f"""<?xml version="1.0"?>
 <PlayList>
 <ListName>CurrentQueue</ListName>
 <Tracks>
 <Track1>
 <URL>https://example.com/one.mp3</URL>
-<Metadata>&lt;DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"&gt;&lt;dc:title&gt;Song 1&lt;/dc:title&gt;&lt;/DIDL-Lite&gt;</Metadata>
+<Metadata>{didl}</Metadata>
 </Track1>
 <Track2>
 <URL>https://example.com/two.mp3</URL>

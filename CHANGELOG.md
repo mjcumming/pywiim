@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-08-15
+
 ### Fixed
 - **UPnP `async_call_action("AVTransport")`** — SOAP service names like `AVTransport` now resolve to `_av_transport_service`. Missing actions raise `Action … not found` instead of a misleading service error (wiim #264).
 - **`supports_queue_add` requires a real enqueue action** — AVTransport without `AddURIToQueue` is not enough. WiiM Pro / Pro Plus use vendor PlayQueue (`CreateQueue`, `AppendTracksInQueueEx`, `PlayQueueWithIndex`) instead; Arylic remains false until that path is proven there (wiim #264).
