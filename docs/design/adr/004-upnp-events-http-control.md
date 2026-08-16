@@ -26,7 +26,7 @@ We use a **single control path** and a **single event path**:
 
 HTTP cannot incrementally enqueue a URL. `setPlayerCmd:add:<url>` returns `OK` and does nothing; `plicount` stays 0. WiiM Pro / Pro Plus also omit AVTransport `AddURIToQueue`.
 
-The **only** working control path for `enqueue: add` / `play_queue` on that firmware is the vendor UPnP PlayQueue service (`CreateQueue`, `AppendTracksInQueueEx`, `PlayQueueWithIndex`, `DeleteQueue`). That is an explicit exception to “no UPnP for control,” limited to URL queue management. Playback, volume, source, EQ, and groups stay on HTTP.
+The **only** working control path for `enqueue: add` / `play_queue` on that firmware is the vendor UPnP PlayQueue service (`CreateQueue`, `AppendTracksInQueueEx`, `PlayQueueWithIndex`, `SetQueueLoopMode`, `DeleteQueue`). That is an explicit exception to “no UPnP for control,” limited to URL queue management. Playback, volume, source, EQ, and groups stay on HTTP. HTTP `plicount`/`plicurr` stay empty on this path, so `queue_count` / `queue_position` overlay from `BrowseQueue` / `GetQueueIndex`.
 
 ### Out of scope
 - How we merge UPnP events with HTTP state (freshness, priority) is documented in ARCHITECTURE_DATA_FLOW and STATE_MANAGEMENT; this ADR only fixes the split between control (HTTP) and events (UPnP).

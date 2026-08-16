@@ -981,6 +981,7 @@ class TestPlayerPlaybackControl:
             "DeleteQueue": object(),
             "RemoveTracksInQueue": object(),
             "GetQueueIndex": object(),
+            "SetQueueLoopMode": object(),
         }
         mock_upnp.content_directory = None
         return mock_upnp
@@ -991,18 +992,20 @@ class TestPlayerPlaybackControl:
         from pywiim.player import Player
 
         mock_upnp = self._playqueue_upnp()
-        mock_upnp.async_call_action = AsyncMock(
-            side_effect=[
-                RuntimeError("GeneratePlayListInQueueToXMLString failed"),
-                {},
-                {},
-            ]
-        )
+
+        async def _call(service, action, arguments=None):
+            if action == "BrowseQueue":
+                raise RuntimeError("GeneratePlayListInQueueToXMLString failed")
+            if action == "GetQueueIndex":
+                return {"TrackNums": 1, "CurrentIndex": 1}
+            return {}
+
+        mock_upnp.async_call_action = AsyncMock(side_effect=_call)
         player = Player(mock_client, upnp_client=mock_upnp)
         await player.add_to_queue("https://example.com/song.mp3")
 
         actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
-        assert actions == ["BrowseQueue", "CreateQueue", "AppendTracksInQueueEx"]
+        assert actions == ["BrowseQueue", "CreateQueue", "AppendTracksInQueueEx", "GetQueueIndex"]
         append_args = mock_upnp.async_call_action.await_args_list[2].args[2]
         assert "https://example.com/song.mp3" in append_args["QueueContext"]
         assert append_args["Action"] == ""
@@ -1013,12 +1016,18 @@ class TestPlayerPlaybackControl:
         from pywiim.player import Player
 
         mock_upnp = self._playqueue_upnp()
-        mock_upnp.async_call_action = AsyncMock(return_value={"QueueContext": "<PlayList/>"})
+
+        async def _call(service, action, arguments=None):
+            if action == "GetQueueIndex":
+                return {"TrackNums": 1, "CurrentIndex": 1}
+            return {"QueueContext": "<PlayList/>"}
+
+        mock_upnp.async_call_action = AsyncMock(side_effect=_call)
         player = Player(mock_client, upnp_client=mock_upnp)
         await player.add_to_queue("https://example.com/two.mp3")
 
         actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
-        assert actions == ["BrowseQueue", "AppendTracksInQueueEx"]
+        assert actions == ["BrowseQueue", "AppendTracksInQueueEx", "GetQueueIndex"]
 
     @pytest.mark.asyncio
     async def test_insert_next_uses_playqueue_index(self, mock_client):
@@ -1039,8 +1048,10 @@ class TestPlayerPlaybackControl:
         actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
         assert "GetQueueIndex" in actions
         assert "AppendTracksInQueueEx" in actions
-        append_args = mock_upnp.async_call_action.await_args_list[-1].args[2]
-        assert append_args["StartIndex"] == 2
+        append_call = next(
+            call for call in mock_upnp.async_call_action.await_args_list if call.args[1] == "AppendTracksInQueueEx"
+        )
+        assert append_call.args[2]["StartIndex"] == 2
 
     @pytest.mark.asyncio
     async def test_play_queue_uses_playqueue_with_index(self, mock_client):
@@ -1051,11 +1062,14 @@ class TestPlayerPlaybackControl:
         player = Player(mock_client, upnp_client=mock_upnp)
         await player.play_queue(2)
 
-        mock_upnp.async_call_action.assert_called_once_with(
-            "play_queue",
-            "PlayQueueWithIndex",
-            {"QueueName": "CurrentQueue", "Index": 3},
-        )
+        actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
+        assert actions[0] == "PlayQueueWithIndex"
+        assert actions[1] == "SetQueueLoopMode"
+        assert "GetQueueIndex" in actions
+        play_args = mock_upnp.async_call_action.await_args_list[0].args[2]
+        assert play_args["Index"] == 3
+        loop_args = mock_upnp.async_call_action.await_args_list[1].args[2]
+        assert loop_args["LoopMode"] == 4
 
     @pytest.mark.asyncio
     async def test_clear_and_remove_use_playqueue(self, mock_client):
@@ -1068,10 +1082,14 @@ class TestPlayerPlaybackControl:
         await player.remove_from_queue(0)
 
         actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
-        assert actions == ["DeleteQueue", "RemoveTracksInQueue"]
-        remove_args = mock_upnp.async_call_action.await_args_list[1].args[2]
-        assert remove_args["RangStart"] == 1
-        assert remove_args["RangEnd"] == 1
+        assert actions[0] == "DeleteQueue"
+        assert "RemoveTracksInQueue" in actions
+        assert "GetQueueIndex" in actions
+        remove_call = next(
+            call for call in mock_upnp.async_call_action.await_args_list if call.args[1] == "RemoveTracksInQueue"
+        )
+        assert remove_call.args[2]["RangStart"] == 1
+        assert remove_call.args[2]["RangEnd"] == 1
 
     @pytest.mark.asyncio
     async def test_get_queue_uses_playqueue_browse(self, mock_client):
@@ -1091,6 +1109,139 @@ class TestPlayerPlaybackControl:
         player = Player(mock_client, upnp_client=mock_upnp)
         items = await player.get_queue()
         assert items == [{"media_content_id": "https://example.com/a.mp3", "position": 0}]
+
+    @pytest.mark.asyncio
+    async def test_play_queue_sets_loop_mode_play_through_once(self, mock_client):
+        """play_queue sets SetQueueLoopMode 4 (play through once) by default."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        player = Player(mock_client, upnp_client=mock_upnp)
+        await player.play_queue(0)
+
+        loop_call = next(
+            call for call in mock_upnp.async_call_action.await_args_list if call.args[1] == "SetQueueLoopMode"
+        )
+        assert loop_call.args[2]["LoopMode"] == 4
+
+    @pytest.mark.asyncio
+    async def test_play_queue_loop_mode_respects_shuffle(self, mock_client):
+        """play_queue maps shuffle/repeat into SetQueueLoopMode."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        player = Player(mock_client, upnp_client=mock_upnp)
+        player._media_ctrl._playqueue_loop_mode = lambda: 3
+        await player.play_queue(0)
+
+        loop_call = next(
+            call for call in mock_upnp.async_call_action.await_args_list if call.args[1] == "SetQueueLoopMode"
+        )
+        assert loop_call.args[2]["LoopMode"] == 3
+
+    @pytest.mark.asyncio
+    async def test_play_queue_skips_loop_mode_when_action_missing(self, mock_client):
+        """play_queue still starts when SetQueueLoopMode is not advertised."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        del mock_upnp.play_queue.actions["SetQueueLoopMode"]
+        player = Player(mock_client, upnp_client=mock_upnp)
+        await player.play_queue(0)
+
+        actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
+        assert "PlayQueueWithIndex" in actions
+        assert "SetQueueLoopMode" not in actions
+
+    @pytest.mark.asyncio
+    async def test_play_queue_continues_if_set_loop_mode_fails(self, mock_client):
+        """SetQueueLoopMode failure must not abort PlayQueueWithIndex playback."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+
+        async def _call(service, action, arguments=None):
+            if action == "SetQueueLoopMode":
+                raise RuntimeError("loop failed")
+            return {}
+
+        mock_upnp.async_call_action = AsyncMock(side_effect=_call)
+        player = Player(mock_client, upnp_client=mock_upnp)
+        await player.play_queue(0)
+
+        actions = [call.args[1] for call in mock_upnp.async_call_action.await_args_list]
+        assert actions[0] == "PlayQueueWithIndex"
+        assert "SetQueueLoopMode" in actions
+
+    def test_queue_count_overlay_when_http_empty(self, mock_client):
+        """PlayQueue overlay supplies queue_count when HTTP plicount is empty."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        player = Player(mock_client, upnp_client=mock_upnp)
+        player._status_model = None
+        player._playqueue_count = 2
+        assert player.queue_count == 2
+
+    def test_queue_position_overlay_when_http_empty(self, mock_client):
+        """PlayQueue overlay supplies queue_position when HTTP plicurr is empty."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        player = Player(mock_client, upnp_client=mock_upnp)
+        player._status_model = None
+        player._playqueue_position = 1
+        assert player.queue_position == 1
+
+    def test_http_queue_count_wins_when_nonzero(self, mock_client):
+        """Non-zero HTTP plicount takes precedence over PlayQueue overlay."""
+        from pywiim.models import PlayerStatus
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        player = Player(mock_client, upnp_client=mock_upnp)
+        player._status_model = PlayerStatus(queue_count=5)
+        player._playqueue_count = 2
+        assert player.queue_count == 5
+
+    @pytest.mark.asyncio
+    async def test_get_queue_updates_playqueue_overlay(self, mock_client):
+        """get_queue overlays count/position from BrowseQueue and GetQueueIndex."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+
+        async def _call(service, action, arguments=None):
+            if action == "GetQueueIndex":
+                return {"TrackNums": 2, "CurrentIndex": 1}
+            return {
+                "QueueContext": (
+                    '<?xml version="1.0"?><PlayList><Tracks>'
+                    "<Track1><URL>https://example.com/a.mp3</URL></Track1>"
+                    "<Track2><URL>https://example.com/b.mp3</URL></Track2>"
+                    "</Tracks></PlayList>"
+                )
+            }
+
+        mock_upnp.async_call_action = AsyncMock(side_effect=_call)
+        player = Player(mock_client, upnp_client=mock_upnp)
+        items = await player.get_queue()
+        assert len(items) == 2
+        assert player.queue_count == 2
+        assert player.queue_position == 0
+
+    @pytest.mark.asyncio
+    async def test_clear_queue_resets_playqueue_overlay(self, mock_client):
+        """clear_queue resets PlayQueue overlay count and position."""
+        from pywiim.player import Player
+
+        mock_upnp = self._playqueue_upnp()
+        player = Player(mock_client, upnp_client=mock_upnp)
+        player._playqueue_count = 2
+        player._playqueue_position = 1
+        await player.clear_queue()
+        assert player.queue_count == 0
+        assert player.queue_position is None
 
 
 class TestPlayerErrorHandling:

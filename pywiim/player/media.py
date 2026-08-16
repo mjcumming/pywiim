@@ -8,6 +8,7 @@ from html import unescape
 from typing import TYPE_CHECKING, Any, Literal
 from xml.etree import ElementTree as ET
 
+from ..api.loop_mode import resolve_loop_mode_mapping_for_player
 from ..exceptions import WiiMError
 from ..upnp.playqueue import (
     CURRENT_QUEUE,
@@ -507,10 +508,76 @@ class MediaControl:
             },
         )
 
+    def _playqueue_loop_mode(self) -> int:
+        """PlayQueue LoopMode: 4 = play through once; map shuffle/repeat when set."""
+        try:
+            mapping = resolve_loop_mode_mapping_for_player(self.player)
+            shuffle = bool(self.player.shuffle_state)
+            repeat = (self.player.repeat_mode or "off").lower()
+            return mapping.to_loop_mode(
+                shuffle=shuffle,
+                repeat_one=repeat == "one",
+                repeat_all=repeat == "all",
+            )
+        except Exception:
+            return 4
+
+    async def _playqueue_apply_loop_mode(self) -> None:
+        """Enable PlayQueue auto-advance via SetQueueLoopMode if advertised."""
+        upnp = self.player._upnp_client
+        if not upnp or not service_has_action(upnp.play_queue, "SetQueueLoopMode"):
+            return
+        mode = self._playqueue_loop_mode()
+        try:
+            await self._playqueue_call("SetQueueLoopMode", {"LoopMode": mode})
+            _LOGGER.debug("Set PlayQueue loop mode %s on %s", mode, self.player.host)
+        except Exception as err:
+            _LOGGER.debug("SetQueueLoopMode failed on %s: %s", self.player.host, err)
+
+    def _playqueue_set_overlay(self, *, count: int | None = None, position: int | None = None) -> None:
+        if count is not None:
+            self.player._playqueue_count = count
+        if position is not None:
+            self.player._playqueue_position = position
+
+    async def _playqueue_sync_overlay(self, *, items: list[dict[str, Any]] | None = None) -> None:
+        """Refresh overlay from GetQueueIndex / BrowseQueue (ADR 004)."""
+        if items is not None:
+            self._playqueue_set_overlay(count=len(items))
+        try:
+            result = await self._playqueue_call("GetQueueIndex", {"QueueName": CURRENT_QUEUE})
+        except Exception as err:
+            _LOGGER.debug("GetQueueIndex overlay failed on %s: %s", self.player.host, err)
+            result = None
+        if result:
+            if items is None:
+                track_nums = result.get("TrackNums")
+                if track_nums is not None:
+                    try:
+                        self._playqueue_set_overlay(count=int(track_nums))
+                    except (TypeError, ValueError):
+                        pass
+            current = result.get("CurrentIndex")
+            if current is not None:
+                try:
+                    idx = int(current)
+                    # CurrentIndex is 1-based
+                    self._playqueue_set_overlay(position=max(idx - 1, 0) if idx > 0 else None)
+                except (TypeError, ValueError):
+                    pass
+        if items is None and self.player._playqueue_count is None:
+            try:
+                result = await self._playqueue_call("BrowseQueue", {"QueueName": CURRENT_QUEUE})
+                parsed = parse_queue_context((result or {}).get("QueueContext", "") or "")
+                self._playqueue_set_overlay(count=len(parsed))
+            except Exception as err:
+                _LOGGER.debug("BrowseQueue overlay failed on %s: %s", self.player.host, err)
+
     async def _playqueue_add(self, url: str, metadata: str = "") -> None:
         """Add URL to the end of CurrentQueue without starting playback."""
         await self._playqueue_ensure()
         await self._playqueue_append(url, metadata)
+        await self._playqueue_sync_overlay()
         _LOGGER.debug("Added URL to PlayQueue on %s", self.player.host)
 
     async def _playqueue_insert_next(self, url: str, metadata: str = "") -> None:
@@ -525,6 +592,7 @@ class MediaControl:
         except Exception as err:
             _LOGGER.debug("GetQueueIndex failed on %s, appending after index 1: %s", self.player.host, err)
         await self._playqueue_append(url, metadata, start_index=start_index)
+        await self._playqueue_sync_overlay()
         _LOGGER.debug("Inserted URL next in PlayQueue on %s", self.player.host)
 
     async def _playqueue_get(self) -> list[dict[str, Any]]:
@@ -535,6 +603,7 @@ class MediaControl:
             _LOGGER.debug("PlayQueue BrowseQueue empty or failed on %s: %s", self.player.host, err)
             return []
         items = parse_queue_context((result or {}).get("QueueContext", "") or "")
+        await self._playqueue_sync_overlay(items=items)
         _LOGGER.debug("Retrieved %d PlayQueue items from %s", len(items), self.player.host)
         return items
 
@@ -852,6 +921,9 @@ class MediaControl:
                     "PlayQueueWithIndex",
                     {"QueueName": CURRENT_QUEUE, "Index": queue_position + 1},
                 )
+                await self._playqueue_apply_loop_mode()
+                self._playqueue_set_overlay(position=queue_position)
+                await self._playqueue_sync_overlay()
                 _LOGGER.debug(
                     "Started PlayQueue playback at position %d on %s",
                     queue_position,
@@ -925,6 +997,7 @@ class MediaControl:
                         "Action": "",
                     },
                 )
+                await self._playqueue_sync_overlay()
                 _LOGGER.debug(
                     "Removed PlayQueue item at position %d from %s",
                     queue_position,
@@ -984,6 +1057,8 @@ class MediaControl:
         if self._use_playqueue_enqueue():
             try:
                 await self._playqueue_call("DeleteQueue", {"QueueName": CURRENT_QUEUE})
+                self.player._playqueue_count = 0
+                self.player._playqueue_position = None
                 _LOGGER.debug("Cleared PlayQueue on %s", self.player.host)
                 return
             except Exception as err:

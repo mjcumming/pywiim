@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **PlayQueue auto-advance** — after `PlayQueueWithIndex`, call `SetQueueLoopMode` (default 4 = play through once; respects shuffle/repeat) so queued URLs continue instead of going idle (wiim #268).
+- **PlayQueue `queue_count` / `queue_position`** — overlay from `BrowseQueue` / `GetQueueIndex` when HTTP `plicount`/`plicurr` stay empty (ADR 004) (wiim #268).
+
 ## [2.3.2] - 2026-08-15
 
 ### Fixed
