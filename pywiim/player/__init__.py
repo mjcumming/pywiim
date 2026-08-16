@@ -987,12 +987,16 @@ class Player(PlayerBase):
 
     @property
     def queue_count(self) -> int | None:
-        """Total number of tracks in queue (from HTTP API plicount field)."""
+        """Total tracks in queue (HTTP plicount, or PlayQueue overlay)."""
         return self._properties.queue_count
 
     @property
     def queue_position(self) -> int | None:
-        """Current track position in queue (from HTTP API plicurr field)."""
+        """Current queue position (HTTP plicurr, or PlayQueue overlay).
+
+        Overlay is 0-based to match play_queue()/get_queue() item positions.
+        HTTP plicount/plicurr stay 0/empty on the PlayQueue path (ADR 004).
+        """
         return self._properties.queue_position
 
     @property

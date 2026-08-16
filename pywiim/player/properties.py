@@ -480,31 +480,42 @@ class PlayerProperties:
 
         return DEFAULT_WIIM_LOGO_URL
 
-    @property
-    def queue_count(self) -> int | None:
-        """Total number of tracks in queue (from HTTP API plicount field)."""
+    def _http_queue_int(self, field: str) -> int | None:
         if self.player._status_model is None:
             return None
-        count = getattr(self.player._status_model, "queue_count", None)
-        if count is not None:
-            try:
-                return int(count)
-            except (TypeError, ValueError):
-                return None
-        return None
+        value = getattr(self.player._status_model, field, None)
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def queue_count(self) -> int | None:
+        """Total tracks in queue (HTTP plicount, or PlayQueue overlay)."""
+        http = self._http_queue_int("queue_count")
+        overlay = self.player._playqueue_count
+        if http:
+            return http
+        if overlay is not None:
+            return overlay
+        return http
 
     @property
     def queue_position(self) -> int | None:
-        """Current track position in queue (from HTTP API plicurr field)."""
-        if self.player._status_model is None:
-            return None
-        position = getattr(self.player._status_model, "queue_position", None)
-        if position is not None:
-            try:
-                return int(position)
-            except (TypeError, ValueError):
-                return None
-        return None
+        """Current queue position (HTTP plicurr, or PlayQueue overlay).
+
+        Overlay is 0-based to match play_queue()/get_queue() item positions.
+        HTTP plicount/plicurr stay 0/empty on the PlayQueue path (ADR 004).
+        """
+        http = self._http_queue_int("queue_position")
+        overlay = self.player._playqueue_position
+        if http:
+            return http
+        if overlay is not None:
+            return overlay
+        return http
 
     @property
     def media_sample_rate(self) -> int | None:

@@ -148,6 +148,10 @@ class PlayerBase:
         # Last played URL tracking (for media_title fallback)
         self._last_played_url: str | None = None
 
+        # PlayQueue overlay when HTTP plicount/plicurr stay empty (ADR 004)
+        self._playqueue_count: int | None = None
+        self._playqueue_position: int | None = None
+
         # Cover art cache (in-memory, keyed by URL hash)
         # Format: {url_hash: (image_bytes, content_type, timestamp)}
         self._cover_art_cache: dict[str, tuple[bytes, str, float]] = {}
