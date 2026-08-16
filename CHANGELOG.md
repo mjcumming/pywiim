@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.4] - 2026-08-16
+
+### Fixed
+- **Slave volume/mute from physical buttons and the app** — slave polls now write volume and mute into the state synchronizer (playback/metadata still come from the master). `Player.volume_level` / `is_muted` were reading the synchronizer first, so hardware changes on a slave never reached Home Assistant (wiim #269).
+- **Stale-metadata guard hid the new track after a source change** — snapshot only the pre-switch title/artist/art, and still apply a genuinely new track on the same poll. Stream → Spotify no longer waits for the next skip; leftover Spotify → radio titles still stay cleared (wiim #263).
+- **`play_url()` filename fallback on network streams** — keep the last played URL when switching *to* wifi/network/`custompushurl` so metadata-less streams can show the filename; still clear it on physical inputs and other sources (wiim #263).
+
 ## [2.3.3] - 2026-08-16
 
 ### Fixed

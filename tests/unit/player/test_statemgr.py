@@ -469,6 +469,24 @@ class TestStateManager:
         assert mock_status.duration is None
 
     @pytest.mark.asyncio
+    async def test_refresh_source_changed_to_wifi_keeps_play_url_filename(self, state_manager, mock_player):
+        """play_url() filename must survive a switch onto wifi/network (#263)."""
+        mock_status = PlayerStatus(play_state="play", source="custompushurl", title=None, duration=0)
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_audio_output": True})
+        mock_player.get_audio_output_status = AsyncMock(return_value={"mode": "wifi"})
+        mock_player._last_played_url = "http://example.com/station-one.mp3"
+        state_manager._last_source = "spotify"
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+
+            await state_manager.refresh(full=False)
+
+        assert mock_player._last_played_url == "http://example.com/station-one.mp3"
+
+    @pytest.mark.asyncio
     async def test_refresh_updates_eq_enabled_from_get_eq_status(self, state_manager, mock_player):
         """Test we update _eq_enabled from get_eq_status() when EQ is supported."""
         mock_status = PlayerStatus(play_state="play", eq_preset="flat", title="Same")
@@ -803,6 +821,53 @@ class TestStateManager:
 
         called_payload = mock_player._state_synchronizer.update_from_upnp.call_args[0][0]
         assert called_payload == {"volume": 0.5, "muted": True}
+
+    @pytest.mark.asyncio
+    async def test_slave_refresh_pushes_volume_mute_to_synchronizer(self, state_manager, mock_player):
+        """Slave poll must update the synchronizer so volume_level tracks the device.
+
+        Physical-button / app volume on a slave never goes through set_volume(); HA
+        only sees it if refresh() writes volume/mute into the synchronizer.
+        See: https://github.com/mjcumming/wiim/issues/269
+        """
+        type(mock_player).is_slave = PropertyMock(return_value=True)
+        mock_player._status_model = PlayerStatus(volume=30, mute=False, title="Master Track", play_state="play")
+        mock_player.client.get_player_status = AsyncMock(
+            return_value={"volume": 70, "mute": True, "group": "1", "title": "Slave Local Track", "play_state": "stop"}
+        )
+
+        status = await state_manager._refresh_core_status()
+
+        assert status.volume == 70
+        assert status.mute is True
+        assert status.title == "Master Track"
+        mock_player._state_synchronizer.update_from_http.assert_called_once_with({"volume": 70, "muted": True})
+
+    @pytest.mark.asyncio
+    async def test_slave_refresh_prefers_upnp_volume_for_synchronizer(self, state_manager, mock_player):
+        """UPnP GetVolume on a slave is written to the synchronizer as the poll value."""
+        type(mock_player).is_slave = PropertyMock(return_value=True)
+        mock_player._status_model = PlayerStatus(volume=30, mute=False)
+        mock_player.client.get_player_status = AsyncMock(return_value={"volume": 30, "mute": False, "group": "1"})
+        mock_player._upnp_client = MagicMock()
+        mock_player._upnp_client.rendering_control = MagicMock()
+        mock_player._upnp_client.get_volume = AsyncMock(return_value=85)
+        mock_player._upnp_client.get_mute = AsyncMock(return_value=True)
+
+        await state_manager._refresh_core_status()
+
+        mock_player._state_synchronizer.update_from_http.assert_called_once_with({"volume": 85, "muted": True})
+
+    @pytest.mark.asyncio
+    async def test_slave_refresh_skips_synchronizer_when_volume_mute_missing(self, state_manager, mock_player):
+        """Do not clear existing synchronizer volume when the slave poll omits it."""
+        type(mock_player).is_slave = PropertyMock(return_value=True)
+        mock_player._status_model = PlayerStatus(volume=40, mute=False)
+        mock_player.client.get_player_status = AsyncMock(return_value={"group": "1"})
+
+        await state_manager._refresh_core_status()
+
+        mock_player._state_synchronizer.update_from_http.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_refresh_uses_get_control_device_info_for_upnp_source_profile(self, state_manager, mock_player):

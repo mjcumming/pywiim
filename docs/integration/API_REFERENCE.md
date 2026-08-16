@@ -1421,9 +1421,11 @@ await slave_player.set_volume(0.5)
 ```
 
 **Cross-Notification:**
-When a slave's volume/mute changes, both slave and master callbacks fire:
+When a slave's volume/mute changes via `set_volume()` / `set_mute()`, both slave and master callbacks fire:
 - Slave callback → slave entity updates
 - Master callback → virtual entity updates (reads group.volume_level)
+
+External volume/mute changes on a slave (physical buttons, WiiM app) are applied on the next `refresh()` poll. Slave polls write volume/mute into the state synchronizer without overwriting master-propagated playback metadata.
 
 #### Group Management
 

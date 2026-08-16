@@ -2880,6 +2880,8 @@ await slave_player.set_volume(0.5)
 3. Master's callback also fires (virtual entity updates immediately)
 4. Virtual entity reads `group.volume_level` which computes MAX on access
 
+**External changes (physical buttons, WiiM app):** HA does not subscribe to UPnP events, so these arrive on the next `Player.refresh()` poll. Slave polls write **only** volume/mute into the state synchronizer (`Player.volume_level` / `is_muted` read that first). Playback and metadata still come from the master.
+
 **HA implementation:**
 ```python
 async def async_set_volume_level(self, volume: float) -> None:
@@ -2917,7 +2919,8 @@ await master.group.set_volume_all(0.8)
 | Action | Callback Fires On | Virtual Entity Update | Slave Entity Update |
 |--------|-------------------|----------------------|---------------------|
 | Slave playback command | Master only | Immediate (via master) | Next refresh (propagation) |
-| Slave volume/mute | Slave + Master | Immediate (via master) | Immediate (own callback) |
+| Slave volume/mute (command) | Slave + Master | Immediate (via master) | Immediate (own callback) |
+| Slave volume/mute (buttons/app) | Slave (next `refresh()`) | Next slave `refresh()` (via `group.volume_level`) | Next slave `refresh()` |
 | Master playback command | Master only | Immediate | Next refresh (propagation) |
 | Master volume/mute | Master only | Immediate | Next refresh (if group-wide) |
 | Group volume/mute | Master only | Immediate | Next refresh |

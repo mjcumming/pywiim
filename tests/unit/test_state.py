@@ -956,3 +956,42 @@ class TestStateSynchronizerWithProfile:
         )
         merged = sync.get_merged_state()
         assert merged.get("title") == "New Stream"
+
+    def test_source_change_accepts_new_spotify_title_on_same_poll(self):
+        """Stream → Spotify must show the new title immediately (wiim #263).
+
+        Firmware often reports Unknown/empty on the stream, then a real Spotify
+        title on the first poll after the switch. Snapshotting that incoming
+        title as leftover hid it until the next track.
+        """
+        from pywiim.profiles import PROFILES
+
+        sync = StateSynchronizer(profile=PROFILES["arylic"])
+        now = time.time()
+        sync.update_from_http(
+            {
+                "play_state": "play",
+                "source": "wifi",
+                "title": None,
+                "artist": None,
+                "image_url": None,
+                "duration": 0,
+            },
+            timestamp=now,
+        )
+        sync.update_from_http(
+            {
+                "play_state": "play",
+                "source": "spotify",
+                "title": "Spotify Song",
+                "artist": "Spotify Artist",
+                "image_url": "https://i.scdn.co/image/abc",
+                "duration": 212,
+            },
+            timestamp=now + 1,
+        )
+        merged = sync.get_merged_state()
+        assert merged.get("title") == "Spotify Song"
+        assert merged.get("artist") == "Spotify Artist"
+        assert merged.get("image_url") == "https://i.scdn.co/image/abc"
+        assert merged.get("duration") == 212

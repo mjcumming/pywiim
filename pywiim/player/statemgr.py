@@ -37,6 +37,19 @@ _LOGGER = logging.getLogger(__name__)
 # UPnP retry cooldown - wait this many seconds between failed creation attempts
 UPNP_RETRY_COOLDOWN = 60.0
 
+# Sources where play_url() filename fallback is the intended title.
+# WiiM reports URL playback as custompushurl (display name "URL Stream").
+_URL_PLAYBACK_SOURCES = frozenset({"wifi", "network", "ethernet", "usb", "udisk", "http", "custompushurl"})
+
+
+def _is_url_playback_source(source: Any) -> bool:
+    """Return True for URL/network playback sources (keep play_url filename)."""
+    if source is None:
+        return False
+    key = str(source).strip().lower().replace("-", "_").replace(" ", "_")
+    return key in _URL_PLAYBACK_SOURCES or key in {"wi_fi"}
+
+
 # Standard sources that shouldn't be cleared when checking for multiroom/master names
 STANDARD_SOURCES = {
     "spotify",
@@ -340,9 +353,11 @@ class StateManager:
     async def _refresh_core_status(self) -> PlayerStatus:
         """Fetch core player status and update state synchronizer.
 
-        For slaves in multi-room groups, we use getStatusEx (device status) instead of
-        getPlayerStatusEx. Playback state (track, position, etc.) comes from the master
-        via propagation. We only need volume/mute/group from slaves.
+        For slaves in multi-room groups, we poll the capability-configured status
+        endpoint for volume/mute/group only. Playback state (track, position, etc.)
+        comes from the master via propagation. Volume and mute are written to the
+        state synchronizer so ``Player.volume_level`` / ``is_muted`` reflect device
+        changes (physical buttons, app) on the next poll.
 
         Returns:
             PlayerStatus model from device.
@@ -380,12 +395,18 @@ class StateManager:
                 status = PlayerStatus.model_construct()  # Empty status, fields populated below
 
             # Update volume/mute/group from device status (these are slave-specific)
+            observed_volume = False
+            observed_mute = False
             if "volume" in status_dict:
                 vol = status_dict.get("volume")
                 if vol is not None:
                     status.volume = int(vol) if not isinstance(vol, int) else vol
+                    observed_volume = True
             if "mute" in status_dict:
-                status.mute = status_dict.get("mute")
+                mute_val = status_dict.get("mute")
+                if mute_val is not None:
+                    status.mute = mute_val
+                    observed_mute = True
             if "group" in status_dict:
                 status.group = status_dict.get("group")
 
@@ -402,12 +423,30 @@ class StateManager:
                     mute_from_upnp = await self.player._upnp_client.get_mute()
                     if volume_from_upnp is not None:
                         status.volume = volume_from_upnp
+                        observed_volume = True
                     if mute_from_upnp is not None:
                         status.mute = mute_from_upnp
+                        observed_mute = True
                 except Exception as err:
                     _LOGGER.debug("UPnP GetVolume failed for slave %s: %s", self.player.host, err)
 
             self.player._status_model = status
+
+            # volume_level / is_muted read the synchronizer first. Physical-button
+            # and app changes on a slave only arrive via this poll (HA does not
+            # subscribe to UPnP events), so we must push slave-local volume/mute
+            # without playback/metadata (those stay master-propagated).
+            # Only stamp fields observed this cycle so a missing reading cannot
+            # refresh a stale cache timestamp over a newer UPnP event.
+            # See: https://github.com/mjcumming/wiim/issues/269
+            http_update: dict[str, Any] = {}
+            if observed_volume and status.volume is not None:
+                http_update["volume"] = status.volume
+            if observed_mute and status.mute is not None:
+                http_update["muted"] = status.mute
+            if http_update:
+                self.player._state_synchronizer.update_from_http(http_update)
+
             self.player._last_refresh = time.time()
             self.player._available = True
             return status
@@ -670,8 +709,11 @@ class StateManager:
             self._last_source = current_source
         elif source_changed:
             self._last_source = current_source
-            # play_url() filename fallback must not survive a source switch (#263)
-            self.player._last_played_url = None
+            # Filename fallback is for URL/network playback. Keep it when
+            # switching *to* wifi/network (play_url just changed the source).
+            # Clear it for physical inputs and other sources (#263).
+            if not _is_url_playback_source(current_source):
+                self.player._last_played_url = None
             if status:
                 status.title = None
                 status.artist = None

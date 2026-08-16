@@ -453,6 +453,33 @@ class TestPlayerVolumeControl:
         assert player._status_model.volume == 75
 
     @pytest.mark.asyncio
+    async def test_slave_volume_level_updates_after_refresh(self, mock_client):
+        """Slave poll updates volume_level when the device volume changes (wiim #269).
+
+        volume_level prefers the state synchronizer. A prior volume (solo poll or
+        set_volume) must not mask later physical-button / app changes on a slave.
+        """
+        from pywiim.models import PlayerStatus
+        from pywiim.player import Player
+
+        player = Player(mock_client)
+        player._detected_role = "slave"
+        player._status_model = PlayerStatus(volume=30, mute=False, play_state="play", title="Master Track")
+        player._state_synchronizer.update_from_http({"volume": 30, "muted": False, "title": "Master Track"})
+        assert player.volume_level == 0.3
+        assert player.is_muted is False
+
+        mock_client.get_player_status = AsyncMock(
+            return_value={"volume": 70, "mute": True, "group": "1", "title": "Should Not Apply"}
+        )
+
+        await player._state_mgr._refresh_core_status()
+
+        assert player.volume_level == 0.7
+        assert player.is_muted is True
+        assert player._status_model.title == "Master Track"
+
+    @pytest.mark.asyncio
     async def test_volume_level_from_upnp_uses_0_to_100_scale(self, mock_client):
         """Test volume_level normalization from UPnP merged state uses 0-100 scale."""
         from pywiim.player import Player
@@ -2391,6 +2418,18 @@ class TestPlayerMediaMetadata:
         player._state_synchronizer.update_from_http({"play_state": "play", "source": "line_in", "title": None})
 
         assert player.media_title is None
+
+    @pytest.mark.asyncio
+    async def test_media_title_url_fallback_kept_on_network_stream(self, mock_client):
+        """play_url() filename is the preferred title for metadata-less streams (#263)."""
+        from pywiim.player import Player
+
+        player = Player(mock_client)
+        player._last_played_url = "https://example.com/playlist/station-one.mp3"
+        player._status_model = PlayerStatus(play_state="play", source="wifi", title=None)
+        player._state_synchronizer.update_from_http({"play_state": "play", "source": "wifi", "title": None})
+
+        assert player.media_title == "station-one.mp3"
 
     @pytest.mark.asyncio
     async def test_media_artist(self, mock_client):
