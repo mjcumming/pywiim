@@ -524,12 +524,15 @@ SUBWOOFER_PHASE_180 = 180
 
 # Audio output mode constants
 # Based on real-world device testing (Issue #160) and official WiiM API documentation:
-# hardware field values: 1=SPDIF, 2=AUX, 3=COAX, 4=varies by device, 7=HDMI (WiiM Amp Ultra), 8=USB
+# hardware field values: 1=SPDIF, 2=AUX, 3=COAX, 4=varies by device, 7=varies, 8=USB
 # source field: 0=BT disabled, 1=BT active (Bluetooth output uses source field)
 # audiocast field: 0=DLNA disabled, 1=DLNA active
 # NOTE: Mode 0 exists in practice but not documented in official API
 # NOTE: WiiM Ultra mode 4: source=0 = Headphone Out, source=1 = Bluetooth Out (Issue #86)
-# NOTE: WiiM Amp Ultra mode 7: HDMI ARC output (Issue #122)
+# NOTE: Mode 7 is overloaded: Amp Ultra HDMI ARC (Issue #122); Sound / Sound Lite
+#        Speaker Out (AUDIO_OUTPUT_SPEAKER_MODE, hardware=7, source=0; BT is source=1)
+#        (wiim #270). The static MAP defaults to HDMI Out; Player.audio_output_mode
+#        uses the hardware catalog for Speaker Out.
 # NOTE: USB Out is mode 8 (confirmed on WiiM Ultra, Issue #160). Mode 6 was incorrectly
 #        documented in the WiiM API spec; modes 5-7 all revert to mode 4 on Ultra.
 AUDIO_OUTPUT_MODE_LINE_OUT = 0  # Undocumented but works on WiiM devices
@@ -538,6 +541,7 @@ AUDIO_OUTPUT_MODE_AUX_OUT = 2  # AUDIO_OUTPUT_AUX_MODE (Line Out/Auxiliary/RCA)
 AUDIO_OUTPUT_MODE_COAX_OUT = 3  # AUDIO_OUTPUT_COAX_MODE (Coaxial)
 AUDIO_OUTPUT_MODE_BLUETOOTH_OUT = 4  # Bluetooth Out (or Headphone Out on Ultra with source=0)
 AUDIO_OUTPUT_MODE_HDMI_OUT = 7  # HDMI ARC output (WiiM Amp Ultra)
+AUDIO_OUTPUT_MODE_SPEAKER_OUT = 7  # Speaker Out (WiiM Sound / Sound Lite); same int as HDMI
 AUDIO_OUTPUT_MODE_USB_OUT = 8  # USB Out (confirmed on WiiM Ultra, Issue #160)
 
 # Legacy aliases for backward compatibility
@@ -547,6 +551,7 @@ AUDIO_OUTPUT_MODE_LINE_OUT_2 = AUDIO_OUTPUT_MODE_AUX_OUT
 # Audio output mode mapping (mode integer -> friendly name)
 # Note: Mode 4 defaults to "Bluetooth Out" but is context-dependent on Ultra devices
 # (see audio_output_mode property for special Ultra handling)
+# Note: Mode 7 defaults to "HDMI Out" but is Speaker Out on Sound / Sound Lite
 AUDIO_OUTPUT_MODE_MAP: dict[int, str] = {
     AUDIO_OUTPUT_MODE_LINE_OUT: "Line Out",  # Mode 0 - undocumented
     AUDIO_OUTPUT_MODE_SPDIF_OUT: "Optical Out",  # Mode 1 - SPDIF
@@ -582,6 +587,8 @@ AUDIO_OUTPUT_MODE_NAME_TO_INT: dict[str, int] = {
     "hdmi out": AUDIO_OUTPUT_MODE_HDMI_OUT,  # Mode 7 (WiiM Amp Ultra)
     "hdmi": AUDIO_OUTPUT_MODE_HDMI_OUT,
     "hdmi arc": AUDIO_OUTPUT_MODE_HDMI_OUT,
+    "speaker out": AUDIO_OUTPUT_MODE_SPEAKER_OUT,  # Mode 7 (WiiM Sound / Sound Lite)
+    "speaker": AUDIO_OUTPUT_MODE_SPEAKER_OUT,
 }
 
 # Alarm trigger types (WiiM devices only)
@@ -617,6 +624,7 @@ __all__ = [
     "AUDIO_OUTPUT_MODE_BLUETOOTH_OUT",
     "AUDIO_OUTPUT_MODE_USB_OUT",
     "AUDIO_OUTPUT_MODE_HDMI_OUT",
+    "AUDIO_OUTPUT_MODE_SPEAKER_OUT",
     "AUDIO_OUTPUT_MODE_MAP",
     "AUDIO_OUTPUT_MODE_NAME_TO_INT",
     "WIIM_CA_CERT",

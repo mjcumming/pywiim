@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pywiim.device_capabilities import get_device_inputs
+from pywiim.device_capabilities import get_device_inputs, get_device_output_modes
 
 
 class TestAudioProDeviceInputs:
@@ -33,3 +33,25 @@ class TestAudioProDeviceInputs:
         assert "rca" in result.inputs
         assert "bluetooth" in result.inputs
         assert "optical" not in result.inputs
+
+
+class TestWiiMSoundOutputs:
+    """Sound / Sound Lite hardware output catalog (wiim #270)."""
+
+    def test_sound_lite_outputs_speaker_out(self):
+        result = get_device_inputs("WiiM_Sound_Lite_V2")
+        assert result is not None
+        assert result.outputs == ["Speaker Out"]
+        assert get_device_output_modes("WiiM_Sound_Lite_V2") == ["Speaker Out"]
+
+    def test_wiim_sound_outputs_speaker_out(self):
+        result = get_device_inputs("WiiM Sound")
+        assert result is not None
+        assert result.outputs == ["Speaker Out"]
+
+    def test_pro_outputs_not_catalogued(self):
+        """Streamer models keep the properties.py ladder until migrated."""
+        result = get_device_inputs("WiiM Pro")
+        assert result is not None
+        assert result.outputs is None
+        assert get_device_output_modes("WiiM Pro") is None

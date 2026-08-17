@@ -14,6 +14,8 @@ WiiM firmware and documentation evolved: **`getAudioOutputStatus`** may return *
 
 ### 2. Model-specific output lists
 - **`available_output_modes`** (and related) must reflect **hardware reality** (e.g. **no HDMI Out** on Ultra if HDMI is input-only; **USB Out** mode numbers from **device testing**, not stale public docs alone).
+- When `device_capabilities.py` sets **`outputs`** for a model, that list is authoritative (WiiM Sound / Sound Lite: **Speaker Out** only). Models with `outputs is None` keep the streamer ladder until migrated.
+- **Mode integers are overloaded.** Do not treat the static `AUDIO_OUTPUT_MODE_MAP` as model-agnostic: **mode 4** is Bluetooth vs Headphone on Ultra; **mode 7** is HDMI Out on Amp Ultra vs Speaker Out on Sound Lite (Bluetooth Out is `source=1` on the same hardware). `Player.audio_output_mode` applies the catalog.
 
 ### 3. Field semantics
 - Treat **`getStatusEx`** output-related fields and **dedicated audio output** endpoint JSON as **different schemas**—do not assume key names imply identical meaning across endpoints.

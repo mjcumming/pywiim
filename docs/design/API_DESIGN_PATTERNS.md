@@ -666,6 +666,19 @@ curl -k https://DEVICE_IP/httpapi.asp?command=connectbta2dpsynk:AA:BB:CC:DD:EE:F
   - Full support in pywiim: `AUDIO_OUTPUT_MODE_HDMI_OUT = 7`
   - **Note**: WiiM Ultra has HDMI as input only, not output (confirmed via Issue #160)
 
+### WiiM Sound / Sound Lite Speaker Out (wiim #270)
+
+Mode **7** is also **Speaker Out** on WiiM Sound and Sound Lite (`AUDIO_OUTPUT_SPEAKER_MODE`). Confirmed on `WiiM_Sound_Lite_V2`:
+
+| App selection | `getNewAudioOutputHardwareMode` |
+| --- | --- |
+| Speaker Out | `{"hardware":"7","source":"0","audiocast":"0"}` |
+| Bluetooth Out | `{"hardware":"7","source":"1","audiocast":"0"}` |
+
+Bluetooth Out is the `source` field, not a second hardware mode (same pattern as Ultra headphones vs BT on mode 4). `getSoundCardModeSupportList` returns a single `AUDIO_OUTPUT_SPEAKER_MODE` / `"Speaker Out"` row and **does not change** when Bluetooth Out is selected — do not use it as the full output dropdown.
+
+The static map still defaults mode 7 to `"HDMI Out"`. `Player.audio_output_mode` returns `"Speaker Out"` when the hardware catalog lists it.
+
 ### Mode 0 Behavior (Defensive Fix for Legacy Devices)
 
 Mode 0 has special handling in pywiim to prevent state bugs on legacy LinkPlay devices:

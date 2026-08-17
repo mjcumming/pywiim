@@ -1,12 +1,12 @@
-"""Device-specific capability definitions for WiiM/LinkPlay devices.
+"""Device-specific hardware catalogs for WiiM/LinkPlay devices.
 
-This module provides a database of known physical inputs for different device models.
-Used to override/correct plm_support bitmask when firmware reports incorrect data.
+This module is the layout catalog: which physical **inputs** and **outputs**
+exist on a model. It is not the runtime ``supports_*`` probe dict (ADR 018).
 
-The plm_support bitmask is poorly documented and varies by device/firmware:
-- Some devices report bits for non-existent inputs (e.g., WiiM Pro reports USB)
-- Newer devices have inputs not covered by documented bits (e.g., phono, HDMI)
-- Firmware updates may change bit meanings or add new bits
+Inputs: override/correct the unreliable ``plm_support`` bitmask.
+Outputs: ``Player.available_output_modes`` uses ``outputs`` when set. Models
+with ``outputs is None`` keep the legacy streamer ladder in properties.py
+until they are migrated (Amp Ultra matching must stay ahead of Ultra).
 """
 
 from __future__ import annotations
@@ -20,15 +20,22 @@ if TYPE_CHECKING:
 
 @dataclass
 class DeviceInputs:
-    """Physical inputs available on a specific device model.
+    """Physical inputs and outputs for a specific device model.
 
     plm_support bitmask is unreliable across all vendors (WiiM, Arylic, LinkPlay).
     While documented by Arylic, it's often incomplete or incorrect even for Arylic devices.
     This database provides authoritative input lists based on actual device hardware.
+
+    ``outputs`` is the hardware output-mode list (friendly names). Bluetooth
+    sinks are not listed here; they are added from pairing history as ``BT: …``.
+    ``None`` means "not catalogued yet" (caller uses the legacy output ladder).
     """
 
     # Physical audio inputs that can be selected as sources
     inputs: list[str]
+
+    # Hardware audio output modes (e.g. ["Speaker Out"], ["Line Out", "USB Out"])
+    outputs: list[str] | None = None
 
     # Bits in plm_support that should be ignored (incorrectly reported)
     ignore_plm_bits: list[int] | None = None
@@ -44,8 +51,7 @@ DEVICE_CAPABILITIES: dict[str, DeviceInputs] = {
     "wiim_mini": DeviceInputs(
         inputs=["bluetooth", "line_in", "optical"],
         ignore_plm_bits=[5],  # Ignore bit 5 (Coaxial)
-        notes="WiiM Mini has Line In (RCA), Optical In (TOSLINK), Bluetooth, WiFi. "
-        "Does not have Ethernet or Coaxial.",
+        notes="WiiM Mini has Line In (RCA), Optical In (TOSLINK), Bluetooth, WiFi. Does not have Ethernet or Coaxial.",
     ),
     "wiim_pro": DeviceInputs(
         inputs=["bluetooth", "line_in", "optical"],
@@ -65,7 +71,10 @@ DEVICE_CAPABILITIES: dict[str, DeviceInputs] = {
     ),
     "wiim_sound": DeviceInputs(
         inputs=["bluetooth", "aux"],
-        notes="WiiM Sound has Aux In (Line In), Bluetooth, WiFi. " "Excludes USB, Optical, and Coaxial.",
+        outputs=["Speaker Out"],
+        notes="WiiM Sound / Sound Lite: Aux In, Bluetooth, WiFi. Internal speaker "
+        "is AUDIO_OUTPUT_SPEAKER_MODE (hardware=7, source=0). Bluetooth Out is "
+        "the same hardware with source=1 (wiim #270). No line/optical/coax out.",
     ),
     "wiim_ultra": DeviceInputs(
         inputs=["bluetooth", "line_in", "optical", "coaxial", "usb", "hdmi", "phono"],
@@ -166,6 +175,18 @@ def get_device_inputs(model: str | None, vendor: str | None = None) -> DeviceInp
 
     # LinkPlay generic fallback (trust plm_support)
     return DEVICE_CAPABILITIES["linkplay_generic"]
+
+
+def get_device_output_modes(model: str | None, vendor: str | None = None) -> list[str] | None:
+    """Return catalogued hardware output names, or None if not catalogued.
+
+    Bluetooth paired sinks are not included. Callers that need a UI list should
+    combine this with ``BT: …`` entries from Bluetooth history.
+    """
+    device = get_device_inputs(model, vendor)
+    if device is None or device.outputs is None:
+        return None
+    return list(device.outputs)
 
 
 def filter_plm_inputs(plm_inputs: list[str], plm_value: int, model: str | None) -> list[str]:

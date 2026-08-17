@@ -175,6 +175,13 @@ Field note: `index` does not appear to match the older output mode integer used
 for reads or writes. Treat `mode` as identity and `index` as display/debug
 metadata only.
 
+WiiM Sound Lite (`WiiM_Sound_Lite_V2`, wiim #270) returns a single speaker
+row (`AUDIO_OUTPUT_SPEAKER_MODE`, `devName: "Speaker Out"`). That list does
+**not** include Bluetooth Out and does **not** change when the app is on
+Bluetooth Out. Current output still comes from `getNewAudioOutputHardwareMode`
+(`hardware` + `source`). This endpoint can later gap-fill Speaker Out for
+unknown speaker models; it is not a complete output-mode catalog.
+
 Possible later use: enrich audio-output availability, especially USB DAC
 presence and capability metadata. Do not replace the existing output probe
 strategy until this endpoint is tested on multiple WiiM models and firmware

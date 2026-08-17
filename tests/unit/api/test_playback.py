@@ -354,6 +354,8 @@ class TestPlaybackAPIAudioOutput:
         assert mock_client.audio_output_name_to_mode("HDMI Out") == 7  # Mode 7 - WiiM Amp Ultra
         assert mock_client.audio_output_name_to_mode("hdmi") == 7  # Case insensitive
         assert mock_client.audio_output_name_to_mode("hdmi arc") == 7  # Alias
+        assert mock_client.audio_output_name_to_mode("Speaker Out") == 7  # Sound / Sound Lite
+        assert mock_client.audio_output_name_to_mode("speaker") == 7
         assert mock_client.audio_output_name_to_mode("Unknown") is None
         assert mock_client.audio_output_name_to_mode("") is None
 

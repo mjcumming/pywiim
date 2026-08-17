@@ -45,7 +45,7 @@ class AudioConfiguration:
         blocked_ids = self._get_non_selectable_source_ids()
         if source_id in blocked_ids:
             raise ValueError(
-                f"Source '{source}' is not directly selectable on this device " f"(blocked source id: {source_id})"
+                f"Source '{source}' is not directly selectable on this device (blocked source id: {source_id})"
             )
 
         # Call API (raises on failure)
@@ -274,7 +274,8 @@ class AudioConfiguration:
         """Select an output by name (hardware mode or specific BT device).
 
         This method handles both hardware output modes and specific Bluetooth devices:
-        - Hardware modes: "Line Out", "Optical Out", "Coax Out", "Headphone Out"
+        - Hardware modes: "Line Out", "Optical Out", "Coax Out", "Headphone Out",
+          "Speaker Out", "HDMI Out", "USB Out"
         - BT devices: "BT: Device Name" (must be already paired)
         - "Bluetooth Out": Activates last connected BT device
 
@@ -327,7 +328,7 @@ class AudioConfiguration:
             await self.player.connect_bluetooth_device(last_device["mac"])
 
         else:
-            # It's a hardware output mode (Line Out, Optical Out, Coax Out, Headphone Out, etc.)
+            # It's a hardware output mode (Line Out, Optical Out, Speaker Out, etc.)
             # If Bluetooth is currently active, disconnect it first
             if self.player.is_bluetooth_output_active:
                 try:

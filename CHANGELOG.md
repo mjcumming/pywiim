@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.5] - 2026-08-17
+
+### Fixed
+- **WiiM Sound Lite audio output modes** — Sound / Sound Lite catalog to `["Speaker Out"]` instead of the generic Line/Optical/Coax list. Firmware reports Speaker Out as **hardware 7** (`AUDIO_OUTPUT_SPEAKER_MODE`) with Bluetooth Out as the same hardware and **source=1** (wiim #270). Mode 7 remains HDMI Out on Amp Ultra. `getSoundCardModeSupportList` lists the speaker DAC only and does not change when Bluetooth Out is selected.
+
 ## [2.3.4] - 2026-08-16
 
 ### Fixed

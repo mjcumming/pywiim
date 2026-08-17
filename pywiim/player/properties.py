@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from ..device_capabilities import filter_plm_inputs, get_device_inputs
+from ..device_capabilities import filter_plm_inputs, get_device_inputs, get_device_output_modes
 from ..metadata import is_valid_image_url, is_valid_metadata_value
 from ..normalize import HARDWARE_SOURCE_KEYS as _HARDWARE_SOURCE_KEYS
 from ..normalize import canonical_source_key, source_rename_reverse
@@ -1411,6 +1411,14 @@ class PlayerProperties:
             if source == 1 or source == "1":
                 return "Bluetooth Out"
 
+            # Mode 7 is overloaded (wiim #270): Amp Ultra HDMI Out vs Sound/Sound Lite
+            # Speaker Out (AUDIO_OUTPUT_SPEAKER_MODE). Catalog outputs decide.
+            if mode_int == 7:
+                model = self.player._device_info.model if self.player._device_info else None
+                catalog_outputs = get_device_output_modes(model)
+                if catalog_outputs and "Speaker Out" in catalog_outputs:
+                    return "Speaker Out"
+
             # Special handling for mode 4 on WiiM Ultra (headphone output is ONLY on Ultra)
             if mode_int == 4:
                 # Check if device is Ultra - headphone output is only available on Ultra
@@ -1484,6 +1492,9 @@ class PlayerProperties:
         Note: This returns hardware output modes only. Bluetooth output is handled
         separately via specific BT devices from history - "Bluetooth Out" is never
         included as it's not a hardware mode the device provides.
+
+        Catalogued models (``device_capabilities.outputs``) win when present.
+        Remaining models use the streamer-shaped ladder below.
         """
         if not self.player.client.capabilities.get("supports_audio_output", False):
             return []
@@ -1494,6 +1505,10 @@ class PlayerProperties:
 
         if not model:
             return ["Line Out", "Optical Out", "Coax Out"]
+
+        catalog_outputs = get_device_output_modes(model)
+        if catalog_outputs:
+            return catalog_outputs
 
         model_lower = model.lower()
 
@@ -1529,7 +1544,7 @@ class PlayerProperties:
             return False
 
         source = self.player._audio_output_status.get("source")
-        return source == 1
+        return source == 1 or source == "1"
 
     @property
     def bluetooth_output_devices(self) -> list[dict[str, str]]:
