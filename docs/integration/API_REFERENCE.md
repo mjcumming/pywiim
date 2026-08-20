@@ -79,9 +79,9 @@ async def get_player_status_model() -> PlayerStatus:
 
 These helpers expose WiiM-specific endpoints discovered from app traffic and
 documented in [WiiM Discovered Read-Only APIs](../design/WIIM_DISCOVERED_APIS.md).
-They are read-only surfaces for diagnostics and real-device validation. pywiim
-does not yet use them to alter source catalogs, output selection, capability
-flags, or Home Assistant behavior.
+On WiiM, `get_mode_rename()` and `get_audio_input_enable()` overlay the source
+catalog (custom labels and hidden inputs). `get_sound_card_mode_support_list()`
+is diagnostic only — it does not populate `available_output_modes`.
 
 Unsupported endpoints return `None` or an empty list.
 
@@ -715,6 +715,9 @@ player.upnp_is_healthy  # bool | None (True/False/None)
 player.upnp_miss_rate  # float | None (0.0-1.0, miss rate)
 player.shuffle  # bool | None
 player.repeat  # str | None ("one", "all", "off")
+player.queue_position  # int | None — HTTP plicurr, or PlayQueue overlay when empty
+player.queue_count  # int | None — HTTP plicount, or PlayQueue overlay when empty
+player.audio_output_mode  # str | None — current hardware mode name (model-specific)
 ```
 
 #### UPnP Health Properties
@@ -841,10 +844,19 @@ await player.clear_playlist()
 await player.set_shuffle(enabled: bool)  # Preserves repeat state
 
 # Media playback
-await player.play_url(url: str, enqueue: str = "replace")  # Play URL directly
+await player.play_url(url: str, enqueue: str = "replace")  # Play URL; enqueue="add"|"next"|"replace"|"play"
 await player.play_playlist(playlist_url: str)  # Play M3U playlist
 await player.play_preset(preset: int, index: int | None = None)  # Play preset; optional 1-based track index (e.g. index=1 = from start)
 result = await player.play_notification(url: str)  # Returns NotificationPlaybackResult
+
+# Queue (requires upnp_client; gate on supports_queue_add / supports_queue_browse)
+# AVTransport AddURIToQueue, or WiiM PlayQueue on Pro / Pro Plus (see HA_CAPABILITIES.md)
+await player.add_to_queue(url: str, metadata: str = "")
+await player.insert_next(url: str, metadata: str = "")
+await player.play_queue(position: int)
+await player.remove_from_queue(position: int)
+await player.clear_queue()
+queue_items = await player.get_queue()  # list[dict] when supports_queue_browse
 
 # EQ control
 await player.set_eq_preset(preset: str)
@@ -863,8 +875,10 @@ await player.client.delete_peq(name)
 await player.client.rename_peq(name, new_name)
 
 # Audio output control
-# Confirmed modes: 1=SPDIF (Optical), 2=AUX (Line Out), 3=COAX, 4=BT/Headphone, 7=HDMI (Amp Ultra), 8=USB
-await player.set_audio_output_mode(mode: str | int)  # "Line Out", "Optical Out", "USB Out", etc.
+# Mode integers are model-specific. Common: 1=Optical, 2=Line Out, 3=COAX, 4=BT/Headphone, 8=USB.
+# Mode 7 is HDMI Out on Amp Ultra and Speaker Out on Sound / Sound Lite (Bluetooth Out is source=1 on the same hardware).
+# Prefer names from player.available_output_modes (catalog when the model sets outputs).
+await player.set_audio_output_mode(mode: str | int)  # "Line Out", "Speaker Out", "Optical Out", "USB Out", etc.
 
 # LED control (primary: setLED / setLEDBrightness)
 await player.set_led(enabled: bool)
@@ -1564,7 +1578,7 @@ async def main():
 
 ## Output Selection (Hardware + Bluetooth)
 
-WiiM devices support multiple audio output modes, and pywiim provides unified output selection that includes both hardware modes and already paired Bluetooth devices.
+WiiM devices support multiple audio output modes. Hardware names come from the device catalog when the model sets `outputs` (Sound / Sound Lite: **Speaker Out**); otherwise the streamer jack list. Paired Bluetooth devices are listed as `BT: …`, not a generic `"Bluetooth Out"`.
 
 ### Available Outputs
 
@@ -1573,12 +1587,15 @@ Get all available outputs (hardware modes + paired BT devices):
 ```python
 # List all outputs
 outputs = player.available_outputs
-# Example (when BT devices are paired): ["Line Out", "Optical Out", "Coax Out", "BT: Sony Speaker", "BT: JBL Headphones"]
-# Note: Generic "Bluetooth Out" is removed when specific BT devices are available
+# Streamer example (when BT devices are paired): ["Line Out", "Optical Out", "Coax Out", "BT: Sony Speaker"]
+# Sound / Sound Lite example: ["Speaker Out", "BT: Kitchen Headphones"]
+# Note: Generic "Bluetooth Out" is not listed; paired devices appear as "BT: …"
 
 # Just get hardware modes
 hardware_modes = player.available_output_modes
-# Example: ["Line Out", "Optical Out", "Coax Out", "Bluetooth Out"]
+# Streamer example: ["Line Out", "Optical Out", "Coax Out"]
+# Sound / Sound Lite: ["Speaker Out"]
+# Amp Ultra includes "HDMI Out"; Sound Lite maps hardware 7 to "Speaker Out"
 
 # Just get paired Bluetooth output devices
 bt_devices = player.bluetooth_output_devices
@@ -1596,6 +1613,7 @@ Use `select_output()` to switch to any output (hardware mode or specific BT devi
 # Select hardware output mode
 await player.audio.select_output("Optical Out")
 await player.audio.select_output("Line Out")
+await player.audio.select_output("Speaker Out")  # Sound / Sound Lite
 
 # Select specific Bluetooth device (auto-switches to BT mode and connects)
 await player.audio.select_output("BT: Sony Speaker")

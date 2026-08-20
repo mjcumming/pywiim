@@ -8,13 +8,14 @@ Python library for WiiM and LinkPlay device control with command-line tools for 
 
 ## Overview
 
-`pywiim` provides control of WiiM and LinkPlay-based audio devices through a Python API and command-line tools. The library handles playback control, volume management, multiroom audio, EQ settings, presets, and more.
+`pywiim` provides control of WiiM and LinkPlay-based audio devices through a Python API and command-line tools. The library handles playback control, volume management, queues, multiroom audio, EQ settings, presets, and more.
 
 ## Key Features
 
 - **MCP Server** - Expose WiiM control to Cursor, Claude Desktop, and other MCP hosts. `pip install pywiim[mcp]` then `wiim-mcp`. Control playback, volume, and more via AI assistants.
 - **Playback Control** - Play, pause, stop, next/previous track, seek
-- **Volume & Audio** - Volume control, mute, channel balance, audio output selection (Line Out, Optical, Coax, USB Out, HDMI Out, Bluetooth/Headphones)
+- **Queue Management** - Enqueue, insert, play, remove, and browse via AVTransport `AddURIToQueue` or WiiM PlayQueue (Pro / Pro Plus). `queue_count` / `queue_position` overlay when HTTP fields are empty.
+- **Volume & Audio** - Volume, mute, channel balance, and model-specific audio outputs (Line Out, Optical, Coax, Speaker Out, USB Out, HDMI Out, headphone). Paired Bluetooth devices appear as `BT: …`.
 - **Sources** - Intelligent model-specific source management (Bluetooth, Line In, Optical In, Coaxial, USB, HDMI ARC, Phono) and streaming services. Authoritative hardware filtering and UI-ready formatting.
 - **Source Catalog** - Structured source metadata via `player.source_catalog` (source type, selectability, and per-source capability flags) for integrations like Music Assistant.
 - **Multiroom Audio** - Create/join/leave groups, synchronized volume and playback
@@ -27,7 +28,7 @@ Python library for WiiM and LinkPlay device control with command-line tools for 
 **Device Compatibility:**
 - **All LinkPlay devices**: Core playback, volume, sources, multiroom, presets
 - **Device-dependent features**: EQ support (varies by device)
-- **WiiM devices only**: Alarm clocks, sleep timers, audio output mode selection, and **Parametric EQ (PEQ)** (LV2 PEQ API)
+- **WiiM devices only**: Alarm clocks, sleep timers, audio output mode selection, and **Parametric EQ (PEQ)** (LV2 PEQ API). Output lists are model-specific (for example Speaker Out on Sound / Sound Lite).
 
 The library automatically detects device capabilities and adapts functionality accordingly.
 

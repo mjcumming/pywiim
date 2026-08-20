@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.6] - 2026-08-20
+
+### Documentation
+- README and API_REFERENCE: Sound / Sound Lite **Speaker Out**, model-specific output lists, PlayQueue enqueue methods, and `queue_count` / `queue_position`. Clarify that `get_mode_rename` overlays the source catalog and `getSoundCardModeSupportList` does not drive the output dropdown.
+
 ## [2.3.5] - 2026-08-17
 
 ### Fixed
