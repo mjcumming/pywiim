@@ -271,6 +271,23 @@ class TestPlayerStatus:
         assert hasattr(status, "unknown_field")
         assert status.unknown_field == "value"
 
+    @pytest.mark.parametrize(
+        ("ch", "expected"),
+        [("0", "stereo"), ("1", "left"), ("2", "right"), (1, "left"), ("3", None), ("", None), ("x", None)],
+    )
+    def test_player_status_output_channel_from_ch(self, ch, expected):
+        """ch maps to stereo/left/right; an unusable value is None, not a validation error."""
+        status = PlayerStatus.model_validate({"ch": ch, "vol": "24"})
+        assert status.output_channel == expected
+        assert status.volume == 24
+
+    def test_player_status_output_channel_missing_and_by_name(self):
+        """No ch leaves output_channel None; the normalized name is accepted as is."""
+        assert PlayerStatus().output_channel is None
+        assert PlayerStatus(output_channel="Right").output_channel == "right"
+        dumped = PlayerStatus.model_validate({"ch": "2"}).model_dump()
+        assert PlayerStatus.model_validate(dumped).output_channel == "right"
+
 
 class TestWiiMDiscoveryModels:
     """Test read-only WiiM discovery models."""

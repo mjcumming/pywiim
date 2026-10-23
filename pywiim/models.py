@@ -12,7 +12,23 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
+from .api.constants import OUTPUT_CHANNEL_MAP
 from .state import normalize_play_state
+
+
+def parse_output_channel(value: Any) -> str | None:
+    """Map the player status ``ch`` field to ``stereo`` / ``left`` / ``right``.
+
+    The device sends ``ch`` as a string (``"0"``, ``"1"``, ``"2"``). Integers are
+    accepted too. Anything else (missing, empty, out of range) returns None.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return OUTPUT_CHANNEL_MAP.get(int(str(value).strip()))
+    except ValueError:
+        return None
+
 
 __all__ = [
     "DeviceInfo",
@@ -197,6 +213,8 @@ class PlayerStatus(_WiimBase):
     loop_mode: int | None = Field(None, alias="loop_mode")
     play_mode: str | None = Field(None, alias="play_mode")
     codec: str | None = None  # Audio codec (e.g., "flac", "mp3", "aac")
+    # Output channel from "ch": "stereo" (0), "left" (1), "right" (2)
+    output_channel: str | None = Field(None, alias="ch")
 
     # Shuffle and repeat can come from different API fields depending on firmware
     repeat: str | None = Field(None, alias="repeat")
@@ -246,6 +264,15 @@ class PlayerStatus(_WiimBase):
             # If it's a dictionary like {'eq_enabled': False}, return None
             return None
         return v
+
+    # Map "ch" ("0"/"1"/"2") to a channel name; an unusable value becomes None
+    # instead of failing the whole status model.
+    @field_validator("output_channel", mode="before")
+    @classmethod
+    def _normalize_output_channel(cls, v: Any) -> str | None:  # noqa: D401
+        if isinstance(v, str) and v.strip().lower() in OUTPUT_CHANNEL_MAP.values():
+            return v.strip().lower()
+        return parse_output_channel(v)
 
 
 class SlaveInfo(BaseModel):

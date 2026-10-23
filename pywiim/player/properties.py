@@ -129,6 +129,13 @@ class PlayerProperties:
         """Stereo channel balance from player cache (HTTP API; not from UPnP)."""
         return self.player._channel_balance
 
+    @property
+    def output_channel(self) -> str | None:
+        """Output channel from cached HTTP status ("stereo", "left", "right"), or None."""
+        if self.player._status_model is None:
+            return None
+        return self.player._status_model.output_channel
+
     # === Playback State ===
 
     @property
@@ -1696,6 +1703,16 @@ class PlayerProperties:
         if not self.player.client:
             return False
         return bool(self.player.client.capabilities.get("supports_channel_balance", False))
+
+    @property
+    def supports_output_channel(self) -> bool:
+        """Whether output channel (stereo / left / right) is supported.
+
+        Set at connect time when the player status carries a valid ``ch`` field.
+        """
+        if not self.player.client:
+            return False
+        return bool(self.player.client.capabilities.get("supports_output_channel", False))
 
     @property
     def supports_presets(self) -> bool:

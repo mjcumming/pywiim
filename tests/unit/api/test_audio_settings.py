@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pywiim.api.base import ApiResponse
-from pywiim.exceptions import WiiMError
+from pywiim.exceptions import WiiMError, WiiMResponseError
 
 
 class TestAudioSettingsAPISoundCardSupport:
@@ -285,6 +285,93 @@ class TestAudioSettingsAPIChannelBalance:
         await mock_client.center_channel_balance()
 
         mock_client.set_channel_balance.assert_called_once_with(0.0)
+
+
+class TestAudioSettingsAPIOutputChannel:
+    """Test AudioSettingsAPI output channel (stereo / left / right)."""
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            ApiResponse(parsed=None, raw="unknown command"),
+            ApiResponse(parsed=None, raw=""),
+            ApiResponse(parsed={"error": "unsupported_command"}, raw=None),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_output_channel_rejected_response(self, mock_client, response):
+        """An HTTP 200 response must acknowledge the setting before it succeeds."""
+        mock_client._request = AsyncMock(return_value=response)
+
+        with pytest.raises(WiiMResponseError, match="output channel"):
+            await mock_client.set_output_channel("left")
+
+    @pytest.mark.parametrize(
+        ("channel", "expected"),
+        [("stereo", "0"), ("left", "1"), ("right", "2"), ("LEFT", "1"), (" Right ", "2")],
+    )
+    @pytest.mark.asyncio
+    async def test_set_output_channel_sends_slave_channel(self, mock_client, channel, expected):
+        """set_output_channel sends setPlayerCmd:slave_channel:N with N 0/1/2."""
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
+
+        await mock_client.set_output_channel(channel)
+
+        mock_client._request.assert_called_once_with(f"/httpapi.asp?command=setPlayerCmd:slave_channel:{expected}")
+
+    @pytest.mark.parametrize("channel", ["mono", "", "1", "center"])
+    @pytest.mark.asyncio
+    async def test_set_output_channel_rejects_unknown_name(self, mock_client, channel):
+        """Unknown names raise ValueError and send nothing."""
+        mock_client._request = AsyncMock()
+
+        with pytest.raises(ValueError, match="Output channel must be one of"):
+            await mock_client.set_output_channel(channel)
+
+        mock_client._request.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_output_channel_from_player_status(self, mock_client):
+        """get_output_channel reads ch from a real AudioCast AMP getPlayerStatus payload."""
+        payload = {
+            "type": "0",
+            "ch": "1",
+            "mode": "31",
+            "loop": "3",
+            "eq": "0",
+            "status": "pause",
+            "curpos": "34608",
+            "offset_pts": "0",
+            "totlen": "192112",
+            "Title": "44726167204D6520446F776E",
+            "alarmflag": "0",
+            "plicount": "0",
+            "plicurr": "0",
+            "vol": "24",
+            "mute": "0",
+        }
+        mock_client._capabilities["status_endpoint"] = "/httpapi.asp?command=getPlayerStatus"
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=payload, raw=None))
+
+        assert await mock_client.get_output_channel() == "left"
+        assert mock_client._request.call_args_list[0][0][0] == "/httpapi.asp?command=getPlayerStatus"
+
+    @pytest.mark.parametrize(
+        ("ch", "expected"), [("0", "stereo"), ("2", "right"), (2, "right"), ("9", None), ("", None)]
+    )
+    @pytest.mark.asyncio
+    async def test_get_output_channel_values(self, mock_client, ch, expected):
+        """ch 0/1/2 map to names; out-of-range or empty values return None."""
+        mock_client.get_player_status = AsyncMock(return_value={"ch": ch})
+
+        assert await mock_client.get_output_channel() == expected
+
+    @pytest.mark.asyncio
+    async def test_get_output_channel_missing_field(self, mock_client):
+        """A status without ch returns None."""
+        mock_client.get_player_status = AsyncMock(return_value={"vol": "24"})
+
+        assert await mock_client.get_output_channel() is None
 
 
 class TestAudioSettingsAPIStatus:

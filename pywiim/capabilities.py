@@ -45,7 +45,7 @@ from .api.misc import parse_digital_filter_types
 from .api.subwoofer import is_valid_subwoofer_lpf_dict
 from .exceptions import WiiMError
 from .model_names import is_known_wiim_model, is_wiim_12v_trigger_model, is_wiim_display_model
-from .models import DeviceInfo
+from .models import DeviceInfo, parse_output_channel
 from .normalize import canonical_source_key, normalize_vendor
 from .profiles import detect_audio_pro_generation, detect_vendor, get_device_profile
 
@@ -297,6 +297,7 @@ class WiiMCapabilities:
         capabilities.setdefault("supports_led_switch", False)
         capabilities.setdefault("supports_display_config", False)
         capabilities.setdefault("supports_digital_filter", False)
+        capabilities.setdefault("supports_output_channel", False)
 
         # LED Indicator (ADR 005): Arylic — set by vendor, try-and-ignore on write; no probe
         if capabilities.get("vendor") == "arylic":
@@ -321,6 +322,7 @@ class WiiMCapabilities:
         # 3. getStatusEx (device info + player status - fallback)
         # See: https://github.com/mjcumming/wiim/issues/145
         status_endpoint = None
+        status_payload: dict[str, Any] | None = None
 
         # Try getPlayerStatusEx first
         try:
@@ -328,6 +330,7 @@ class WiiMCapabilities:
             if isinstance(r.parsed, dict) and _is_valid_player_status(r.parsed):
                 capabilities["supports_player_status_ex"] = True
                 status_endpoint = "/httpapi.asp?command=getPlayerStatusEx"
+                status_payload = r.parsed
                 _LOGGER.debug("Device %s supports getPlayerStatusEx", client.host)
         except WiiMError:
             capabilities["supports_player_status_ex"] = False
@@ -339,6 +342,7 @@ class WiiMCapabilities:
                 r = await client._request("/httpapi.asp?command=getPlayerStatus")
                 if isinstance(r.parsed, dict) and _is_valid_player_status(r.parsed):
                     status_endpoint = "/httpapi.asp?command=getPlayerStatus"
+                    status_payload = r.parsed
                     _LOGGER.debug("Device %s supports getPlayerStatus (using as fallback)", client.host)
             except WiiMError:
                 _LOGGER.debug("Device %s does not support getPlayerStatus", client.host)
@@ -346,6 +350,14 @@ class WiiMCapabilities:
         # Store the best status endpoint (if found, otherwise base.py will use getStatusEx)
         if status_endpoint:
             capabilities["status_endpoint"] = status_endpoint
+
+        # Output channel (stereo / left / right): a valid "ch" in the status response
+        # we already fetched is the gate. No extra request and nothing is written.
+        capabilities["supports_output_channel"] = (
+            status_payload is not None and parse_output_channel(status_payload.get("ch")) is not None
+        )
+        if capabilities["supports_output_channel"]:
+            _LOGGER.debug("Device %s supports output channel (ch in player status)", client.host)
 
         # Probe for getSlaveList support
         try:

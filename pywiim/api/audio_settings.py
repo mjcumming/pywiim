@@ -14,15 +14,32 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ..exceptions import WiiMError
-from ..models import SoundCardModeSupport
+from ..exceptions import WiiMError, WiiMResponseError
+from ..models import SoundCardModeSupport, parse_output_channel
 from .constants import (
     API_ENDPOINT_GET_CHANNEL_BALANCE,
     API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST,
     API_ENDPOINT_GET_SPDIF_SAMPLE_RATE,
     API_ENDPOINT_SET_CHANNEL_BALANCE,
+    API_ENDPOINT_SET_OUTPUT_CHANNEL,
     API_ENDPOINT_SET_SPDIF_SWITCH_DELAY,
+    OUTPUT_CHANNEL_MAP,
 )
+
+
+def output_channel_value(channel: str) -> int:
+    """Return the wire value (0, 1, 2) for ``stereo`` / ``left`` / ``right``.
+
+    Matching ignores case and surrounding spaces.
+
+    Raises:
+        ValueError: If ``channel`` is not one of the three names.
+    """
+    wanted = channel.strip().lower() if isinstance(channel, str) else ""
+    for value, name in OUTPUT_CHANNEL_MAP.items():
+        if name == wanted:
+            return value
+    raise ValueError(f"Output channel must be one of {list(OUTPUT_CHANNEL_MAP.values())}, got {channel!r}")
 
 
 class AudioSettingsAPI:
@@ -132,6 +149,47 @@ class AudioSettingsAPI:
         # Format as string, removing unnecessary decimal places
         balance_str = f"{balance:g}"
         await self._request(f"{API_ENDPOINT_SET_CHANNEL_BALANCE}{balance_str}")  # type: ignore[attr-defined]
+
+    # ------------------------------------------------------------------
+    # Output channel (stereo / left / right)
+    # ------------------------------------------------------------------
+
+    async def get_output_channel(self) -> str | None:
+        """Read the output channel from the ``ch`` field of the player status.
+
+        There is no dedicated getter command; ``ch`` comes with every
+        ``getPlayerStatus`` / ``getPlayerStatusEx`` response.
+
+        Returns:
+            ``"stereo"``, ``"left"`` or ``"right"``, or None if the status has no usable ``ch``.
+
+        Raises:
+            WiiMRequestError: If the status request fails.
+        """
+        status = await self.get_player_status()  # type: ignore[attr-defined]
+        return parse_output_channel(status.get("ch"))
+
+    async def set_output_channel(self, channel: str) -> None:
+        """Set the output channel with ``setPlayerCmd:slave_channel:N``.
+
+        Works on a standalone player and on a group member addressed directly.
+        A group master can also set a member's channel with ``set_slave_channel()``.
+
+        Args:
+            channel: ``"stereo"`` (0), ``"left"`` (1) or ``"right"`` (2), any case.
+
+        Raises:
+            ValueError: If ``channel`` is not one of the three names.
+            WiiMRequestError: If the request fails.
+            WiiMResponseError: If the device does not acknowledge the command.
+        """
+        value = output_channel_value(channel)
+        endpoint = f"{API_ENDPOINT_SET_OUTPUT_CHANNEL}{value}"
+        response = await self._request(endpoint)  # type: ignore[attr-defined]
+        if (response.raw or "").strip().upper() != "OK" and response.parsed != "OK":
+            raise WiiMResponseError(
+                f"Failed to set output channel: {response.raw or response.parsed!r}", endpoint=endpoint
+            )
 
     # ------------------------------------------------------------------
     # Helper methods

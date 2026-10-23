@@ -814,6 +814,9 @@ player.supports_digital_filter    # bool - True if getDigitalFilterTypeSupportLi
 player.digital_filter_types       # list[str] - cached DAC filter names
 player.digital_filter             # str | None - cached current DAC filter name
 # await player.set_digital_filter(name)  # name from digital_filter_types; analog line out only
+player.supports_output_channel    # bool - True if the player status carries a valid "ch" field
+player.output_channel             # str | None - "stereo" / "left" / "right" from "ch" on every status poll
+# await player.set_output_channel(name)  # "stereo" / "left" / "right"; setPlayerCmd:slave_channel:N
 ```
 
 **UPnP Capabilities** (depend on UPnP client initialization):
@@ -912,6 +915,15 @@ player.display_brightness   # int | None — cached default_bright (1–100); re
 bal = await player.get_channel_balance()  # float | None; updates cache, fires callback if changed
 player.channel_balance  # float | None — cached; also updated on refresh() ~60s when supported
 await player.set_channel_balance(balance: float)  # -1.0 to 1.0
+
+# Output channel (stereo / left / right; when supports_output_channel). Not the same as balance.
+player.output_channel  # "stereo" | "left" | "right" | None; read from "ch" in the player status
+await player.set_output_channel("left")  # setPlayerCmd:slave_channel:1; works on a group member too
+await player.client.get_output_channel()  # reads "ch" from a fresh status request
+await master.client.set_slave_channel("192.168.1.101", "right")  # multiroom:SlaveChannel (master only)
+
+# Group members poll their own channel even while playback metadata comes from the master.
+# Both setters require a device acknowledgement; rejected commands raise WiiMResponseError.
 
 # Status and metadata fetchers
 await player.get_multiroom_status()  # Returns dict[str, Any]

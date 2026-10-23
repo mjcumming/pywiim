@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pywiim.api.base import ApiResponse
-from pywiim.exceptions import WiiMError
+from pywiim.exceptions import WiiMError, WiiMResponseError
 from pywiim.models import DeviceGroupInfo, DeviceInfo
 
 
@@ -373,6 +373,67 @@ class TestGroupAPISlaveManagement:
 
         with pytest.raises(RuntimeError, match="Not a group master"):
             await mock_client.mute_slave("192.168.1.102", True)
+
+    @pytest.mark.parametrize(("channel", "expected"), [("stereo", 0), ("left", 1), ("Right", 2)])
+    @pytest.mark.asyncio
+    async def test_set_slave_channel(self, mock_client, channel, expected):
+        """The master sets a slave's channel with multiroom:SlaveChannel:<ip>:<N>."""
+        mock_client._group_master = None
+        type(mock_client).host = "192.168.1.100"
+        mock_client.get_device_group_info = AsyncMock(return_value=DeviceGroupInfo(role="master"))
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
+
+        await mock_client.set_slave_channel("192.168.1.101", channel)
+
+        mock_client._request.assert_called_once_with(
+            f"/httpapi.asp?command=multiroom:SlaveChannel:192.168.1.101:{expected}"
+        )
+
+    @pytest.mark.parametrize("role", ["solo", "slave"])
+    @pytest.mark.asyncio
+    async def test_set_slave_channel_not_master(self, mock_client, role):
+        """A non-master refuses before sending anything."""
+        mock_client._group_master = "192.168.1.100"
+        type(mock_client).host = "192.168.1.100"
+        mock_client.get_device_group_info = AsyncMock(return_value=DeviceGroupInfo(role=role))
+        mock_client._request = AsyncMock()
+
+        with pytest.raises(RuntimeError, match="Not a group master"):
+            await mock_client.set_slave_channel("192.168.1.102", "left")
+
+        mock_client._request.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "response",
+        [
+            ApiResponse(parsed=None, raw="unknown command"),
+            ApiResponse(parsed=None, raw=""),
+            ApiResponse(parsed={"error": "unsupported_command"}, raw=None),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_slave_channel_rejected_response(self, mock_client, response):
+        """The master must acknowledge a member channel command."""
+        mock_client._group_master = "192.168.1.100"
+        type(mock_client).host = "192.168.1.100"
+        mock_client.get_device_group_info = AsyncMock(return_value=DeviceGroupInfo(role="master"))
+        mock_client._request = AsyncMock(return_value=response)
+
+        with pytest.raises(WiiMResponseError, match="output channel"):
+            await mock_client.set_slave_channel("192.168.1.101", "left")
+
+    @pytest.mark.asyncio
+    async def test_set_slave_channel_rejects_unknown_name(self, mock_client):
+        """An unknown channel name raises ValueError and sends nothing."""
+        mock_client._group_master = "192.168.1.100"
+        type(mock_client).host = "192.168.1.100"
+        mock_client.get_device_group_info = AsyncMock(return_value=DeviceGroupInfo(role="master"))
+        mock_client._request = AsyncMock()
+
+        with pytest.raises(ValueError):
+            await mock_client.set_slave_channel("192.168.1.101", "mono")
+
+        mock_client._request.assert_not_called()
 
 
 class TestGroupAPIDeviceGroupInfo:

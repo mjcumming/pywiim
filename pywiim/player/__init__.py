@@ -461,6 +461,18 @@ class Player(PlayerBase):
         """Set channel balance (left/right stereo balance)."""
         await self._audio_config.set_channel_balance(balance)
 
+    async def set_output_channel(self, channel: str) -> None:
+        """Set the output channel: ``"stereo"``, ``"left"`` or ``"right"``.
+
+        Sends ``setPlayerCmd:slave_channel:N`` to this device, standalone or as a
+        group member, and updates ``output_channel`` right away.
+
+        Raises:
+            WiiMError: If ``supports_output_channel`` is false or the request fails.
+            ValueError: If ``channel`` is not one of the three names.
+        """
+        await self._audio_config.set_output_channel(channel)
+
     async def sync_time(self, ts: int | None = None) -> None:
         """Synchronize device time."""
         await self._diagnostics.sync_time(ts)
@@ -998,6 +1010,14 @@ class Player(PlayerBase):
         return self._properties.channel_balance
 
     @property
+    def output_channel(self) -> str | None:
+        """Output channel from cached status: ``"stereo"``, ``"left"``, ``"right"``, or None.
+
+        Read from the ``ch`` field of every status poll, and updated by ``set_output_channel()``.
+        """
+        return self._properties.output_channel
+
+    @property
     def play_state(self) -> str | None:
         """Current playback state from cached status."""
         return self._properties.play_state
@@ -1477,6 +1497,11 @@ class Player(PlayerBase):
     def supports_channel_balance(self) -> bool:
         """Whether stereo channel balance is supported (WiiM devices; probed at connect)."""
         return self._properties.supports_channel_balance
+
+    @property
+    def supports_output_channel(self) -> bool:
+        """Whether output channel (stereo / left / right) is supported (``ch`` in player status)."""
+        return self._properties.supports_output_channel
 
     @property
     def supports_presets(self) -> bool:

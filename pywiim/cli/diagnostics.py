@@ -287,6 +287,7 @@ class DeviceDiagnostics:
             ("Bluetooth", self._test_bluetooth),
             ("Audio Settings", self._test_audio_settings),
             ("Channel Balance", self._test_channel_balance),
+            ("Output Channel", self._test_output_channel),
             ("LMS Integration", self._test_lms),
             ("Source Selection", self._test_sources),
             ("Audio Output Modes", self._test_audio_output),
@@ -566,6 +567,17 @@ class DeviceDiagnostics:
             return {"supported": True, "balance": balance}
         except WiiMError:
             return {"supported": False, "reason": "getChannelBalance failed"}
+        except Exception as err:
+            return {"supported": False, "error": str(err)}
+
+    async def _test_output_channel(self) -> dict[str, Any]:
+        """Output channel (stereo / left / right) from ``ch`` in player status. Read-only."""
+        if not self.client.capabilities.get("supports_output_channel", False):
+            return {"supported": False, "reason": "No ch field in player status"}
+        try:
+            return {"supported": True, "channel": await self.client.get_output_channel()}
+        except WiiMError:
+            return {"supported": False, "reason": "Player status request failed"}
         except Exception as err:
             return {"supported": False, "error": str(err)}
 
@@ -1010,6 +1022,9 @@ class DeviceDiagnostics:
                 self.report["channel_balance"] = {"supported": False}
         except Exception:
             self.report["channel_balance"] = {"supported": False}
+
+        # Output channel (read-only, from ch in player status)
+        self.report["output_channel"] = await self._test_output_channel()
 
         # Add audio output status
         try:

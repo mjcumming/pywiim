@@ -23,6 +23,7 @@ import aiohttp
 from ..api.constants import MODE_MAP
 from ..exceptions import WiiMTimeoutError
 from ..metadata import is_valid_metadata_value
+from ..models import parse_output_channel
 from ..polling import PollingStrategy
 from ..state import PLAYING_STATES, normalize_play_state
 from .debounce import PlayStateDebouncer
@@ -421,6 +422,8 @@ class StateManager:
                     observed_mute = True
             if "group" in status_dict:
                 status.group = status_dict.get("group")
+            if "ch" in status_dict:
+                status.output_channel = parse_output_channel(status_dict["ch"])
 
             # Try UPnP for more accurate volume (slaves can have independent volume)
             # Skip if UPnP is marked unhealthy to avoid stressing the device's UPnP server

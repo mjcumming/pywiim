@@ -36,6 +36,7 @@ These capabilities are detected via endpoint probing during device initializatio
 | `player.supports_led_indicator` | LED Indicator on/off (ADR 005; use get_led_indicator / set_led_indicator) | Arylic + WiiM |
 | `player.supports_display_config` | Display/LCD on-off and brightness | WiiM Ultra family and WiiM Sound (not Sound Lite) |
 | `player.supports_digital_filter` | DAC digital filter (`digital_filter` / `set_digital_filter`) | Devices whose `getDigitalFilterTypeSupportList` is a non-empty list |
+| `player.supports_output_channel` | Output channel stereo / left / right (`output_channel` / `set_output_channel`) | Devices whose player status carries a valid `ch` field |
 | `player.supports_subwoofer` | Subwoofer configuration | WiiM only (not Arylic) |
 | `player.supports_trigger_out` | 12V trigger output (amplifier control) | Ultra / Pro / Pro Plus model class (no connect probe) |
 

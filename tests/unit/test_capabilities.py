@@ -567,6 +567,66 @@ class TestWiiMCapabilitiesClass:
         assert capabilities["supports_digital_filter"] is False
 
     @pytest.mark.asyncio
+    async def test_detect_capabilities_output_channel_from_status_ch(self, mock_client):
+        """A valid ch in the player status sets supports_output_channel without extra requests."""
+        device_info = DeviceInfo(uuid="test-uuid", model="AudioCast AMP", firmware="4.6.629929")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        async def _request(endpoint, *args, **kwargs):
+            if "getPlayerStatusEx" in str(endpoint):
+                return ApiResponse(parsed={"type": "0", "ch": "1", "status": "pause", "vol": "24"}, raw=None)
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=_request)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["supports_output_channel"] is True
+        calls = [str(c.args[0]) for c in mock_client._request.call_args_list]
+        assert not any("slave_channel" in c or "SlaveChannel" in c for c in calls)
+
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_output_channel_from_basic_player_status(self, mock_client):
+        """When getPlayerStatusEx fails, ch from the getPlayerStatus fallback is used."""
+        device_info = DeviceInfo(uuid="test-uuid", model="Generic LinkPlay", firmware="4.6.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        async def _request(endpoint, *args, **kwargs):
+            if "getPlayerStatusEx" in str(endpoint):
+                raise WiiMError("unknown command")
+            if "getPlayerStatus" in str(endpoint):
+                return ApiResponse(parsed={"ch": "0", "status": "stop", "vol": "60"}, raw=None)
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=_request)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["status_endpoint"] == "/httpapi.asp?command=getPlayerStatus"
+        assert capabilities["supports_output_channel"] is True
+
+    @pytest.mark.parametrize("status", [{"status": "play", "vol": "30"}, {"status": "play", "ch": ""}])
+    @pytest.mark.asyncio
+    async def test_detect_capabilities_output_channel_absent(self, mock_client, status):
+        """A player status without a usable ch leaves supports_output_channel False."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro", firmware="4.8.1")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        async def _request(endpoint, *args, **kwargs):
+            if "getPlayerStatus" in str(endpoint):
+                return ApiResponse(parsed=status, raw=None)
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=_request)
+
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+
+        assert capabilities["supports_output_channel"] is False
+
+    @pytest.mark.asyncio
     async def test_detect_capabilities_wiim_ultra_fw52_loop_mode_scheme_arylic(self, mock_client):
         """Merged capabilities include profile loop_mode_scheme (Ultra 5.2+ → arylic, pywiim#17)."""
         device_info = DeviceInfo(uuid="test-uuid", model="wiim_ultra", firmware="5.2.813259")

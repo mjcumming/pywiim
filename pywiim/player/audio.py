@@ -7,7 +7,8 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
-from ..api.constants import API_ENDPOINT_GET_CHANNEL_BALANCE
+from ..api.audio_settings import output_channel_value
+from ..api.constants import API_ENDPOINT_GET_CHANNEL_BALANCE, OUTPUT_CHANNEL_MAP
 from ..capabilities import _channel_balance_probe_success
 from ..exceptions import WiiMError
 from ..normalize import source_rename_reverse
@@ -394,6 +395,28 @@ class AudioConfiguration:
             raise ValueError(f"Balance must be between -1.0 and 1.0, got {balance}")
         await self.player.client.set_channel_balance(balance)
         self.player._channel_balance = balance
+        if self.player._on_state_changed:
+            self.player._on_state_changed()
+
+    async def set_output_channel(self, channel: str) -> None:
+        """Set the output channel and update the cached status.
+
+        The device reports the new value in ``ch`` on the next status poll; the cache
+        is updated right after the command succeeds so the state does not lag a poll.
+
+        Args:
+            channel: ``"stereo"``, ``"left"`` or ``"right"``, any case.
+
+        Raises:
+            WiiMError: If the device does not support output channel.
+            ValueError: If ``channel`` is not one of the three names.
+        """
+        if not self.player.supports_output_channel:
+            raise WiiMError("Output channel is not supported")
+        name = OUTPUT_CHANNEL_MAP[output_channel_value(channel)]
+        await self.player.client.set_output_channel(name)
+        if self.player._status_model is not None:
+            self.player._status_model.output_channel = name
         if self.player._on_state_changed:
             self.player._on_state_changed()
 

@@ -7,8 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.16] - 2026-10-23
+
 ### Added
+- **Output channel (stereo / left / right)**: `Player.output_channel` reads the `ch` field of every player status poll (`0` stereo, `1` left, `2` right). `set_output_channel(name)` sends `setPlayerCmd:slave_channel:N` and updates the cache right away; it works on a standalone player and on a group member addressed directly. `supports_output_channel` is set at capability detection when the status response already fetched there has a valid `ch`, so the probe sends no extra request and writes nothing. A group master can also set a member with `client.set_slave_channel(ip, name)` (`multiroom:SlaveChannel:<ip>:<N>`). `wiim-diagnostics` prints the current channel without changing it. This is separate from channel balance (`getChannelBalance` answers `unknown command` on these devices). Confirmed on an AudioCast AMP (A31, firmware 4.6.629929) and an iEAST-02 (A31, firmware 4.6.629930): read, set left, right and stereo, each read back from the next status poll.
 - **Ethernet MAC** ([wiim #285](https://github.com/mjcumming/wiim/issues/285)) — `DeviceInfo.eth_mac` reads `ETH_MAC` from getStatusEx and `Player.eth_mac_address` exposes it. `MAC` stays the Wi-Fi MAC. `wiim-diagnostics` prints the Ethernet MAC after the MAC. Confirmed on a WiiM Pro Plus on cable: `ETH_MAC` differs from `MAC`.
+
+### Fixed
+- Group members refresh their own output channel from status polls, including changes made outside pywiim. Channel setters reject device errors and missing acknowledgements without changing the cached channel or notifying listeners. Master-to-member channel commands validate the current device role instead of an unrelated legacy cache.
+
+### Validation
+- Channel reads, all three settings, external changes, and restoration tested on four WiiM Pros (`Linkplay.4.8.827634`) and an Arylic Up2Stream AMP V4 (`4.6.415145`). Group-member polling and master-to-member settings tested with two WiiM Pros; original channels, grouping, volume, and mute restored.
 
 ## [2.3.15] - 2026-10-18
 

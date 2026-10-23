@@ -196,6 +196,33 @@ async def test_channel_balance_feature_skipped_without_capability():
 
 
 @pytest.mark.asyncio
+async def test_output_channel_feature_supported():
+    """_test_output_channel reads the channel when the capability flag is set."""
+    client = DummyClient()
+    client.capabilities = {**client.capabilities, "supports_output_channel": True}
+    client.get_output_channel = AsyncMock(return_value="left")
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    result = await diagnostics._test_output_channel()
+
+    assert result == {"supported": True, "channel": "left"}
+
+
+@pytest.mark.asyncio
+async def test_output_channel_feature_skipped_without_capability():
+    """_test_output_channel does not call HTTP when the capability is false."""
+    client = DummyClient()
+    client.capabilities = {**client.capabilities, "supports_output_channel": False}
+    client.get_output_channel = AsyncMock(return_value="stereo")
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    result = await diagnostics._test_output_channel()
+
+    assert result["supported"] is False
+    client.get_output_channel.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_graphic_eq_feature_supported():
     """_test_graphic_eq summarizes read-only graphic EQ state."""
     client = DummyClient()

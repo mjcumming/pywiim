@@ -353,6 +353,7 @@ API_ENDPOINT_GROUP_EXIT = "/httpapi.asp?command=multiroom:Ungroup"
 API_ENDPOINT_GROUP_KICK = "/httpapi.asp?command=multiroom:SlaveKickout:"
 API_ENDPOINT_GROUP_SLAVE_MUTE = "/httpapi.asp?command=multiroom:SlaveMute:"
 API_ENDPOINT_GROUP_SLAVE_VOLUME = "/httpapi.asp?command=multiroom:SlaveVolume:"
+API_ENDPOINT_GROUP_SLAVE_CHANNEL = "/httpapi.asp?command=multiroom:SlaveChannel:"
 
 # EQ endpoints
 API_ENDPOINT_EQ_GET = "/httpapi.asp?command=EQGetBand"
@@ -388,6 +389,19 @@ API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST = "/httpapi.asp?command=getSoundCa
 API_ENDPOINT_GET_DIGITAL_FILTER_TYPES = "/httpapi.asp?command=getDigitalFilterTypeSupportList"
 API_ENDPOINT_GET_DIGITAL_FILTER_TYPE = "/httpapi.asp?command=getDigitalFilterType"
 API_ENDPOINT_SET_DIGITAL_FILTER_TYPE = "/httpapi.asp?command=setDigitalFilterType:"
+# Output channel (stereo / left / right). The current value is the "ch" field of
+# getPlayerStatus / getPlayerStatusEx; there is no separate getter command.
+API_ENDPOINT_SET_OUTPUT_CHANNEL = "/httpapi.asp?command=setPlayerCmd:slave_channel:"
+
+# Output channel names and their wire values ("ch" in player status, N in slave_channel:N)
+OUTPUT_CHANNEL_STEREO = "stereo"
+OUTPUT_CHANNEL_LEFT = "left"
+OUTPUT_CHANNEL_RIGHT = "right"
+OUTPUT_CHANNEL_MAP: dict[int, str] = {
+    0: OUTPUT_CHANNEL_STEREO,
+    1: OUTPUT_CHANNEL_LEFT,
+    2: OUTPUT_CHANNEL_RIGHT,
+}
 
 # Miscellaneous endpoints
 API_ENDPOINT_SET_LED = "/httpapi.asp?command=LED_SWITCH_SET:"
@@ -671,6 +685,7 @@ __all__ = [
     "API_ENDPOINT_GROUP_KICK",
     "API_ENDPOINT_GROUP_SLAVE_MUTE",
     "API_ENDPOINT_GROUP_SLAVE_VOLUME",
+    "API_ENDPOINT_GROUP_SLAVE_CHANNEL",
     "EQ_PRESET_MAP",
     "EQ_NUMERIC_MAP",
     "API_ENDPOINT_PRESET_INFO",
@@ -678,6 +693,11 @@ __all__ = [
     "API_ENDPOINT_AUDIO_OUTPUT_STATUS",
     "API_ENDPOINT_AUDIO_OUTPUT_SET",
     "API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST",
+    "API_ENDPOINT_SET_OUTPUT_CHANNEL",
+    "OUTPUT_CHANNEL_STEREO",
+    "OUTPUT_CHANNEL_LEFT",
+    "OUTPUT_CHANNEL_RIGHT",
+    "OUTPUT_CHANNEL_MAP",
     "API_ENDPOINT_LED",
     "API_ENDPOINT_LED_BRIGHTNESS",
     "API_ENDPOINT_ARYLIC_LED",
