@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.17] - 2026-10-26
+
 ### Added
 - **Diagnostics-safe device info** ([#29](https://github.com/mjcumming/pywiim/issues/29)) — `DeviceInfo.diagnostics_dict()` returns the declared fields without the identifying ones (`uuid`, MACs, IPs, `master_*`, `ssid`). Undeclared getStatusEx keys are listed by name under `extra_keys`, without their values. For diagnostics attached to public issues.
 
