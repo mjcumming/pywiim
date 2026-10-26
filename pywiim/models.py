@@ -63,6 +63,10 @@ class _WiimBase(BaseModel):
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
+# Identifying DeviceInfo fields left out of diagnostics_dict()
+_DIAGNOSTICS_EXCLUDE = {"uuid", "mac", "eth_mac", "ip", "master_uuid", "master_ip", "ssid"}
+
+
 class DeviceInfo(_WiimBase):
     """Subset of *getStatusEx* payload required by the library.
 
@@ -98,6 +102,23 @@ class DeviceInfo(_WiimBase):
     )  # Bitmask for physical input sources (plm_support from getStatusEx)
     ssid: str | None = Field(None, alias="ssid")  # WiFi SSID (needed for WiFi Direct multiroom mode)
     wifi_channel: int | None = Field(None, alias="WifiChannel")  # WiFi channel (needed for WiFi Direct multiroom mode)
+
+    # ---------------- Diagnostics ----------------
+
+    def diagnostics_dict(self) -> dict[str, Any]:
+        """Declared fields safe to share in public diagnostics.
+
+        Identifying fields are dropped. Undeclared getStatusEx keys are listed
+        by name only, so new firmware fields stay visible without their values.
+        """
+        data = self.model_dump(
+            by_alias=True,
+            exclude_none=True,
+            include=set(type(self).model_fields) - _DIAGNOSTICS_EXCLUDE,
+        )
+        if self.model_extra:
+            data["extra_keys"] = sorted(self.model_extra)
+        return data
 
     # ---------------- Computed Properties (Multiroom) ----------------
 
