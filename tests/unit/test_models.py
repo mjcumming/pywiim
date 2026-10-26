@@ -105,6 +105,32 @@ class TestDeviceInfo:
         assert hasattr(info, "another_unknown")
         assert info.another_unknown == 123
 
+    def test_device_info_diagnostics_dict(self):
+        """diagnostics_dict keeps debug fields, drops identifying ones and lists extras by name only."""
+        info = DeviceInfo.model_validate(
+            {
+                "uuid": "00000000-0000-0000-0000-000000000001",
+                "MAC": "AA:BB:CC:DD:EE:00",
+                "ETH_MAC": "AA:BB:CC:DD:EE:01",
+                "ip": "10.0.0.2",
+                "master_ip": "10.0.0.3",
+                "master_uuid": "00000000-0000-0000-0000-000000000002",
+                "ssid": "FakeNet",
+                "BTMAC": "AA:BB:CC:DD:EE:02",
+                "eth0": "10.0.0.4",
+                "firmware": "Linkplay.4.8.000000",
+                "project": "WiiM_Pro_Plus",
+            }
+        )
+
+        data = info.diagnostics_dict()
+
+        assert data == {
+            "firmware": "Linkplay.4.8.000000",
+            "project": "WiiM_Pro_Plus",
+            "extra_keys": ["BTMAC", "eth0"],
+        }
+
     def test_device_info_input_list_list(self):
         """Test input_list normalization with list input."""
         info = DeviceInfo(InputList=["wifi", "bluetooth", "line_in"])
