@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'  # Trigger on version tags like v2.1.28
+  workflow_dispatch:  # Release from the Actions tab: creates the tag on the selected branch's head
+    inputs:
+      version:
+        description: "Version to release (must match pyproject.toml), e.g. 2.3.17"
+        required: true
+        type: string
 
 jobs:
   release:
@@ -12,8 +18,19 @@ jobs:
       contents: write  # Required for creating releases
       id-token: write  # Required for PyPI trusted publishing
     
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
+
     steps:
     - uses: actions/checkout@v4
+
+    - name: Check version matches pyproject.toml
+      run: |
+        VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+        if [ "v$VERSION" != "$TAG" ]; then
+          echo "::error::Tag $TAG does not match pyproject.toml version $VERSION"
+          exit 1
+        fi
     
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -34,7 +51,7 @@ jobs:
       id: changelog
       run: |
         # Extract notes for this version from CHANGELOG.md
-        VERSION=${GITHUB_REF_NAME#v}
+        VERSION=${TAG#v}
         echo "Extracting notes for version $VERSION"
         # Get content between this version header and the next version header
         NOTES=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
@@ -43,10 +60,16 @@ jobs:
         echo "$NOTES" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
     
+    # Publish first: if PyPI rejects the upload, no tag or release is created
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        name: Release ${{ github.ref_name }}
+        tag_name: ${{ env.TAG }}
+        target_commitish: ${{ github.sha }}
+        name: Release ${{ env.TAG }}
         body: ${{ steps.changelog.outputs.notes }}
         draft: false
         prerelease: false
@@ -54,7 +77,3 @@ jobs:
           dist/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-
