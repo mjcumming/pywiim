@@ -196,9 +196,9 @@ Output ONLY the changelog entries (no markdown headers, no explanations). Start 
 
     try:
         message = client.messages.create(
-            model="claude-3-haiku-20240307",  # Use cheaper model
+            model="claude-haiku-4-5-20251001",  # Use cheaper model
             max_tokens=2000,
-            temperature=0.3,
+            extra_body={"temperature": 0.3},
             messages=[{"role": "user", "content": prompt}],
         )
         return message.content[0].text.strip()
