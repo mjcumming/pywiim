@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.18] - 2026-10-29
+
+### Fixed
+- Changelog generation script uses Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) after Claude Haiku 3 (`claude-3-haiku-20240307`) was retired ([#31](https://github.com/mjcumming/pywiim/pull/31)).
+
 ## [2.3.17] - 2026-10-26
 
 ### Added
