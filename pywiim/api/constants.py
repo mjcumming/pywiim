@@ -389,9 +389,11 @@ API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST = "/httpapi.asp?command=getSoundCa
 API_ENDPOINT_GET_DIGITAL_FILTER_TYPES = "/httpapi.asp?command=getDigitalFilterTypeSupportList"
 API_ENDPOINT_GET_DIGITAL_FILTER_TYPE = "/httpapi.asp?command=getDigitalFilterType"
 API_ENDPOINT_SET_DIGITAL_FILTER_TYPE = "/httpapi.asp?command=setDigitalFilterType:"
-# Output channel (stereo / left / right). The current value is the "ch" field of
-# getPlayerStatus / getPlayerStatusEx; there is no separate getter command.
+# Group channel (stereo / left / right) is the "ch" field of player status.
 API_ENDPOINT_SET_OUTPUT_CHANNEL = "/httpapi.asp?command=setPlayerCmd:slave_channel:"
+# Some devices have a separate output mode for standalone playback.
+API_ENDPOINT_GET_CHANNEL_MODE = "/httpapi.asp?command=getChannelMode"
+API_ENDPOINT_SET_CHANNEL_MODE = "/httpapi.asp?command=setChannelMode:"
 
 # Output channel names and their wire values ("ch" in player status, N in slave_channel:N)
 OUTPUT_CHANNEL_STEREO = "stereo"
@@ -402,6 +404,7 @@ OUTPUT_CHANNEL_MAP: dict[int, str] = {
     1: OUTPUT_CHANNEL_LEFT,
     2: OUTPUT_CHANNEL_RIGHT,
 }
+CHANNEL_MODE_MAP: dict[int, str] = {**OUTPUT_CHANNEL_MAP, 3: "mono"}
 
 # Miscellaneous endpoints
 API_ENDPOINT_SET_LED = "/httpapi.asp?command=LED_SWITCH_SET:"
@@ -694,10 +697,13 @@ __all__ = [
     "API_ENDPOINT_AUDIO_OUTPUT_SET",
     "API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST",
     "API_ENDPOINT_SET_OUTPUT_CHANNEL",
+    "API_ENDPOINT_GET_CHANNEL_MODE",
+    "API_ENDPOINT_SET_CHANNEL_MODE",
     "OUTPUT_CHANNEL_STEREO",
     "OUTPUT_CHANNEL_LEFT",
     "OUTPUT_CHANNEL_RIGHT",
     "OUTPUT_CHANNEL_MAP",
+    "CHANNEL_MODE_MAP",
     "API_ENDPOINT_LED",
     "API_ENDPOINT_LED_BRIGHTNESS",
     "API_ENDPOINT_ARYLIC_LED",

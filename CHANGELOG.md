@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.19] - 2026-10-29
+
+### Fixed
+- **Standalone output channel** ([wiim #291](https://github.com/mjcumming/wiim/issues/291)): on devices with a separate channel-mode API, a solo player's stereo/left/right setting now uses `getChannelMode` and `setChannelMode`. Group leaders and members continue to use their own `ch` and `slave_channel` control. Devices without the mode API retain the previous channel control; an inconclusive capability probe does not cause a silent fallback. The separate settings were exercised on WiiM Pros at zero volume; audible verification on the reporter's Pro Plus remains outstanding.
+
 ## [2.3.18] - 2026-10-29
 
 ### Fixed

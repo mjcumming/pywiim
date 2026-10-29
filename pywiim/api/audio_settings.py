@@ -15,12 +15,14 @@ from typing import Any
 from pydantic import ValidationError
 
 from ..exceptions import WiiMError, WiiMResponseError
-from ..models import SoundCardModeSupport, parse_output_channel
+from ..models import SoundCardModeSupport, parse_channel_mode, parse_channel_mode_number, parse_output_channel
 from .constants import (
     API_ENDPOINT_GET_CHANNEL_BALANCE,
+    API_ENDPOINT_GET_CHANNEL_MODE,
     API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST,
     API_ENDPOINT_GET_SPDIF_SAMPLE_RATE,
     API_ENDPOINT_SET_CHANNEL_BALANCE,
+    API_ENDPOINT_SET_CHANNEL_MODE,
     API_ENDPOINT_SET_OUTPUT_CHANNEL,
     API_ENDPOINT_SET_SPDIF_SWITCH_DELAY,
     OUTPUT_CHANNEL_MAP,
@@ -155,7 +157,7 @@ class AudioSettingsAPI:
     # ------------------------------------------------------------------
 
     async def get_output_channel(self) -> str | None:
-        """Read the output channel from the ``ch`` field of the player status.
+        """Read the group channel from the ``ch`` field of the player status.
 
         There is no dedicated getter command; ``ch`` comes with every
         ``getPlayerStatus`` / ``getPlayerStatusEx`` response.
@@ -170,9 +172,10 @@ class AudioSettingsAPI:
         return parse_output_channel(status.get("ch"))
 
     async def set_output_channel(self, channel: str) -> None:
-        """Set the output channel with ``setPlayerCmd:slave_channel:N``.
+        """Set the group channel with ``setPlayerCmd:slave_channel:N``.
 
-        Works on a standalone player and on a group member addressed directly.
+        On some LinkPlay devices this also controls standalone playback. Devices
+        with a separate channel mode use ``set_channel_mode()`` when solo.
         A group master can also set a member's channel with ``set_slave_channel()``.
 
         Args:
@@ -189,6 +192,31 @@ class AudioSettingsAPI:
         if (response.raw or "").strip().upper() != "OK" and response.parsed != "OK":
             raise WiiMResponseError(
                 f"Failed to set output channel: {response.raw or response.parsed!r}", endpoint=endpoint
+            )
+
+    async def _probe_channel_mode(self) -> tuple[bool | None, str | None]:
+        """Read standalone channel-mode support and its current value without writing."""
+        response = await self._request(API_ENDPOINT_GET_CHANNEL_MODE)  # type: ignore[attr-defined]
+        value = response.parsed if response.parsed is not None else response.raw
+        if parse_channel_mode_number(value) is not None:
+            return True, parse_channel_mode(value)
+        if isinstance(value, str) and value.strip().lower() == "unknown command":
+            return False, None
+        return None, None
+
+    async def get_channel_mode(self) -> str | None:
+        """Read the separate standalone mode, including ``mono`` when reported."""
+        _, mode = await self._probe_channel_mode()
+        return mode
+
+    async def set_channel_mode(self, channel: str) -> None:
+        """Set standalone playback to stereo, left or right."""
+        value = output_channel_value(channel)
+        endpoint = f"{API_ENDPOINT_SET_CHANNEL_MODE}{value}"
+        response = await self._request(endpoint)  # type: ignore[attr-defined]
+        if (response.raw or "").strip().upper() != "OK" and response.parsed != "OK":
+            raise WiiMResponseError(
+                f"Failed to set output channel mode: {response.raw or response.parsed!r}", endpoint=endpoint
             )
 
     # ------------------------------------------------------------------

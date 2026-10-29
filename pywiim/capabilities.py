@@ -298,6 +298,7 @@ class WiiMCapabilities:
         capabilities.setdefault("supports_display_config", False)
         capabilities.setdefault("supports_digital_filter", False)
         capabilities.setdefault("supports_output_channel", False)
+        capabilities.setdefault("supports_output_channel_mode", None)
 
         # LED Indicator (ADR 005): Arylic — set by vendor, try-and-ignore on write; no probe
         if capabilities.get("vendor") == "arylic":
@@ -351,13 +352,19 @@ class WiiMCapabilities:
         if status_endpoint:
             capabilities["status_endpoint"] = status_endpoint
 
-        # Output channel (stereo / left / right): a valid "ch" in the status response
-        # we already fetched is the gate. No extra request and nothing is written.
-        capabilities["supports_output_channel"] = (
+        # A separate channel mode controls standalone playback on newer devices.
+        # A failed or ambiguous probe must not silently select the group command.
+        try:
+            mode_supported, _ = await client._probe_channel_mode()
+        except WiiMError as err:
+            _LOGGER.debug("Channel mode probe failed for %s: %s", client.host, err)
+            mode_supported = None
+        capabilities["supports_output_channel_mode"] = mode_supported
+        capabilities["supports_output_channel"] = mode_supported is True or (
             status_payload is not None and parse_output_channel(status_payload.get("ch")) is not None
         )
         if capabilities["supports_output_channel"]:
-            _LOGGER.debug("Device %s supports output channel (ch in player status)", client.host)
+            _LOGGER.debug("Device %s supports output channel (standalone mode or status ch)", client.host)
 
         # Probe for getSlaveList support
         try:

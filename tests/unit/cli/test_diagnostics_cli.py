@@ -209,6 +209,49 @@ async def test_output_channel_feature_supported():
 
 
 @pytest.mark.asyncio
+async def test_output_channel_reports_independent_standalone_mode():
+    """Report the group channel separately from the standalone output mode."""
+    client = DummyClient()
+    client.capabilities = {
+        **client.capabilities,
+        "supports_output_channel": True,
+        "supports_output_channel_mode": True,
+    }
+    client.get_output_channel = AsyncMock(return_value="left")
+    client.get_channel_mode = AsyncMock(return_value="right")
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    assert await diagnostics._test_output_channel() == {
+        "supported": True,
+        "channel": "left",
+        "channel_source": "group",
+        "standalone_mode": "right",
+    }
+
+
+@pytest.mark.asyncio
+async def test_output_channel_reports_unknown_mode_when_probe_inconclusive():
+    """Do not report the group channel as the standalone mode after a failed probe."""
+    client = DummyClient()
+    client.capabilities = {
+        **client.capabilities,
+        "supports_output_channel": True,
+        "supports_output_channel_mode": None,
+    }
+    client.get_output_channel = AsyncMock(return_value="left")
+    client.get_channel_mode = AsyncMock()
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    assert await diagnostics._test_output_channel() == {
+        "supported": True,
+        "channel": "left",
+        "channel_source": "group",
+        "standalone_mode": None,
+    }
+    client.get_channel_mode.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_output_channel_feature_skipped_without_capability():
     """_test_output_channel does not call HTTP when the capability is false."""
     client = DummyClient()

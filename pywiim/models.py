@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, field_validator
 
-from .api.constants import OUTPUT_CHANNEL_MAP
+from .api.constants import CHANNEL_MODE_MAP, OUTPUT_CHANNEL_MAP
 from .state import normalize_play_state
 
 
@@ -28,6 +28,23 @@ def parse_output_channel(value: Any) -> str | None:
         return OUTPUT_CHANNEL_MAP.get(int(str(value).strip()))
     except ValueError:
         return None
+
+
+def parse_channel_mode_number(value: Any) -> int | None:
+    """Parse a nonnegative channel-mode value, including unrecognized future modes."""
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return None
+    try:
+        number = int(value)
+        return number if number >= 0 else None
+    except ValueError:
+        return None
+
+
+def parse_channel_mode(value: Any) -> str | None:
+    """Map a standalone channel mode to a name, or None when unknown."""
+    number = parse_channel_mode_number(value)
+    return CHANNEL_MODE_MAP.get(number) if number is not None else None
 
 
 __all__ = [
