@@ -138,6 +138,9 @@ class PlayerBase:
         self._channel_balance: float | None = None
         self._last_channel_balance_check: float = 0
 
+        # Standalone output mode is independent of the group channel in player status.
+        self._output_channel_mode: str | None = None
+
         # DAC digital filter names (fetched once) and current 1-based index (60s tier).
         self._digital_filters: list[DigitalFilter] = []
         self._digital_filter_index: int | None = None

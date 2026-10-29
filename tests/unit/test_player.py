@@ -241,6 +241,7 @@ class TestPlayerRefresh:
     @pytest.mark.asyncio
     async def test_refresh_with_audio_output(self, mock_aiohttp_session):
         """Test refresh with audio output status."""
+        from pywiim.api.base import ApiResponse
         from pywiim.client import WiiMClient
         from pywiim.models import DeviceInfo, PlayerStatus
         from pywiim.player import Player
@@ -251,7 +252,7 @@ class TestPlayerRefresh:
             "is_legacy_device": False,
         }
         mock_client = WiiMClient("192.168.1.100", session=mock_aiohttp_session, capabilities=capabilities)
-        mock_client._request = AsyncMock(return_value={"status": "ok"})
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "ok"}, raw=None))
 
         mock_status = PlayerStatus(play_state="play", volume=50, mute=False)
         mock_info = DeviceInfo(uuid="test-uuid", name="Test Device")
@@ -5596,7 +5597,9 @@ class TestPlayerLEDIndicatorAndDisplay:
         """output_channel comes from ch in the cached status; supports_* from capabilities."""
         from pywiim.player import Player
 
-        type(mock_client).capabilities = PropertyMock(return_value={"supports_output_channel": True})
+        type(mock_client).capabilities = PropertyMock(
+            return_value={"supports_output_channel": True, "supports_output_channel_mode": False}
+        )
         player = Player(mock_client)
         assert player.output_channel is None
         assert player.supports_output_channel is True
@@ -5630,7 +5633,9 @@ class TestPlayerLEDIndicatorAndDisplay:
         """A rejected setting leaves both the cached channel and listeners alone."""
         from pywiim.player import Player
 
-        type(mock_client).capabilities = PropertyMock(return_value={"supports_output_channel": True})
+        type(mock_client).capabilities = PropertyMock(
+            return_value={"supports_output_channel": True, "supports_output_channel_mode": False}
+        )
         mock_client.set_output_channel = AsyncMock(side_effect=WiiMResponseError("unknown command"))
         callback = MagicMock()
         player = Player(mock_client, on_state_changed=callback)
@@ -5647,7 +5652,9 @@ class TestPlayerLEDIndicatorAndDisplay:
         """set_output_channel sends the normalized name and updates the cached status."""
         from pywiim.player import Player
 
-        type(mock_client).capabilities = PropertyMock(return_value={"supports_output_channel": True})
+        type(mock_client).capabilities = PropertyMock(
+            return_value={"supports_output_channel": True, "supports_output_channel_mode": False}
+        )
         mock_client.set_output_channel = AsyncMock()
         player = Player(mock_client)
         player._status_model = PlayerStatus.model_validate({"ch": "0"})

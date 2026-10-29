@@ -464,8 +464,8 @@ class Player(PlayerBase):
     async def set_output_channel(self, channel: str) -> None:
         """Set the output channel: ``"stereo"``, ``"left"`` or ``"right"``.
 
-        Sends ``setPlayerCmd:slave_channel:N`` to this device, standalone or as a
-        group member, and updates ``output_channel`` right away.
+        Uses the standalone channel mode when supported and solo; otherwise uses
+        the device's group-channel command. Updates ``output_channel`` right away.
 
         Raises:
             WiiMError: If ``supports_output_channel`` is false or the request fails.
@@ -1011,9 +1011,10 @@ class Player(PlayerBase):
 
     @property
     def output_channel(self) -> str | None:
-        """Output channel from cached status: ``"stereo"``, ``"left"``, ``"right"``, or None.
+        """Current solo mode or group channel, or None when unknown.
 
-        Read from the ``ch`` field of every status poll, and updated by ``set_output_channel()``.
+        A standalone device can also report ``"mono"``. The channel select setter
+        accepts stereo, left and right; a reported mono mode is left unchanged.
         """
         return self._properties.output_channel
 
@@ -1500,7 +1501,7 @@ class Player(PlayerBase):
 
     @property
     def supports_output_channel(self) -> bool:
-        """Whether output channel (stereo / left / right) is supported (``ch`` in player status)."""
+        """Whether output channel (stereo / left / right) is supported."""
         return self._properties.supports_output_channel
 
     @property

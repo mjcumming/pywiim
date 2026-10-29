@@ -131,7 +131,10 @@ class PlayerProperties:
 
     @property
     def output_channel(self) -> str | None:
-        """Output channel from cached HTTP status ("stereo", "left", "right"), or None."""
+        """Current solo mode or group channel, or None if it is unknown."""
+        mode_support = self.player.client.capabilities.get("supports_output_channel_mode")
+        if self.player.is_solo and mode_support is not False:
+            return self.player._output_channel_mode if mode_support is True else None
         if self.player._status_model is None:
             return None
         return self.player._status_model.output_channel
@@ -1708,7 +1711,7 @@ class PlayerProperties:
     def supports_output_channel(self) -> bool:
         """Whether output channel (stereo / left / right) is supported.
 
-        Set at connect time when the player status carries a valid ``ch`` field.
+        Detected from a valid status ``ch`` or the standalone channel-mode API.
         """
         if not self.player.client:
             return False

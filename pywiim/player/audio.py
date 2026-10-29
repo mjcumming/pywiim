@@ -399,10 +399,7 @@ class AudioConfiguration:
             self.player._on_state_changed()
 
     async def set_output_channel(self, channel: str) -> None:
-        """Set the output channel and update the cached status.
-
-        The device reports the new value in ``ch`` on the next status poll; the cache
-        is updated right after the command succeeds so the state does not lag a poll.
+        """Set the solo mode or group channel and update the matching cache.
 
         Args:
             channel: ``"stereo"``, ``"left"`` or ``"right"``, any case.
@@ -414,9 +411,16 @@ class AudioConfiguration:
         if not self.player.supports_output_channel:
             raise WiiMError("Output channel is not supported")
         name = OUTPUT_CHANNEL_MAP[output_channel_value(channel)]
-        await self.player.client.set_output_channel(name)
-        if self.player._status_model is not None:
-            self.player._status_model.output_channel = name
+        mode_support = self.player.client.capabilities.get("supports_output_channel_mode")
+        if self.player.is_solo and mode_support is None:
+            raise WiiMError("Standalone output channel support is not yet known")
+        if self.player.is_solo and mode_support:
+            await self.player.client.set_channel_mode(name)
+            self.player._output_channel_mode = name
+        else:
+            await self.player.client.set_output_channel(name)
+            if self.player._status_model is not None:
+                self.player._status_model.output_channel = name
         if self.player._on_state_changed:
             self.player._on_state_changed()
 

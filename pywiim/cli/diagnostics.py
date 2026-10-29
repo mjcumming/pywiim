@@ -571,11 +571,16 @@ class DeviceDiagnostics:
             return {"supported": False, "error": str(err)}
 
     async def _test_output_channel(self) -> dict[str, Any]:
-        """Output channel (stereo / left / right) from ``ch`` in player status. Read-only."""
+        """Report the group channel and any separate standalone mode, without writes."""
         if not self.client.capabilities.get("supports_output_channel", False):
-            return {"supported": False, "reason": "No ch field in player status"}
+            return {"supported": False, "reason": "No output channel control detected"}
         try:
-            return {"supported": True, "channel": await self.client.get_output_channel()}
+            result = {"supported": True, "channel": await self.client.get_output_channel()}
+            mode_support = self.client.capabilities.get("supports_output_channel_mode", False)
+            if mode_support is not False:
+                result["channel_source"] = "group"
+                result["standalone_mode"] = await self.client.get_channel_mode() if mode_support is True else None
+            return result
         except WiiMError:
             return {"supported": False, "reason": "Player status request failed"}
         except Exception as err:
@@ -1023,7 +1028,7 @@ class DeviceDiagnostics:
         except Exception:
             self.report["channel_balance"] = {"supported": False}
 
-        # Output channel (read-only, from ch in player status)
+        # Group channel and standalone mode (read-only).
         self.report["output_channel"] = await self._test_output_channel()
 
         # Add audio output status

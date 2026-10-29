@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 import aiohttp
 
 from ..api.constants import MODE_MAP
-from ..exceptions import WiiMTimeoutError
+from ..exceptions import WiiMError, WiiMTimeoutError
 from ..metadata import is_valid_metadata_value
 from ..models import parse_output_channel
 from ..polling import PollingStrategy
@@ -1194,6 +1194,23 @@ class StateManager:
         from .groupops import GroupOperations
 
         await GroupOperations(self.player)._synchronize_group_state()
+
+        # Role detection must run first: a device that has just left a group
+        # needs its independent solo mode, not the previous group channel.
+        mode_support = self.player.client.capabilities.get("supports_output_channel_mode")
+        if self.player.is_solo and mode_support is not False:
+            try:
+                if mode_support is None:
+                    mode_support, mode = await self.player.client._probe_channel_mode()
+                    self.player.client.capabilities["supports_output_channel_mode"] = mode_support
+                    if mode_support:
+                        self.player.client.capabilities["supports_output_channel"] = True
+                else:
+                    mode = await self.player.client.get_channel_mode()
+                if mode_support:
+                    self.player._output_channel_mode = mode
+            except WiiMError as err:
+                _LOGGER.debug("Failed to read standalone channel mode for %s: %s", self.player.host, err)
 
         # HTTP polling path: enrich artwork/metadata on track change (refreshes a valid
         # but stale previous-track URL) or when artwork/metadata is missing.

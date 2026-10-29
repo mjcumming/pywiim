@@ -814,9 +814,9 @@ player.supports_digital_filter    # bool - True if getDigitalFilterTypeSupportLi
 player.digital_filter_types       # list[str] - cached DAC filter names
 player.digital_filter             # str | None - cached current DAC filter name
 # await player.set_digital_filter(name)  # name from digital_filter_types; analog line out only
-player.supports_output_channel    # bool - True if the player status carries a valid "ch" field
-player.output_channel             # str | None - "stereo" / "left" / "right" from "ch" on every status poll
-# await player.set_output_channel(name)  # "stereo" / "left" / "right"; setPlayerCmd:slave_channel:N
+player.supports_output_channel    # bool - valid status "ch" or supported standalone channel-mode API
+player.output_channel             # str | None - current mode for the player's role; may report "mono"
+# await player.set_output_channel(name)  # "stereo" / "left" / "right"; command depends on role
 ```
 
 **UPnP Capabilities** (depend on UPnP client initialization):
@@ -917,12 +917,16 @@ player.channel_balance  # float | None — cached; also updated on refresh() ~60
 await player.set_channel_balance(balance: float)  # -1.0 to 1.0
 
 # Output channel (stereo / left / right; when supports_output_channel). Not the same as balance.
-player.output_channel  # "stereo" | "left" | "right" | None; read from "ch" in the player status
-await player.set_output_channel("left")  # setPlayerCmd:slave_channel:1; works on a group member too
-await player.client.get_output_channel()  # reads "ch" from a fresh status request
+player.output_channel  # "stereo" | "left" | "right" | "mono" | None; selected for the current role
+await player.set_output_channel("left")  # solo mode API when supported; otherwise the group/legacy channel API
+await player.client.get_output_channel()  # low-level group/legacy "ch" from a fresh status request
+await player.client.get_channel_mode()  # separate standalone mode, or None when unavailable
 await master.client.set_slave_channel("192.168.1.101", "right")  # multiroom:SlaveChannel (master only)
 
 # Group members poll their own channel even while playback metadata comes from the master.
+# Solo mode and group channel are independent when the mode API is supported.
+# Inconclusive mode probes leave solo mode unknown and block solo writes until retried.
+# The setter and the HA select offer stereo/left/right; the getter may also report mono.
 # Both setters require a device acknowledgement; rejected commands raise WiiMResponseError.
 
 # Status and metadata fetchers
