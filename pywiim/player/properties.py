@@ -1291,6 +1291,11 @@ class PlayerProperties:
         caps = self.player.client.capabilities if self.player.client else {}
         capability_ids = caps.get("wiim_input_capability")
         enable_map = caps.get("wiim_input_enable")
+        selectable_ids = caps.get("selectable_source_ids")
+        if selectable_ids is not None:
+            # A10 MkII's verified list replaces heuristic inputs; active
+            # unlisted sources remain readable via source / source_catalog.
+            return list(selectable_ids)
         if not capability_ids and not enable_map:
             return sources
 
@@ -1339,7 +1344,8 @@ class PlayerProperties:
             raw_blocked = self.player.client.capabilities.get("non_selectable_source_ids", [])
             if isinstance(raw_blocked, list):
                 blocked_ids = {str(item).lower() for item in raw_blocked}
-        if source_id.lower() in blocked_ids:
+        allowed_ids = self.player.client.capabilities.get("selectable_source_ids") if self.player.client else None
+        if source_id.lower() in blocked_ids or (allowed_ids is not None and source_id not in allowed_ids):
             selectable = False
 
         # Keep unknown/virtual source capabilities conservative in the catalog.
@@ -1394,6 +1400,11 @@ class PlayerProperties:
             )
             catalog.append(entry)
             seen_ids.add(source_id)
+
+        if self.player.client.capabilities.get("selectable_source_ids") is not None:
+            if current_key and current_key not in seen_ids:
+                catalog.append(self._catalog_entry(current_key, self.source_name or current_key, True))
+                seen_ids.add(current_key)
 
         # Append known service/protocol sources for integrations like Music Assistant.
         for source_id, source_name in _KNOWN_SERVICE_SOURCES:
