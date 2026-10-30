@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.20] - 2026-10-30
+
 ### Fixed
 - **Audio Pro A10 MkII AUX selection** ([wiim #187](https://github.com/mjcumming/wiim/issues/187#issuecomment-6270088302)): probe `getAudioInputCapbility` on this model, including non-WiiM classifications. When it explicitly lists `auxIn`, preserve that command spelling for AUX/Line In and expose only the reported selectable inputs. Mode 60 retains its existing `line_in` identity. Unsupported/failed queries preserve previous behavior; other devices retain their source commands. Based on JoeKarlsson's tests on four speakers running `Linkplay.5.2.825329`; post-release device validation remains outstanding. Per-input EQ is separate.
 
