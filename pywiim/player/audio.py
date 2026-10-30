@@ -11,7 +11,7 @@ from ..api.audio_settings import output_channel_value
 from ..api.constants import API_ENDPOINT_GET_CHANNEL_BALANCE, OUTPUT_CHANNEL_MAP
 from ..capabilities import _channel_balance_probe_success
 from ..exceptions import WiiMError
-from ..normalize import source_rename_reverse
+from ..normalize import canonical_source_key, source_rename_reverse
 
 if TYPE_CHECKING:
     from . import Player
@@ -44,7 +44,8 @@ class AudioConfiguration:
 
         # Capability-driven blocklist for device-specific switchmode quirks.
         blocked_ids = self._get_non_selectable_source_ids()
-        if source_id in blocked_ids:
+        selectable_ids = self.player.client.capabilities.get("selectable_source_ids")
+        if source_id in blocked_ids or (selectable_ids is not None and source_id not in selectable_ids):
             raise ValueError(
                 f"Source '{source}' is not directly selectable on this device (blocked source id: {source_id})"
             )
@@ -56,6 +57,10 @@ class AudioConfiguration:
         # Some firmwares return "OK" for switchmode but do nothing.
         if not await self._verify_source_switch(normalized_source):
             raise WiiMError(f"Device acknowledged source switch to '{source}' but did not change source state.")
+
+        # Wire spelling is not source identity (A10 auxIn is mode 60 / line_in).
+        if normalized_source == "auxIn" and source_id == "line_in":
+            normalized_source = "line_in"
 
         # Update cached state immediately (optimistic)
         # Command verified/sent, so use normalized source for immediate UI response.
@@ -103,6 +108,11 @@ class AudioConfiguration:
         if resolved_id:
             source = resolved_id
             source_lower = resolved_id.lower()
+
+        overrides = self.player.client.capabilities.get("source_command_overrides", {})
+        command = overrides.get(canonical_source_key(source))
+        if command:
+            return str(command)
 
         # Handle "Network" display name mapping back to "wifi"
         if source_lower == "network":
@@ -216,6 +226,11 @@ class AudioConfiguration:
 
         if source_lower in ("network", "wifi", "wi-fi", "ethernet") or normalized_lower == "wifi":
             return "network"
+        if (
+            normalized_source == "auxIn"
+            and self.player.client.capabilities.get("source_command_overrides", {}).get("line_in") == "auxIn"
+        ):
+            return "line_in"
         if normalized_lower in ("line-in", "line_in", "linein"):
             return "line_in"
         if normalized_lower in ("line-in-2", "line_in_2", "linein2"):

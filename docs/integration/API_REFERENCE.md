@@ -200,6 +200,14 @@ player.available_sources  # list[str] - Returns [] if unavailable
 player.source_catalog     # list[dict[str, Any]] - Structured source metadata for integrations
 ```
 
+For Audio Pro A10 MkII devices that explicitly advertise `auxIn` through
+`getAudioInputCapbility`, `available_sources` uses the reported selectable inputs
+instead of heuristic inputs. AUX retains the stable `line_in` id and `Line In`
+label (mode 60); `set_source("Aux In")` and `set_source("Line In")` both send the
+exact `auxIn` command. Active unlisted sources remain readable via `source` and
+`source_catalog` with `selectable: false`. Failed or unsupported queries retain
+previous source behavior; this does not enable the command on other models.
+
 `available_sources` returns a UI-ready list of source names:
 
 1. **Always included**: Physical/hardware inputs (`Bluetooth`, `Line In`, `Optical In`, etc.) and `Network`

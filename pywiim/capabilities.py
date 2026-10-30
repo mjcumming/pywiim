@@ -154,9 +154,9 @@ async def _probe_supports_subwoofer(client: Any, device_info: DeviceInfo, capabi
 
 
 async def _probe_wiim_input_metadata(client: Any, capabilities: dict[str, Any]) -> None:
-    """Probe WiiM-only input metadata and store it as a source overlay.
+    """Probe input metadata and store it as a source overlay.
 
-    Populates (WiiM devices only, best-effort):
+    WiiM metadata (best-effort):
 
     - ``wiim_input_capability``: canonical ids the device reports as physical
       inputs (``getAudioInputCapbility``) — used to fill gaps in enumeration.
@@ -166,21 +166,45 @@ async def _probe_wiim_input_metadata(client: Any, capabilities: dict[str, Any]) 
       custom labels overlaid on the stable ids (never a replacement for identity).
 
     These are read-only WiiM endpoints absent on most LinkPlay/OEM devices, so
-    the probe is skipped for non-WiiM devices and any failing endpoint is simply
+    only the capability query is also tried on explicit Audio Pro A10 MkII models.
+    An exact ``auxIn`` response sets command overrides and an authoritative
+    ``selectable_source_ids`` list. Otherwise existing behavior is retained.
+    The other probes are skipped for non-WiiM devices and any failing endpoint is simply
     left out (no overlay → today's behavior is preserved).
     """
-    if not capabilities.get("is_wiim_device"):
+    # wiim#187: this Audio Pro model implements the capability query too. Only
+    # explicit MkII model names qualify; generation detection alone also matches
+    # older A10s. Do not assume other OEMs implement these WiiM endpoints.
+    model = "".join(c for c in str(capabilities.get("device_type", "")).lower() if c.isalnum())
+    is_a10_mkii = model in {"audioproa10mkii", "audioproa10mkiiwiim"}
+    if not capabilities.get("is_wiim_device") and not is_a10_mkii:
         return
 
     host = getattr(client, "host", "?")
 
     try:
         capability = await client.get_audio_input_capability()
+        if is_a10_mkii:
+            # Preserve the exact, device-advertised wire token. Mode 60 already
+            # maps to line_in; keep that stable id and expose one analog input.
+            if capability is not None and any(item.mode == "auxIn" for item in capability.audio_input):
+                ids = [canonical_source_key(item.mode) for item in capability.audio_input if item.mode]
+                capabilities["selectable_source_ids"] = list(
+                    dict.fromkeys("line_in" if key == "aux" else key for key in ids)
+                )
+                capabilities["source_command_overrides"] = {"line_in": "auxIn", "aux": "auxIn"}
+                capabilities["non_selectable_source_ids"] = [
+                    key for key in capabilities.get("non_selectable_source_ids", []) if key not in {"line_in", "aux"}
+                ]
+            if not capabilities.get("is_wiim_device"):
+                return
         if capability is not None and capability.audio_input:
             ids = [canonical_source_key(item.mode) for item in capability.audio_input if item.mode]
             capabilities["wiim_input_capability"] = [i for i in ids if i]
     except WiiMError as err:
         _LOGGER.debug("getAudioInputCapbility probe failed for host=%s: %s", host, err)
+        if not capabilities.get("is_wiim_device"):
+            return
 
     try:
         enable = await client.get_audio_input_enable()
@@ -668,6 +692,10 @@ def detect_device_capabilities(device_info: DeviceInfo) -> dict[str, Any]:
         # Canonical source IDs from Player.source_catalog that should not be treated
         # as directly selectable for this device (device/firmware-specific quirks).
         "non_selectable_source_ids": [],
+        # Explicit defaults clear stale runtime evidence on a forced re-probe
+        # (clients and integrations merge detected keys into cached metadata).
+        "source_command_overrides": {},
+        "selectable_source_ids": None,
         # Runtime detection sets this on WiiM via getChannelBalance probe (WiiMCapabilities).
         "supports_channel_balance": False,
     }
@@ -717,8 +745,8 @@ def detect_device_capabilities(device_info: DeviceInfo) -> dict[str, Any]:
                 capabilities["status_endpoint"] = "/httpapi.asp?command=getStatusEx"
 
                 # Audio Pro A10 MkII WiiM Edition firmware quirk:
-                # AUX/Line In can be active (mode 60) but switchmode source
-                # selection is not implemented and returns silent no-op.
+                # AUX/Line In can be active (mode 60), but line-in returns a
+                # silent no-op. A runtime auxIn capability can lift this block.
                 # Keep source visible, but don't expose as directly selectable.
                 if "a10" in model_lower:
                     capabilities["non_selectable_source_ids"] = ["line_in", "aux", "rca"]
