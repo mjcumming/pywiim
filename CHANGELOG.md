@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.21] - 2026-10-31
+
+### Added
+
+- Cache saved parametric EQ preset names per player session and select them for the current input. Refresh the active PEQ state independently of the preset list.
+
+### Fixed
+
+- Reject failed or malformed PEQ list, state, and preset-load responses instead of treating them as empty settings.
+
 ## [2.3.20] - 2026-10-30
 
 ### Fixed

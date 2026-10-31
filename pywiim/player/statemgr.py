@@ -1165,6 +1165,18 @@ class StateManager:
         # RoomFit. The profile list changes in the app, so refresh names and the
         # switch together on the same 60s tier. supports_peq is the gate.
         peq_supported = bool(self.player.client.capabilities.get("supports_peq", False))
+        should_fetch_peq = full or (
+            self._polling_strategy
+            and self._polling_strategy.should_fetch_led_indicator(
+                self.player._last_peq_state_check, peq_supported, now=now
+            )
+        )
+        if should_fetch_peq and peq_supported and self.player._peq_presets:
+            try:
+                await self.player.refresh_peq_preset()
+                self.player._last_peq_state_check = now
+            except Exception as err:
+                _LOGGER.debug("Failed to fetch PEQ state for %s: %s", self.player.host, err)
         should_fetch_room = full or (
             self._polling_strategy
             and self._polling_strategy.should_fetch_led_indicator(
