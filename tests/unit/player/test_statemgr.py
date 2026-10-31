@@ -698,6 +698,27 @@ class TestStateManager:
         assert mock_player._last_room_correction_check != 0
 
     @pytest.mark.asyncio
+    async def test_refresh_updates_peq_state_without_reloading_preset_names(self, state_manager, mock_player):
+        """PEQ state follows the active input while the saved list stays fixed."""
+        from pywiim.api.peq import PEQSettings
+
+        mock_player.client.get_player_status_model = AsyncMock(return_value=PlayerStatus(play_state="pause"))
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_peq": True})
+        mock_player._peq_presets = ["Night"]
+        mock_player.client.get_peq_bands = AsyncMock(
+            side_effect=[PEQSettings(enabled=True, name="Night"), PEQSettings(enabled=False, name="Night")]
+        )
+        mock_player.client.get_peq_preset_list = AsyncMock()
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+            await state_manager.refresh(full=True)
+            assert mock_player.peq_preset == "Night"
+            await state_manager.refresh(full=True)
+        assert mock_player.peq_preset is None
+        mock_player.client.get_peq_preset_list.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_refresh_skips_room_correction_without_peq(self, state_manager, mock_player):
         """Refresh does not read RoomFit when the device has no LV2 PEQ."""
         mock_status = PlayerStatus(play_state="pause")

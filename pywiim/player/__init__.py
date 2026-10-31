@@ -406,6 +406,37 @@ class Player(PlayerBase):
         if self._on_state_changed:
             self._on_state_changed()
 
+    async def initialize_peq_presets(self) -> None:
+        """Read saved PEQ preset names once per player session."""
+        if self._peq_presets is not None:
+            return
+        presets = await self.client.get_peq_preset_list()
+        self._peq_presets = list(dict.fromkeys(name for key in ("custom", "preset") for name in presets[key] if name))
+        if self._peq_presets:
+            await self.refresh_peq_preset()
+
+    async def refresh_peq_preset(self) -> None:
+        """Refresh the current input's active PEQ preset."""
+        async with self._peq_lock:
+            try:
+                settings = await self.client.get_peq_bands()
+            except WiiMError:
+                self._peq_preset = None
+                raise
+            self._peq_preset = (
+                settings.name if settings.enabled and settings.name in (self._peq_presets or []) else None
+            )
+
+    async def set_peq_preset(self, name: str) -> None:
+        """Load a saved PEQ preset for this player's active input."""
+        if name not in (self._peq_presets or []):
+            raise WiiMError(f"Unknown PEQ preset {name!r}")
+        async with self._peq_lock:
+            settings = await self.client.load_peq(name)
+            self._peq_preset = settings.name if settings.enabled and settings.name == name else None
+        if self._on_state_changed:
+            self._on_state_changed()
+
     async def set_room_correction(self, name: str) -> None:
         """Load a RoomFit profile, or turn RoomFit off.
 
@@ -1412,6 +1443,16 @@ class Player(PlayerBase):
             if item.index == self._digital_filter_index:
                 return item.name
         return None
+
+    @property
+    def peq_presets(self) -> list[str]:
+        """Saved PEQ preset names cached for this player session."""
+        return list(self._peq_presets or [])
+
+    @property
+    def peq_preset(self) -> str | None:
+        """Active PEQ preset for the current source, if known."""
+        return self._peq_preset
 
     @property
     def room_correction_profiles(self) -> list[str]:

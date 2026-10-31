@@ -307,6 +307,8 @@ if player.client.capabilities.get("supports_peq", False):
     # ...
 ```
 
+For a saved-preset selector, call `await player.initialize_peq_presets()` once per player session. The cached `player.peq_presets` list is not refreshed automatically; create a new player session to discover changes. `player.peq_preset` is the active saved name for the current input, or `None` when PEQ is off or its state is unknown. Use `await player.set_peq_preset(name)` to load a listed preset. Player refresh updates the current state independently of the preset list.
+
 **Client methods (use when `supports_peq` is True):**
 
 ```python

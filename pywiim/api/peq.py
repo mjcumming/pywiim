@@ -40,7 +40,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
 
-from ..exceptions import WiiMError
+from ..exceptions import WiiMError, WiiMResponseError
 from .constants import (
     API_ENDPOINT_EQ_OFF,
     API_ENDPOINT_PEQ_CHANGE_FX,
@@ -423,7 +423,13 @@ class PEQAPI:
             endpoint = API_ENDPOINT_PEQ_GET_BAND + quote(PEQ_PLUGIN_URI, safe="")
 
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
-        return _parse_peq_settings(raw.parsed if isinstance(raw.parsed, dict) else {})
+        if (
+            not isinstance(raw.parsed, dict)
+            or str(raw.parsed.get("status", "ok")).lower() != "ok"
+            or str(raw.parsed.get("EQStat", "")).lower() not in ("on", "off")
+        ):
+            raise WiiMResponseError("Invalid PEQ state response", endpoint=endpoint)
+        return _parse_peq_settings(raw.parsed)
 
     async def get_graphic_eq_bands(self, source_name: str | None = None) -> GraphicEQSettings:
         """Get WiiM LV2 graphic 10-band EQ settings.
@@ -725,7 +731,15 @@ class PEQAPI:
         self._require_peq()
         endpoint = API_ENDPOINT_PEQ_GET_LIST + quote(PEQ_PLUGIN_URI, safe="")
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
-        data = raw.parsed if isinstance(raw.parsed, dict) else {}
+        data = raw.parsed
+        if (
+            not isinstance(data, dict)
+            or str(data.get("status", "ok")).lower() != "ok"
+            or not all(isinstance(data.get(k), list) for k in ("custom", "preset"))
+        ):
+            raise WiiMResponseError("Invalid PEQ preset list response", endpoint=endpoint)
+        if not all(isinstance(name, str) for key in ("custom", "preset") for name in data[key]):
+            raise WiiMResponseError("Invalid PEQ preset name", endpoint=endpoint)
         return {
             "custom": list(data.get("custom", [])),
             "preset": list(data.get("preset", [])),
@@ -826,7 +840,14 @@ class PEQAPI:
             payload = {"pluginURI": PEQ_PLUGIN_URI, "Name": name}
             endpoint = API_ENDPOINT_PEQ_LOAD + _encode_json_param(payload)
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
-        return _parse_peq_settings(raw.parsed if isinstance(raw.parsed, dict) else {})
+        if (
+            not isinstance(raw.parsed, dict)
+            or str(raw.parsed.get("status", "")).lower() != "ok"
+            or str(raw.parsed.get("EQStat", "")).lower() != "on"
+            or raw.parsed.get("Name") != name
+        ):
+            raise WiiMResponseError(f"Failed to load PEQ preset {name!r}", endpoint=endpoint)
+        return _parse_peq_settings(raw.parsed)
 
     async def delete_peq(self, name: str) -> None:
         """Delete a custom PEQ preset by name.

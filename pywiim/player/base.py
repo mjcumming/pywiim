@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import weakref
 from collections.abc import Callable
@@ -152,6 +153,10 @@ class PlayerBase:
         self._room_correction_enabled: bool = False
         self._room_correction_name: str = ""
         self._last_room_correction_check: float = 0
+        self._peq_presets: list[str] | None = None
+        self._peq_preset: str | None = None
+        self._last_peq_state_check: float = 0
+        self._peq_lock = asyncio.Lock()
 
         # UPnP health tracking (only if UPnP client is provided)
         self._upnp_health_tracker: UpnpHealthTracker | None = None
