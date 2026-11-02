@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **EQ preset reverts to Flat** ([wiim #165](https://github.com/mjcumming/wiim/issues/165)): `Player.eq_preset` keeps the `EQGetBand` name when `getPlayerStatus` `eq` stays at flat. A selected preset no longer snaps back to Flat one minute later. `Off` still means EQ is bypassed.
+
 ## [2.3.21] - 2026-10-31
 
 ### Added

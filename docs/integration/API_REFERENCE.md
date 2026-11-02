@@ -293,7 +293,7 @@ player.eq_preset  # str | None
 # Example: "Flat", "Acoustic", "Rock" (not "flat", "acoustic", "rock")
 ```
 
-Current EQ preset name from cached status.
+Current EQ preset name. After the first `EQGetBand` read, `Name` is kept until the next read; `getPlayerStatus` `eq` does not replace it.
 
 #### Parametric EQ (PEQ) – WiiM only
 

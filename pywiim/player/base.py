@@ -99,6 +99,11 @@ class PlayerBase:
         self._eq_enabled: bool | None = None
         self._last_eq_status_check: float = 0  # Track when EQ status was last fetched
 
+        # Preset name from EQGetBand. getPlayerStatus eq stays at flat on current
+        # firmware after EQLoad, so this name outranks that field (wiim #165).
+        self._eq_band_preset: str | None = None
+        self._eq_band_reconcile: bool = False
+
         # Track when EQ preset was set (for preserving optimistic updates during refresh)
         # Device status endpoint returns stale EQ data; we preserve the optimistic update for a few seconds
         self._last_eq_preset_set_time: float = 0

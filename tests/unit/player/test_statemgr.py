@@ -493,7 +493,7 @@ class TestStateManager:
         mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
         TestStateManager._setup_refresh_mocks(mock_player, state_manager)
         type(mock_player.client).capabilities = PropertyMock(return_value={"supports_eq": True})
-        mock_player.client.get_eq_status = AsyncMock(return_value=False)
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "Off", "Name": "Rock"})
         mock_player._coverart_mgr._last_track_signature = "Same|Track"
 
         with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
@@ -501,8 +501,78 @@ class TestStateManager:
 
             await state_manager.refresh(full=True)
 
-        mock_player.client.get_eq_status.assert_called_once()
+        mock_player.client.get_eq.assert_called_once()
         assert mock_player._eq_enabled is False
+        assert mock_player.eq_preset == "Off"
+
+    @pytest.mark.asyncio
+    async def test_refresh_keeps_eqgetband_preset_when_status_stays_flat(self, state_manager, mock_player):
+        """getPlayerStatus eq=flat must not replace EQGetBand after the 60s window.
+
+        wiim #165: the status field stays at flat, and the old guard gave up after
+        one minute. The EQGetBand name is the preset that remains.
+        """
+
+        async def _refresh(full: bool) -> None:
+            with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+                mock_groupops.return_value._synchronize_group_state = AsyncMock()
+                await state_manager.refresh(full=full)
+
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_eq": True})
+        mock_player.client.get_player_status_model = AsyncMock(
+            side_effect=lambda: PlayerStatus(play_state="pause", eq_preset="flat", title="Same")
+        )
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "Vocal Booster"})
+        mock_player._coverart_mgr._last_track_signature = "||"
+
+        await _refresh(full=True)
+
+        assert mock_player.eq_preset == "Vocal Booster"
+        assert mock_player._eq_enabled is True
+        mock_player.client.get_eq.assert_called_once()
+
+        # Window expired, status still flat/0. No extra EQGetBand read.
+        mock_player._last_eq_preset_set_time = 0
+        await _refresh(full=False)
+
+        assert mock_player.eq_preset == "Vocal Booster"
+        mock_player.client.get_eq.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_refresh_adopts_eqgetband_name_when_status_eq_changes(self, state_manager, mock_player):
+        """A new getPlayerStatus eq is checked once against EQGetBand."""
+
+        async def _refresh() -> None:
+            with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+                mock_groupops.return_value._synchronize_group_state = AsyncMock()
+                await state_manager.refresh(full=False)
+
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_eq": True})
+        mock_player._eq_band_preset = "Rock"
+        mock_player._eq_enabled = True
+        mock_player._status_model = PlayerStatus(play_state="pause", eq_preset="Rock", title="Same")
+        mock_player._last_eq_status_check = time.time()
+        mock_player._last_eq_presets_check = time.time()
+        state_manager._last_eq_preset = "Rock"
+        state_manager._last_status_eq_preset = "flat"
+        mock_player._coverart_mgr._last_track_signature = "||"
+        mock_player.client.get_player_status_model = AsyncMock(
+            side_effect=lambda: PlayerStatus(play_state="pause", eq_preset="jazz", title="Same")
+        )
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "Jazz"})
+
+        await _refresh()
+
+        mock_player.client.get_eq.assert_called_once()
+        assert mock_player.eq_preset == "Jazz"
+
+        mock_player.client.get_eq.reset_mock()
+        await _refresh()
+
+        mock_player.client.get_eq.assert_not_called()
+        assert mock_player.eq_preset == "Jazz"
 
     @pytest.mark.asyncio
     async def test_refresh_fetches_eq_presets(self, state_manager, mock_player):

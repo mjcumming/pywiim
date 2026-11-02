@@ -475,12 +475,16 @@ class AudioConfiguration:
             available_presets=available_presets or None,
         )
 
-        # Update cached state immediately (optimistic) with normalized preset
+        # Update cached state immediately (optimistic) with normalized preset.
+        # Remember it as the EQGetBand name so later status polls cannot replace it
+        # with a stale flat value once the short preservation window ends.
         if self.player._status_model:
             self.player._status_model.eq_preset = normalized_preset
+        self.player._eq_band_preset = normalized_preset
+        self.player._eq_band_reconcile = False
 
         # Track when EQ was set for preserving optimistic update during refresh
-        # Device status endpoint returns stale EQ data for many seconds
+        # Device status endpoint returns stale EQ data and may never catch up
         self.player._last_eq_preset_set_time = time.time()
 
         # Verify by querying the authoritative EQ endpoint after a brief delay
@@ -488,10 +492,14 @@ class AudioConfiguration:
         try:
             await asyncio.sleep(0.3)  # Brief delay for device to apply
             eq_data = await self.player.client.get_eq()
-            verified_preset = eq_data.get("Name") or eq_data.get("name")
+            verified_preset = None
+            if isinstance(eq_data, dict):
+                verified_preset = eq_data.get("Name") or eq_data.get("name")
             if verified_preset and self.player._status_model:
-                self.player._status_model.eq_preset = verified_preset
-                _LOGGER.debug("EQ preset verified: %s", verified_preset)
+                verified_name = str(verified_preset)
+                self.player._status_model.eq_preset = verified_name
+                self.player._eq_band_preset = verified_name
+                _LOGGER.debug("EQ preset verified: %s", verified_name)
         except Exception as err:
             # If verification fails, keep the optimistic update
             _LOGGER.debug("EQ verification failed, keeping optimistic value: %s", err)

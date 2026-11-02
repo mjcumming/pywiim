@@ -923,7 +923,10 @@ class PlayerProperties:
 
     @property
     def eq_preset(self) -> str | None:
-        """Current EQ preset from cached status, or "Off" if EQ is disabled.
+        """Current EQ preset, or "Off" if EQ is disabled.
+
+        The name comes from EQGetBand once that read has succeeded. A later
+        getPlayerStatus ``eq`` value does not replace it.
 
         Returns:
             - "Off" if EQ is disabled (bypassed)

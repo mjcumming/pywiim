@@ -1192,7 +1192,7 @@ class Player(PlayerBase):
 
     @property
     def eq_preset(self) -> str | None:
-        """Current EQ preset from cached status."""
+        """Current EQ preset, or Off when EQ is bypassed."""
         return self._properties.eq_preset
 
     @property

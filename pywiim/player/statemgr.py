@@ -34,6 +34,15 @@ if TYPE_CHECKING:
     from . import Player
 
 _LOGGER = logging.getLogger(__name__)
+_EQ_PRESET_PRESERVATION_SECONDS = 60.0
+
+
+def _eq_names_match(left: str | None, right: str | None) -> bool:
+    """Return True when two EQ preset names are the same, ignoring case."""
+    if left is None or right is None:
+        return left is None and right is None
+    return left.casefold() == right.casefold()
+
 
 _PlayerPlayState = Literal["play", "pause", "stop", "idle", "buffering"]
 _PLAYER_PLAY_STATES: frozenset[str] = frozenset({"play", "pause", "stop", "idle", "buffering"})
@@ -100,6 +109,8 @@ class StateManager:
 
         # Track last EQ preset to detect changes (trigger full EQ info fetch)
         self._last_eq_preset: str | None = None
+        # Last raw getPlayerStatus eq, before a preserved name replaces it.
+        self._last_status_eq_preset: str | None = None
 
         # Track last source to detect source changes (for audio output fetching)
         self._last_source: str | None = None
@@ -363,6 +374,50 @@ class StateManager:
         except Exception as err:
             self._handle_refresh_error(err)
 
+    def _eq_preset_to_keep(self, polled: str | None) -> str | None:
+        """Return the preset name that should replace a stale status poll.
+
+        ``EQGetBand`` ``Name`` wins over ``getPlayerStatus`` ``eq``. Until that
+        read exists, a preset set in the last minute is kept.
+        """
+        band = self.player._eq_band_preset
+        if band:
+            if not _eq_names_match(polled, band):
+                # A new status value gets one EQGetBand check. A value that is
+                # already known to be stale does not.
+                seen = self._last_status_eq_preset
+                if seen is not None and not _eq_names_match(polled, seen):
+                    self.player._eq_band_reconcile = True
+                return band
+            return None
+
+        model = self.player._status_model
+        set_at = self.player._last_eq_preset_set_time
+        if (
+            model is not None
+            and model.eq_preset
+            and set_at > 0
+            and (time.time() - set_at) < _EQ_PRESET_PRESERVATION_SECONDS
+        ):
+            return str(model.eq_preset)
+        return None
+
+    def _remember_eq_band(self, eq_data: dict[str, Any] | None) -> None:
+        """Store EQGetBand enabled state and preset name."""
+        if not isinstance(eq_data, dict):
+            return
+        if "EQStat" in eq_data:
+            self.player._eq_enabled = str(eq_data["EQStat"]).lower() == "on"
+        name = eq_data.get("Name")
+        if name is None:
+            name = eq_data.get("name")
+        if isinstance(name, str) and name.strip():
+            self.player._eq_band_preset = name.strip()
+            if self.player._status_model is not None and self.player._eq_enabled is not False:
+                self.player._status_model.eq_preset = self.player._eq_band_preset
+                self._last_eq_preset = self.player._eq_band_preset
+            _LOGGER.debug("EQ preset from EQGetBand: %s", self.player._eq_band_preset)
+
     async def _refresh_core_status(self) -> PlayerStatus:
         """Fetch core player status and update state synchronizer.
 
@@ -597,20 +652,13 @@ class StateManager:
             # Recently set source via set_source() - preserve the optimistic value
             status.source = self.player._status_model.source
 
-        # Preserve optimistic EQ preset if it was recently set
-        # Device status endpoint returns stale EQ data for a long time after a change
-        # (sometimes 30+ seconds). This prevents refresh() from overwriting the correct
-        # optimistic value with stale data.
-        eq_preservation_window = 60.0  # seconds to preserve optimistic EQ preset
-        if (
-            status
-            and self.player._status_model
-            and self.player._status_model.eq_preset
-            and self.player._last_eq_preset_set_time > 0
-            and (time.time() - self.player._last_eq_preset_set_time) < eq_preservation_window
-        ):
-            # Recently set EQ preset via set_eq_preset() - preserve the optimistic value
-            status.eq_preset = self.player._status_model.eq_preset
+        # getPlayerStatus eq stays at flat after EQLoad on current firmware (wiim #165).
+        # Keep an EQGetBand name, and the short optimistic window before that read exists.
+        polled_eq_preset = status.eq_preset if status else None
+        kept_eq_preset = self._eq_preset_to_keep(polled_eq_preset) if status else None
+        if status is not None and kept_eq_preset is not None:
+            status.eq_preset = kept_eq_preset
+        self._last_status_eq_preset = polled_eq_preset
 
         # Preserve optimistic loop_mode (shuffle/repeat) if it was recently set
         # Device status endpoint may return stale loop_mode data after a change.
@@ -641,15 +689,9 @@ class StateManager:
             # Update synchronizer with preserved optimistic source
             optimistic_updates["source"] = self.player._status_model.source
 
-        if (
-            status
-            and self.player._status_model
-            and self.player._status_model.eq_preset
-            and self.player._last_eq_preset_set_time > 0
-            and (time.time() - self.player._last_eq_preset_set_time) < eq_preservation_window
-        ):
-            # Update synchronizer with preserved optimistic EQ preset
-            optimistic_updates["eq_preset"] = self.player._status_model.eq_preset
+        if kept_eq_preset is not None and not _eq_names_match(polled_eq_preset, kept_eq_preset):
+            # Update synchronizer with the EQGetBand or optimistic preset
+            optimistic_updates["eq_preset"] = kept_eq_preset
 
         if optimistic_updates:
             # Update state synchronizer with preserved optimistic values
@@ -789,12 +831,17 @@ class StateManager:
 
         # Detect EQ preset change (trigger full EQ info fetch)
         current_eq_preset = status.eq_preset if status else None
-        eq_preset_changed = self._last_eq_preset is not None and current_eq_preset != self._last_eq_preset
+        eq_preset_changed = self._last_eq_preset is not None and not _eq_names_match(
+            current_eq_preset, self._last_eq_preset
+        )
         # Initialize on first run (don't trigger fetch on first detection)
         if self._last_eq_preset is None:
             self._last_eq_preset = current_eq_preset
         elif eq_preset_changed:
             self._last_eq_preset = current_eq_preset
+            # Ask the periodic EQGetBand read to confirm this poll. One fetch per cycle.
+            if self.player.client.capabilities.get("supports_eq", False):
+                self.player._eq_band_reconcile = True
 
         # Detect source change (trigger audio output fetch)
         current_source = status.source if status else None
@@ -882,17 +929,6 @@ class StateManager:
             except Exception as err:
                 _LOGGER.debug("Failed to fetch metadata for %s: %s", self.player.host, err)
                 self.player._metadata = None
-
-        # EQ Info - Fetch full EQ state when preset changes
-        # When EQ preset changes in status, fetch full EQ info (band values, enabled status)
-        if eq_preset_changed and self.player.client.capabilities.get("supports_eq", False):
-            try:
-                _ = (
-                    await self.player.client.get_eq()
-                )  # Fetch EQ data (currently not cached, but available for callbacks)
-                _LOGGER.debug("EQ preset changed to %s, fetched full EQ info", current_eq_preset)
-            except Exception as err:
-                _LOGGER.debug("Failed to fetch EQ info after preset change for %s: %s", self.player.host, err)
 
     async def _refresh_periodic_data(self, full: bool, status: PlayerStatus, track_changed: bool) -> None:
         """Refresh periodic data (audio output, EQ presets, presets, BT history).
@@ -995,11 +1031,13 @@ class StateManager:
                 _LOGGER.debug("Failed to fetch EQ presets for %s: %s", self.player.host, err)
                 self.player._eq_presets = None
 
-        # EQ Enabled Status - Fetch on full refresh, track change, or periodically (every 60s)
-        # This determines whether to show "Off" or the actual preset in sound_mode.
+        # EQGetBand - enabled flag and preset name. Same cadence as the preset list,
+        # plus once when getPlayerStatus eq changes, so a real app change is confirmed
+        # without trusting the stale status field.
         should_fetch_eq_status = (
             full
             or track_changed
+            or self.player._eq_band_reconcile
             or (
                 self._polling_strategy
                 and self._polling_strategy.should_fetch_eq_info(
@@ -1007,14 +1045,17 @@ class StateManager:
                 )
             )
         )
-        if should_fetch_eq_status and eq_supported:
+        if not eq_supported:
+            self.player._eq_band_reconcile = False
+        elif should_fetch_eq_status:
             try:
-                eq_enabled = await self.player.client.get_eq_status()
-                self.player._eq_enabled = eq_enabled
+                self._remember_eq_band(await self.player.client.get_eq())
                 self.player._last_eq_status_check = now
             except Exception as err:
                 _LOGGER.debug("Failed to fetch EQ status for %s: %s", self.player.host, err)
-                # Don't clear - keep previous value if fetch fails
+                # Don't clear enabled/name - keep previous values if fetch fails
+            finally:
+                self.player._eq_band_reconcile = False
 
         # Channel balance (WiiM HTTP getChannelBalance only; no UPnP event path)
         cb_supported = self.player.client.capabilities.get("supports_channel_balance", False)

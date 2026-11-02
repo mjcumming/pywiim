@@ -17,7 +17,8 @@ Users expect **EQ fully bypassed** as a first-class sound mode. Firmware can exp
 - **`set_eq_preset(name)`** resolves the requested name against the device’s **current `eq_presets` list** (case/fuzzy rules as implemented) **before** falling back to built-in alias maps, so **user-defined** and **new firmware** labels work.
 
 ### 3. Refresh
-- EQ **enabled** state and preset list are refreshed on the same **periodic** cadence as other “configuration tier” features (e.g. ~60s with full refresh), so “Off” and custom names stay accurate.
+- The current preset **name** is `EQGetBand` `Name`. `getPlayerStatus` `eq` stays stale on current firmware (often `flat` / `0` after `EQLoad`) and must not replace a name already read from `EQGetBand`.
+- EQ **enabled** state, that name, and the preset list refresh on the same **periodic** cadence as other configuration-tier features (~60s), and again when `getPlayerStatus` `eq` changes to a new value.
 
 ## Consequences
 - Integrations exposing **`sound_mode`** / EQ must treat **`"Off"`** as distinct from named curves.

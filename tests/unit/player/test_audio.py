@@ -841,6 +841,7 @@ class TestEQOffBehavior:
         mock_player.client.set_eq_enabled.assert_called_once_with(True)
         mock_player.client.set_eq_preset.assert_called_once_with("rock", available_presets=None)
         assert mock_player._eq_enabled is True
+        assert mock_player._eq_band_preset == "rock"
 
     @pytest.mark.asyncio
     async def test_set_eq_preset_does_not_enable_when_already_on(self, audio_config, mock_player):
@@ -856,6 +857,7 @@ class TestEQOffBehavior:
         # Should NOT call set_eq_enabled since EQ is already on
         mock_player.client.set_eq_enabled.assert_not_called()
         mock_player.client.set_eq_preset.assert_called_once_with("rock", available_presets=None)
+        assert mock_player._eq_band_preset == "rock"
 
     @pytest.mark.asyncio
     async def test_set_eq_enabled_updates_cached_state(self, audio_config, mock_player):
