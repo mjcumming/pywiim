@@ -532,12 +532,16 @@ class TestStateManager:
         assert mock_player._eq_enabled is True
         mock_player.client.get_eq.assert_called_once()
 
-        # Window expired, status still flat/0. No extra EQGetBand read.
-        mock_player._last_eq_preset_set_time = 0
+        # Status remains flat/0. No extra EQGetBand read is needed.
         await _refresh(full=False)
 
         assert mock_player.eq_preset == "Vocal Booster"
         mock_player.client.get_eq.assert_called_once()
+
+        # Configuration-tier reads continue to win over the fixed flat status.
+        await _refresh(full=True)
+        await _refresh(full=True)
+        assert mock_player.eq_preset == "Vocal Booster"
 
     @pytest.mark.asyncio
     async def test_refresh_adopts_eqgetband_name_when_status_eq_changes(self, state_manager, mock_player):

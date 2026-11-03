@@ -721,8 +721,8 @@ class TestWiiMCapabilitiesClass:
         assert capabilities["supports_channel_balance"] is False
 
     @pytest.mark.asyncio
-    async def test_detect_capabilities_eq_read_only_probing(self, mock_client):
-        """Test EQ capability detection uses read-only probing - we don't test setting to avoid changing state."""
+    async def test_detect_capabilities_generic_tone_data_is_not_preset_eq(self, mock_client):
+        """A generic legacy tone response does not establish preset EQ support."""
         device_info = DeviceInfo(uuid="test-uuid", model="UP2STREAM_AMP_V4", firmware="4.6.415145")
         # mock_client already has host set from fixture
         mock_client.get_status = AsyncMock(return_value={"status": "ok"})
@@ -738,7 +738,7 @@ class TestWiiMCapabilitiesClass:
         detector = WiiMCapabilities()
         capabilities = await detector.detect_capabilities(mock_client, device_info)
 
-        assert capabilities["supports_eq"] is True
+        assert capabilities["supports_eq"] is False
 
     @pytest.mark.asyncio
     async def test_getmetainfo_unknown_command_disables_metadata(self, mock_client):

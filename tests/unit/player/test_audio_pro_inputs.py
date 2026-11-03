@@ -52,7 +52,8 @@ async def test_a10_switch_preserves_wire_case_and_mode60_identity(a10_client, so
     player._status_model = PlayerStatus(source="wifi")
     a10_client.get_player_status_model = AsyncMock(return_value=PlayerStatus.model_validate({"mode": "60"}))
     await player.set_source(source)
-    a10_client._request.assert_awaited_once_with("/httpapi.asp?command=setPlayerCmd:switchmode:auxIn")
+    commands = [entry.args[0] for entry in a10_client._request.await_args_list if "switchmode:" in entry.args[0]]
+    assert commands == ["/httpapi.asp?command=setPlayerCmd:switchmode:auxIn"]
     assert player.source == "line_in"
     assert player.source_name == "Line In"
 
@@ -119,7 +120,8 @@ async def test_existing_source_commands_unchanged(mock_client, source, command):
     player = Player(mock_client)
     mock_client.get_player_status_model = AsyncMock(return_value=PlayerStatus())
     await player.set_source(source)
-    mock_client._request.assert_awaited_once_with(f"/httpapi.asp?command=setPlayerCmd:switchmode:{command}")
+    commands = [entry.args[0] for entry in mock_client._request.await_args_list if "switchmode:" in entry.args[0]]
+    assert commands == [f"/httpapi.asp?command=setPlayerCmd:switchmode:{command}"]
 
 
 async def test_runtime_detection_retains_a10_input_evidence(a10_client):

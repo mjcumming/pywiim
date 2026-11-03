@@ -391,21 +391,25 @@ class TestParsePlayerStatus:
         assert parsed.get("entity_picture") is None
 
     def test_parse_eq_numeric_mapping(self):
-        """Test EQ preset numeric to text mapping."""
+        """Numeric EQ mapping is available only for explicitly verified profiles."""
         # EQ preset 0 = flat
         raw1 = {"eq": "0"}
-        parsed1, _ = parse_player_status(raw1)
+        parsed1, _ = parse_player_status(raw1, legacy_eq_numeric_mapping=True)
         assert parsed1["eq_preset"] == "flat"
 
         # EQ preset 1 = pop
         raw2 = {"eq": "1"}
-        parsed2, _ = parse_player_status(raw2)
+        parsed2, _ = parse_player_status(raw2, legacy_eq_numeric_mapping=True)
         assert parsed2["eq_preset"] == "pop"
 
         # EQ preset 2 = rock
         raw3 = {"eq": "2"}
-        parsed3, _ = parse_player_status(raw3)
+        parsed3, _ = parse_player_status(raw3, legacy_eq_numeric_mapping=True)
         assert parsed3["eq_preset"] == "rock"
+        parsed_default, _ = parse_player_status(raw1)
+        assert parsed_default["eq_preset"] == "0"
+        parsed_number, _ = parse_player_status({"eq": 0})
+        assert parsed_number["eq_preset"] == "0"
 
     def test_parse_track_change_detection(self):
         """Test track change detection for logging."""

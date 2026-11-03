@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pywiim.api.base import ApiResponse
-from pywiim.exceptions import WiiMError
+from pywiim.exceptions import WiiMError, WiiMResponseError
 
 
 class TestEQAPIPresets:
@@ -120,9 +120,8 @@ class TestEQAPIPresets:
         """Test getting presets when response is not a list."""
         mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"error": "not found"}, raw=None))
 
-        result = await mock_client.get_eq_presets()
-
-        assert result == []
+        with pytest.raises(WiiMResponseError):
+            await mock_client.get_eq_presets()
 
 
 class TestEQAPICustom:
@@ -227,19 +226,19 @@ class TestEQAPIEnableDisable:
         mock_client._request.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_eq_status_no_eqstat_returns_false(self, mock_client):
-        """EQGetBand response without EQStat key returns False."""
+    async def test_get_eq_status_no_eqstat_returns_unknown(self, mock_client):
+        """A response without EQStat is not proof EQ is disabled."""
         mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"status": "OK", "Name": "Rock"}, raw=None))
 
         result = await mock_client.get_eq_status()
 
-        assert result is False
+        assert result is None
 
     @pytest.mark.asyncio
-    async def test_get_eq_status_request_raises_returns_false(self, mock_client):
-        """When EQGetBand request raises, return False."""
+    async def test_get_eq_status_request_raises_returns_unknown(self, mock_client):
+        """A failed request has an unknown EQ state."""
         mock_client._request = AsyncMock(side_effect=WiiMError("Failed"))
 
         result = await mock_client.get_eq_status()
 
-        assert result is False
+        assert result is None

@@ -411,7 +411,7 @@ shuffle = player.shuffle  # True/False/None (None for external sources like AirP
 repeat = player.repeat  # 'one'/'all'/'off'/None (None for external sources)
 shuffle_supported = player.shuffle_supported  # Check before using shuffle
 repeat_supported = player.repeat_supported  # Check before using repeat
-eq_preset = player.eq_preset  # EQ preset name (normalized to Title Case, e.g., "Flat", "Rock")
+eq_preset = player.eq_preset  # Device name, "Custom", "Off", or None if unavailable
 available_sources = player.available_sources  # List of selectable input sources (smart detection)
 wifi_rssi = player.wifi_rssi  # Signal strength in dBm
 

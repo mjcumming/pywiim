@@ -116,8 +116,8 @@ async def get_track_metadata(self) -> dict:
 Missing advanced features shouldn't break core functionality:
 
 ```python
-async def get_eq_status(self) -> bool:
-    """Return True when EQ is on, False otherwise.
+async def get_eq_status(self) -> bool | None:
+    """Return True or False for a valid state, otherwise None.
 
     We use EQGetBand only. Its response includes EQStat ("On"/"Off") and
     Name (current preset). EQGetStat fails on some firmware (e.g. WiiM Pro
@@ -125,11 +125,13 @@ async def get_eq_status(self) -> bool:
     """
     try:
         response = await self._request(API_ENDPOINT_EQ_GET)  # EQGetBand
-        if isinstance(response, dict) and "EQStat" in response:
-            return str(response["EQStat"]).lower() == "on"
-        return False
+        if isinstance(response.parsed, dict):
+            status = str(response.parsed.get("EQStat", "")).lower()
+            if status in ("on", "off"):
+                return status == "on"
+        return None
     except WiiMError:
-        return False
+        return None
 ```
 
 **EQ status: protocol vs implementation.** The [WiiM HTTP API v1.2](https://www.wiimhome.com/pdf/HTTP%20API%20for%20WiiM%20Products.pdf) specifies **EQGetStat** for on/off (`{"EQStat":"On"}` or `"Off"`). On some devices (e.g. WiiM Pro, Linkplay 4.8) **EQGetStat** returns plain text `"unknown command"` and does not work. **EQGetBand** works and its response includes **EQStat** and **Name** (current preset), e.g. `{"status":"OK","EQStat":"Off","Name":"Rock","EQBand":[...]}`. We therefore use **EQGetBand only** for `get_eq_status()` and do not call EQGetStat (wiim#165).

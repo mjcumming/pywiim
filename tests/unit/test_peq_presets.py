@@ -27,7 +27,10 @@ async def test_player_selects_exact_preset_and_notifies(mock_client):
     callback = MagicMock()
     player = Player(mock_client, on_state_changed=callback)
     player._peq_presets = ["Night"]
+    mock_client._capabilities["supports_peq"] = True
     mock_client.load_peq = AsyncMock(return_value=PEQSettings(enabled=True, name="Night"))
+    mock_client.get_eq = AsyncMock(return_value={"EQStat": "Off", "Name": "Flat"})
+    mock_client.get_peq_bands = AsyncMock(return_value=PEQSettings(enabled=True, name="Night"))
     await player.set_peq_preset("Night")
     mock_client.load_peq.assert_awaited_once_with("Night")
     assert player.peq_preset == "Night"
@@ -51,6 +54,7 @@ async def test_failed_peq_load_does_not_update_player(mock_client):
 async def test_empty_list_is_cached_and_failed_list_can_be_retried(mock_client):
     player = Player(mock_client)
     mock_client.get_peq_preset_list = AsyncMock(side_effect=[WiiMResponseError("failed"), {"custom": [], "preset": []}])
+    mock_client.get_peq_bands = AsyncMock(return_value=PEQSettings(enabled=False))
     with pytest.raises(WiiMResponseError):
         await player.initialize_peq_presets()
     assert player._peq_presets is None

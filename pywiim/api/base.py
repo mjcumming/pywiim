@@ -774,8 +774,15 @@ class BaseWiiMClient:
                         resp.raise_for_status()
                         text = await resp.text()
 
-                        # Valid response - cache this endpoint
-                        if text and (text.strip() == "OK" or text.strip().startswith("{")):
+                        # EQGetList and other endpoints may return a bare JSON array.
+                        body = text.strip()
+                        valid_array = False
+                        if body.startswith("["):
+                            try:
+                                valid_array = isinstance(json.loads(body), list)
+                            except json.JSONDecodeError:
+                                pass
+                        if body == "OK" or body.startswith("{") or valid_array:
                             self._endpoint = base_url
                             # Keep self.port aligned with the cached endpoint. Discovery and the
                             # integration read client.port to persist protocol/port, so a stale
@@ -1045,6 +1052,10 @@ class BaseWiiMClient:
         Returns:
             ApiResponse with validated parsed dict for legacy devices
         """
+        # Legacy devices can also return valid JSON arrays (for example EQGetList).
+        # The Audio Pro normalizer only handles object and text responses.
+        if isinstance(response.parsed, list):
+            return response
         input_val: dict[str, Any] | str = response.parsed if isinstance(response.parsed, dict) else (response.raw or "")
         validated = validate_audio_pro_response(
             input_val,
@@ -1120,6 +1131,7 @@ class BaseWiiMClient:
             self._last_track,
             vendor,
             loop_mode_scheme=self._capabilities.get("loop_mode_scheme"),
+            legacy_eq_numeric_mapping=self._capabilities.get("legacy_eq_numeric_mapping", False),
         )
         return parsed
 
@@ -1185,6 +1197,7 @@ class BaseWiiMClient:
                 self._last_track,
                 self._capabilities.get("vendor"),
                 loop_mode_scheme=self._capabilities.get("loop_mode_scheme"),
+                legacy_eq_numeric_mapping=self._capabilities.get("legacy_eq_numeric_mapping", False),
             )
 
             # If artwork is missing or invalid and device supports getMetaInfo, try to fetch it

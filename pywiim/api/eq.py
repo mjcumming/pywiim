@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from ..exceptions import WiiMResponseError
 from .constants import (
     API_ENDPOINT_EQ_CUSTOM,
     API_ENDPOINT_EQ_GET,
@@ -149,12 +150,12 @@ class EQAPI:
 
         # Handle dict response (some devices wrap the list)
         if isinstance(parsed, dict):
+            if parsed.get("error") or str(parsed.get("status", "ok")).lower() in ("error", "failed"):
+                raise WiiMResponseError("Invalid EQ preset list response", endpoint=API_ENDPOINT_EQ_LIST)
             for key in ["EQList", "eq_list", "list", "presets", "preset_list"]:
                 if key in parsed and isinstance(parsed[key], list):
                     return [str(item) for item in parsed[key] if item]
-            return []
-
-        return []
+        raise WiiMResponseError("Invalid EQ preset list response", endpoint=API_ENDPOINT_EQ_LIST)
 
     # ------------------------------------------------------------------
     # Custom 10-band upload
@@ -202,17 +203,23 @@ class EQAPI:
         """
         await self._request(API_ENDPOINT_EQ_ON if enabled else API_ENDPOINT_EQ_OFF)  # type: ignore[attr-defined]
 
-    async def get_eq_status(self) -> bool:
-        """Return True when the device reports EQ enabled (On), False otherwise.
+    async def get_eq_status(self) -> bool | None:
+        """Return the reported EQ enabled state, or None when unavailable.
 
-        Uses EQGetBand only: its response includes EQStat ("On"/"Off") and works
-        on all devices we care about. EQGetStat fails on some firmware (e.g. WiiM Pro
-        Linkplay 4.8) with "unknown command", so we do not use it.
+        Uses EQGetBand where supported. EQGetStat fails on some firmware
+        (e.g. WiiM Pro Linkplay 4.8), so we do not use it as a fallback.
         """
         try:
             response = await self._request(API_ENDPOINT_EQ_GET)  # type: ignore[attr-defined]
-            if isinstance(response.parsed, dict) and "EQStat" in response.parsed:
-                return str(response.parsed["EQStat"]).lower() == "on"
-            return False
+            if isinstance(response.parsed, dict):
+                if response.parsed.get("error") or str(response.parsed.get("status", "ok")).lower() in (
+                    "error",
+                    "failed",
+                ):
+                    return None
+                status = str(response.parsed.get("EQStat", "")).strip().lower()
+                if status in ("on", "off"):
+                    return status == "on"
+            return None
         except Exception:  # noqa: BLE001
-            return False
+            return None

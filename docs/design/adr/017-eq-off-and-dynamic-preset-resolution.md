@@ -10,7 +10,7 @@ Users expect **EQ fully bypassed** as a first-class sound mode. Firmware can exp
 
 ### 1. “Off” as explicit preset
 - **`eq_presets`** includes **`"Off"`** as the **disabled / bypass** option when the device supports turning EQ off.
-- **`eq_preset`** returns **`"Off"`** when EQ is bypassed, not the last active preset name.
+- **`eq_preset`** returns **`"Off"`** when graphic EQ is inactive, including when PEQ is active. Use `peq_enabled` to distinguish PEQ from full bypass; unknown remains `None`.
 - **`set_eq_preset("Off")`** disables EQ (bypass). Selecting a **non-Off** preset when EQ is off **enables** EQ then applies the preset (order as implemented in player/client).
 
 ### 2. Dynamic name resolution
@@ -19,6 +19,8 @@ Users expect **EQ fully bypassed** as a first-class sound mode. Firmware can exp
 ### 3. Refresh
 - The current preset **name** is `EQGetBand` `Name`. `getPlayerStatus` `eq` stays stale on current firmware (often `flat` / `0` after `EQLoad`) and must not replace a name already read from `EQGetBand`.
 - EQ **enabled** state, that name, and the preset list refresh on the same **periodic** cadence as other configuration-tier features (~60s), and again when `getPlayerStatus` `eq` changes to a new value.
+- Invalidate the current EQ state and preset list when the active input changes, then fetch the new input's data. An empty `Name` with graphic EQ on means unsaved `Custom` bands, not a saved preset. Failed or malformed reads do not replace valid state with Off; list reads retry on the configuration polling cadence.
+- Read both graphic and initialized PEQ state after either control changes. An acknowledged command alone does not establish the resulting state. Numeric playback-status EQ mappings are opt-in for verified legacy profiles.
 
 ## Consequences
 - Integrations exposing **`sound_mode`** / EQ must treat **`"Off"`** as distinct from named curves.

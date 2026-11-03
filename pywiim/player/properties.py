@@ -923,40 +923,27 @@ class PlayerProperties:
 
     @property
     def eq_preset(self) -> str | None:
-        """Current EQ preset, or "Off" if EQ is disabled.
+        """Current graphic EQ preset, or "Off" when graphic EQ is inactive.
 
         The name comes from EQGetBand once that read has succeeded. A later
         getPlayerStatus ``eq`` value does not replace it.
 
         Returns:
-            - "Off" if EQ is disabled (bypassed)
-            - The preset name (Title Case) if EQ is enabled
+            - "Off" if graphic EQ is inactive (PEQ may still be active)
+            - The preset name or "Custom" if graphic EQ is active
             - None if status is not available
-
-        Normalized to Title Case to match the format returned by get_eq_presets().
-        The device may return lowercase in status but capitalized in preset list,
-        so we normalize for consistency.
         """
-        # Check if EQ is disabled - return "Off" if so
-        # Note: _eq_enabled is None if we haven't fetched status yet, so default to showing preset
         if self.player._eq_enabled is False:
             return "Off"
-
-        if self.player._status_model is None:
+        if self.player._eq_enabled is None:
             return None
-        preset = self.player._status_model.eq_preset
+        preset = self.player._eq_band_preset
         if not preset:
             return None
-        # Normalize to Title Case to match get_eq_presets() format
-        # Handle special cases like "Hip-Hop" and "R&B"
-        preset_lower = preset.lower()
-        if "hip" in preset_lower and "hop" in preset_lower:
-            return "Hip-Hop"
-        elif preset_lower == "r&b" or preset_lower == "r and b":
-            return "R&B"
-        else:
-            # Capitalize first letter of each word
-            return " ".join(word.capitalize() for word in str(preset).split())
+        for option in self.player._eq_presets or []:
+            if option.casefold() == preset.casefold():
+                return option
+        return preset
 
     @property
     def shuffle(self) -> bool | None:

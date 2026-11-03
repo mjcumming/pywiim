@@ -52,6 +52,22 @@ from .profiles import detect_audio_pro_generation, detect_vendor, get_device_pro
 _LOGGER = logging.getLogger(__name__)
 
 
+def _eq_probe_success(response: ApiResponse, endpoint: str) -> bool:
+    """Require an EQ-shaped response; HTTP success alone can mean unknown command."""
+    parsed = response.parsed
+    if endpoint == API_ENDPOINT_EQ_LIST and isinstance(parsed, list):
+        return True
+    if isinstance(parsed, dict):
+        if parsed.get("error") or str(parsed.get("status", "ok")).lower() in ("error", "failed"):
+            return False
+        if str(parsed.get("EQStat", "")).lower() in ("on", "off"):
+            return True
+        if isinstance(parsed.get("EQBand"), list):
+            return True
+        return any(isinstance(parsed.get(key), list) for key in ("EQList", "eq_list", "list", "presets", "preset_list"))
+    return endpoint == API_ENDPOINT_EQ_STATUS and (response.raw or "").strip().lower() in ("on", "off")
+
+
 def _channel_balance_probe_success(response: ApiResponse) -> bool:
     """True when getChannelBalance returned a numeric balance (not unknown command / empty).
 
@@ -520,10 +536,11 @@ class WiiMCapabilities:
             API_ENDPOINT_EQ_STATUS,  # EQGetStat
         ]:
             try:
-                await client._request(endpoint)
-                eq_supported = True
-                _LOGGER.debug("Device %s supports EQ (detected via %s)", client.host, endpoint)
-                break
+                response = await client._request(endpoint)
+                if _eq_probe_success(response, endpoint):
+                    eq_supported = True
+                    _LOGGER.debug("Device %s supports EQ (detected via %s)", client.host, endpoint)
+                    break
             except WiiMError:
                 continue  # Try next endpoint
 
@@ -567,9 +584,15 @@ class WiiMCapabilities:
         # LinkPlay devices.  We use the preset-list endpoint as a lightweight read probe.
         peq_supported = False
         try:
-            await client._request(API_ENDPOINT_PEQ_GET_LIST + quote(PEQ_PLUGIN_URI, safe=""))
-            peq_supported = True
-            _LOGGER.debug("Device %s supports WiiM LV2 PEQ (EQv2GetList probe succeeded)", client.host)
+            response = await client._request(API_ENDPOINT_PEQ_GET_LIST + quote(PEQ_PLUGIN_URI, safe=""))
+            data = response.parsed
+            peq_supported = (
+                isinstance(data, dict)
+                and str(data.get("status", "ok")).lower() == "ok"
+                and all(isinstance(data.get(key), list) for key in ("custom", "preset"))
+            )
+            if peq_supported:
+                _LOGGER.debug("Device %s supports WiiM LV2 PEQ (EQv2GetList probe succeeded)", client.host)
         except WiiMError:
             _LOGGER.debug("Device %s does not support WiiM LV2 PEQ (EQv2GetList probe failed)", client.host)
 

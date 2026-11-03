@@ -6,6 +6,7 @@ that adds group awareness, role management, and cached state with getter methods
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -13,7 +14,7 @@ from ..api.constants import DISPLAY_DEFAULT_BRIGHTNESS
 from ..api.misc import select_digital_filter
 from ..api.subwoofer import SubwooferStatus
 from ..client import WiiMClient
-from ..exceptions import WiiMError
+from ..exceptions import WiiMError, WiiMResponseError
 from ..models import DeviceInfo, PlayerStatus
 from .audio import AudioConfiguration
 from .base import PlayerBase
@@ -30,6 +31,8 @@ from .volume import VolumeControl
 if TYPE_CHECKING:
     from ..group import Group
     from ..upnp.client import UpnpClient
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class Player(PlayerBase):
@@ -412,30 +415,78 @@ class Player(PlayerBase):
             return
         presets = await self.client.get_peq_preset_list()
         self._peq_presets = list(dict.fromkeys(name for key in ("custom", "preset") for name in presets[key] if name))
-        if self._peq_presets:
+        try:
             await self.refresh_peq_preset()
+        except WiiMError as err:
+            _LOGGER.debug("Could not read initial PEQ state for %s: %s", self.host, err)
 
     async def refresh_peq_preset(self) -> None:
         """Refresh the current input's active PEQ preset."""
         async with self._peq_lock:
-            try:
-                settings = await self.client.get_peq_bands()
-            except WiiMError:
-                self._peq_preset = None
-                raise
-            self._peq_preset = (
-                settings.name if settings.enabled and settings.name in (self._peq_presets or []) else None
-            )
+            source = self._eq_state_source
+            revision = self._eq_state_revision
+            settings = await self.client.get_peq_bands()
+            if (
+                source != self._eq_state_source
+                or revision != self._eq_state_revision
+                or not self._state_mgr._eq_source_matches(settings.source_name)
+            ):
+                raise WiiMResponseError("PEQ response was for a different input")
+            self._peq_enabled = settings.enabled
+            self._peq_preset = settings.name if settings.enabled and settings.name else None
+            if settings.enabled:
+                self._eq_enabled = False
+                self._eq_band_preset = None
+                self._eq_is_custom = False
+
+    async def refresh_eq_state(self) -> None:
+        """Read the active input's graphic and supported parametric EQ."""
+        source = self._eq_state_source
+        revision = self._eq_state_revision
+        eq_data = await self.client.get_eq()
+        if (
+            source != self._eq_state_source
+            or revision != self._eq_state_revision
+            or not self._state_mgr._remember_eq_band(eq_data)
+        ):
+            raise WiiMResponseError("Invalid graphic EQ state response")
+        if self.client.capabilities.get("supports_peq", False):
+            await self.refresh_peq_preset()
+
+    async def disable_peq(self) -> None:
+        """Disable active PEQ on the current input and verify the result."""
+        # An external app may have activated PEQ since the last poll.
+        await self.refresh_peq_preset()
+        if self._peq_enabled is False:
+            if self._on_state_changed:
+                self._on_state_changed()
+            return
+        await self.client.set_peq_enabled(False)
+        self._state_mgr._invalidate_eq_state()
+        try:
+            await self.refresh_eq_state()
+            if self.peq_enabled is not False:
+                raise WiiMResponseError("PEQ disable was not confirmed by the device")
+        finally:
+            if self._on_state_changed:
+                self._on_state_changed()
 
     async def set_peq_preset(self, name: str) -> None:
-        """Load a saved PEQ preset for this player's active input."""
+        """Load a saved PEQ preset, or disable PEQ for an unclaimed Off label."""
+        if name.casefold() == "off" and name not in (self._peq_presets or []):
+            await self.disable_peq()
+            return
         if name not in (self._peq_presets or []):
             raise WiiMError(f"Unknown PEQ preset {name!r}")
-        async with self._peq_lock:
-            settings = await self.client.load_peq(name)
-            self._peq_preset = settings.name if settings.enabled and settings.name == name else None
-        if self._on_state_changed:
-            self._on_state_changed()
+        await self.client.load_peq(name)
+        self._state_mgr._invalidate_eq_state()
+        try:
+            await self.refresh_eq_state()
+            if self._peq_enabled is not True or self._peq_preset != name or self._eq_enabled is not False:
+                raise WiiMResponseError(f"PEQ preset {name!r} was not confirmed by the device")
+        finally:
+            if self._on_state_changed:
+                self._on_state_changed()
 
     async def set_room_correction(self, name: str) -> None:
         """Load a RoomFit profile, or turn RoomFit off.
@@ -528,8 +579,8 @@ class Player(PlayerBase):
         """Get list of available equalizer presets."""
         return await self._audio_config.get_eq_presets()
 
-    async def get_eq_status(self) -> bool:
-        """Get current equalizer enabled status."""
+    async def get_eq_status(self) -> bool | None:
+        """Get the equalizer enabled status, or None if it cannot be read."""
         return await self._audio_config.get_eq_status()
 
     async def get_multiroom_status(self) -> dict[str, Any]:
@@ -1192,8 +1243,13 @@ class Player(PlayerBase):
 
     @property
     def eq_preset(self) -> str | None:
-        """Current EQ preset, or Off when EQ is bypassed."""
+        """Current graphic EQ preset, or Off when graphic EQ is inactive."""
         return self._properties.eq_preset
+
+    @property
+    def eq_is_custom(self) -> bool | None:
+        """Whether the active graphic EQ consists of unsaved custom bands."""
+        return self._eq_is_custom
 
     @property
     def shuffle(self) -> bool | None:
@@ -1453,6 +1509,11 @@ class Player(PlayerBase):
     def peq_preset(self) -> str | None:
         """Active PEQ preset for the current source, if known."""
         return self._peq_preset
+
+    @property
+    def peq_enabled(self) -> bool | None:
+        """Whether PEQ is active for the current source, or None if unknown."""
+        return self._peq_enabled
 
     @property
     def room_correction_profiles(self) -> list[str]:

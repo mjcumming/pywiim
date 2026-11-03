@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from ..api.audio_settings import output_channel_value
 from ..api.constants import API_ENDPOINT_GET_CHANNEL_BALANCE, OUTPUT_CHANNEL_MAP
 from ..capabilities import _channel_balance_probe_success
-from ..exceptions import WiiMError
+from ..exceptions import WiiMError, WiiMResponseError
 from ..normalize import canonical_source_key, source_rename_reverse
 
 if TYPE_CHECKING:
@@ -70,6 +70,25 @@ class AudioConfiguration:
         # Update state synchronizer (for immediate property reads)
         # This ensures player.source returns the new value before the next poll
         self.player._state_synchronizer.update_from_http({"source": normalized_source})
+
+        # EQ is per input. Never expose the previous input's settings after a
+        # confirmed switch, and read the new input before notifying listeners.
+        if self.player.client.capabilities.get("supports_eq", False):
+            if self.player._state_mgr._set_eq_source(normalized_source):
+                revision = self.player._eq_state_revision
+                try:
+                    presets = await self.player.client.get_eq_presets()
+                    if revision == self.player._eq_state_revision:
+                        self.player._eq_presets = presets
+                except Exception as err:
+                    _LOGGER.debug("Could not read EQ presets after switching source: %s", err)
+                finally:
+                    if revision == self.player._eq_state_revision:
+                        self.player._last_eq_presets_check = time.time()
+                try:
+                    await self.player.refresh_eq_state()
+                except Exception as err:
+                    _LOGGER.debug("Could not read EQ after switching source: %s", err)
 
         # Track when source was set for preserving optimistic update during refresh
         # Device status endpoint may return stale source data after a switch
@@ -448,9 +467,6 @@ class AudioConfiguration:
                    Special value "Off" disables EQ entirely.
                    The method normalizes the preset name internally.
         """
-        import asyncio
-        import time
-
         # Handle "Off" - disable EQ instead of setting a preset
         if preset.lower() == "off":
             await self.set_eq_enabled(False)
@@ -463,50 +479,36 @@ class AudioConfiguration:
             available_presets=available_presets or None,
         )
 
-        # Ensure EQ is enabled before setting a preset
-        # (user may be switching from "Off" to a preset)
-        if self.player._eq_enabled is False:
-            await self.player.client.set_eq_enabled(True)
-            self.player._eq_enabled = True
-
-        # Call API (raises on failure)
-        await self.player.client.set_eq_preset(
-            preset,
-            available_presets=available_presets or None,
-        )
-
-        # Update cached state immediately (optimistic) with normalized preset.
-        # Remember it as the EQGetBand name so later status polls cannot replace it
-        # with a stale flat value once the short preservation window ends.
-        if self.player._status_model:
-            self.player._status_model.eq_preset = normalized_preset
-        self.player._eq_band_preset = normalized_preset
-        self.player._eq_band_reconcile = False
-
-        # Track when EQ was set for preserving optimistic update during refresh
-        # Device status endpoint returns stale EQ data and may never catch up
-        self.player._last_eq_preset_set_time = time.time()
-
-        # Verify by querying the authoritative EQ endpoint after a brief delay
-        # This ensures we have the correct value even if status endpoint is stale
+        changed = False
         try:
-            await asyncio.sleep(0.3)  # Brief delay for device to apply
-            eq_data = await self.player.client.get_eq()
-            verified_preset = None
-            if isinstance(eq_data, dict):
-                verified_preset = eq_data.get("Name") or eq_data.get("name")
-            if verified_preset and self.player._status_model:
-                verified_name = str(verified_preset)
-                self.player._status_model.eq_preset = verified_name
-                self.player._eq_band_preset = verified_name
-                _LOGGER.debug("EQ preset verified: %s", verified_name)
-        except Exception as err:
-            # If verification fails, keep the optimistic update
-            _LOGGER.debug("EQ verification failed, keeping optimistic value: %s", err)
-
-        # Call callback to notify state change
-        if self.player._on_state_changed:
-            self.player._on_state_changed()
+            if self.player._eq_enabled is False:
+                await self.player.client.set_eq_enabled(True)
+                changed = True
+                self.player._state_mgr._invalidate_eq_state()
+            await self.player.client.set_eq_preset(
+                preset,
+                available_presets=available_presets or None,
+            )
+            changed = True
+            self.player._state_mgr._invalidate_eq_state()
+            await asyncio.sleep(0.3)
+            await self.player.refresh_eq_state()
+            actual = self.player._eq_band_preset
+            try:
+                verified = (
+                    actual
+                    and self.player.client._normalize_eq_preset_name(
+                        actual, available_presets=available_presets or None
+                    )
+                    == normalized_preset
+                )
+            except ValueError:
+                verified = False
+            if self.player._eq_enabled is not True or not verified:
+                raise WiiMResponseError(f"EQ preset {preset!r} was not confirmed by the device")
+        finally:
+            if changed and self.player._on_state_changed:
+                self.player._on_state_changed()
 
     async def set_eq_custom(self, eq_values: list[int]) -> None:
         """Set custom 10-band equalizer values.
@@ -529,13 +531,15 @@ class AudioConfiguration:
         """
         # Call API (raises on failure)
         await self.player.client.set_eq_enabled(enabled)
-
-        # Update cached state immediately (optimistic)
-        self.player._eq_enabled = enabled
-
-        # Call callback to notify state change (EQ enabled/disabled)
-        if self.player._on_state_changed:
-            self.player._on_state_changed()
+        self.player._state_mgr._invalidate_eq_state()
+        try:
+            await asyncio.sleep(0.3)
+            await self.player.refresh_eq_state()
+            if self.player._eq_enabled is not enabled or (not enabled and self.player._peq_enabled is True):
+                raise WiiMResponseError(f"EQ {'enable' if enabled else 'disable'} was not confirmed by the device")
+        finally:
+            if self.player._on_state_changed:
+                self.player._on_state_changed()
 
     async def get_eq(self) -> dict[str, Any]:
         """Get current equalizer band values."""
@@ -545,8 +549,8 @@ class AudioConfiguration:
         """Get list of available equalizer presets."""
         return await self.player.client.get_eq_presets()
 
-    async def get_eq_status(self) -> bool:
-        """Get current equalizer enabled status."""
+    async def get_eq_status(self) -> bool | None:
+        """Get the equalizer enabled status, or None if it cannot be read."""
         return await self.player.client.get_eq_status()
 
     async def get_multiroom_status(self) -> dict[str, Any]:

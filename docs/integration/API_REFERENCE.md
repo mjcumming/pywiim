@@ -288,12 +288,11 @@ if spotify and spotify["supports_shuffle"]:
 #### EQ Presets
 
 ```python
-player.eq_preset  # str | None
-# Returns current EQ preset name, normalized to Title Case to match get_eq_presets() format.
-# Example: "Flat", "Acoustic", "Rock" (not "flat", "acoustic", "rock")
+player.eq_preset  # str | None: device name, "Custom", "Off", or None if unknown
+player.eq_is_custom  # bool | None: unsaved graphic bands, or unknown
 ```
 
-Current EQ preset name. After the first `EQGetBand` read, `Name` is kept until the next read; `getPlayerStatus` `eq` does not replace it.
+Current graphic EQ name for the active input. `Off` also covers graphic EQ inactive while PEQ is on. An empty device name with EQ on is unsaved `Custom`, not a loadable preset. After the first `EQGetBand` read, `getPlayerStatus` `eq` does not replace it.
 
 #### Parametric EQ (PEQ) – WiiM only
 
@@ -307,7 +306,7 @@ if player.client.capabilities.get("supports_peq", False):
     # ...
 ```
 
-For a saved-preset selector, call `await player.initialize_peq_presets()` once per player session. The cached `player.peq_presets` list is not refreshed automatically; create a new player session to discover changes. `player.peq_preset` is the active saved name for the current input, or `None` when PEQ is off or its state is unknown. Use `await player.set_peq_preset(name)` to load a listed preset. Player refresh updates the current state independently of the preset list.
+For a saved-preset selector, call `await player.initialize_peq_presets()` once per player session. The cached `player.peq_presets` list is not refreshed automatically; create a new player session to discover changes. `player.peq_preset` is the active name, if known; `player.peq_enabled` distinguishes active, inactive, and unknown. Use `await player.set_peq_preset(name)` to load a listed preset and `await player.disable_peq()` to disable active PEQ. An existing saved preset named `Off` remains loadable. Player refresh updates the current state independently of the preset list.
 
 **Client methods (use when `supports_peq` is True):**
 
@@ -890,7 +889,7 @@ queue_items = await player.get_queue()  # list[dict] when supports_queue_browse
 await player.set_eq_preset(preset: str)
 await player.get_eq()  # Returns dict[str, Any]
 await player.get_eq_presets()  # Returns list[str]
-await player.get_eq_status()  # Returns bool
+await player.get_eq_status()  # Returns bool | None when unavailable
 
 # Parametric EQ (PEQ) – WiiM only; check supports_peq first (see "Parametric EQ (PEQ)" section above)
 await player.client.get_peq_bands(source_name=None)
