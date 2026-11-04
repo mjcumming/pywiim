@@ -18,8 +18,7 @@ This document provides development patterns and examples. The current
 10. [Async/Await](#asyncawait)
 11. [Capability Detection](#capability-detection)
 12. [Common Patterns](#common-patterns)
-13. [TODO / Roadmap](#todo--roadmap)
-14. [Resources](#resources)
+13. [Resources](#resources)
 
 ## Development Setup
 
@@ -1180,41 +1179,6 @@ def apply_state_update(self, changes: dict[str, Any]) -> bool:
             changed = True
     return changed
 ```
-
-## TODO / Roadmap
-
-This section tracks architectural improvements and technical debt identified during code reviews.
-
-### Priority 1: High Impact
-
-(No high-priority items currently pending)
-
----
-
-### Priority 2: Medium Impact
-
-
----
-
-### Priority 3: Future Improvements
-
-(No future improvement items currently pending)
-
----
-
-### Code Review Summary (Dec 2025)
-
-| Aspect | Grade | Notes |
-|--------|-------|-------|
-| **Architecture** | A | Profile system, state sync, mixin pattern excellent |
-| **Documentation** | A | 15+ design docs is exceptional |
-| **Test Quantity** | A | 1,390 tests (comprehensive coverage) |
-| **Test Quality** | B+ | Focus on behavior tests over shallow mocks, Player class coverage 79% (up from 48%), core logic well tested |
-| **Code Organization** | A- | StateManager refactored (Jan 2025) ✅ |
-| **Error Handling** | A- | Good exception hierarchy, graceful degradation |
-| **Maintainability** | A- | Clear patterns, well documented |
-
----
 
 ## Resources
 
