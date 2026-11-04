@@ -74,7 +74,7 @@ install:
 
 dev-install:
 	pip install -e ".[dev]"
-	pre-commit install
+	@echo "Optional staged-file checks: pre-commit install"
 
 # Publish the version already reviewed and merged to main.
 release:

@@ -180,6 +180,46 @@ def test_manual_production_upload_is_disabled(fake_tools: tuple[dict[str, str], 
     assert not record.exists()
 
 
+def test_testpypi_build_preserves_existing_artifacts(fake_tools: tuple[dict[str, str], Path], tmp_path: Path) -> None:
+    env, _ = fake_tools
+    modules = tmp_path / "modules"
+    for name in ("build", "twine"):
+        (modules / name).mkdir(parents=True)
+        (modules / name / "__init__.py").write_text("")
+    (modules / "build/__main__.py").write_text(
+        "import os, sys\nfrom pathlib import Path\n"
+        "out = Path(sys.argv[sys.argv.index('--outdir') + 1])\n"
+        "(out / 'sample.whl').write_text('sample')\n"
+        "Path(os.environ['FAKE_BUILD_DIR']).write_text(str(out))\n"
+    )
+    (modules / "twine/__main__.py").write_text("""import os
+import sys
+from pathlib import Path
+Path(os.environ["FAKE_TWINE_ARGS"]).write_text("\\n".join(sys.argv))
+""")
+    project = tmp_path / "project"
+    (project / "dist").mkdir(parents=True)
+    (project / "build").mkdir()
+    (project / "dist/keep").write_text("existing artifact")
+    (project / "build/keep").write_text("existing build")
+    build_dir = tmp_path / "build-dir"
+    twine_args = tmp_path / "twine-args"
+    env.update(PYTHONPATH=str(modules), FAKE_BUILD_DIR=str(build_dir), FAKE_TWINE_ARGS=str(twine_args))
+    run = subprocess.run(
+        ["bash", str(ROOT / "scripts/publish.sh"), "test"],
+        cwd=project,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 0
+    assert (project / "dist/keep").read_text() == "existing artifact"
+    assert (project / "build/keep").read_text() == "existing build"
+    assert not Path(build_dir.read_text()).exists()
+    assert "testpypi" in twine_args.read_text().splitlines()
+
+
 @pytest.mark.skipif(shutil.which("make") is None, reason="make is not installed")
 def test_failed_parallel_tests_are_not_silently_retried(
     fake_tools: tuple[dict[str, str], Path], tmp_path: Path

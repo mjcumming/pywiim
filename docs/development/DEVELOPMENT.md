@@ -206,6 +206,8 @@ make lint typecheck
 
 ### Pre-commit Hooks
 
+Hooks are optional. Preserve existing Git hook configuration.
+
 ```bash
 # Install pre-commit hooks
 pre-commit install
