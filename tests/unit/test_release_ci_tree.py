@@ -21,6 +21,7 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="Release scripts use a P
         ("artifact missing", True, True, False, True, "completed\tfailure", 1, True),
         ("main still running", False, True, True, True, "in_progress\t", 1, True),
         ("direct commit with passing main", False, True, True, True, "completed\tsuccess", 0, True),
+        ("main already failed", True, True, True, True, "completed\tfailure", 1, True),
     ],
 )
 def test_release_requires_ci_for_the_exact_tree(
@@ -35,7 +36,6 @@ def test_release_requires_ci_for_the_exact_tree(
     uses_main: bool,
 ) -> None:
     """A missing or mismatched PR proof must fall back to main CI."""
-    del case
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     gh = bin_dir / "gh"
@@ -47,7 +47,13 @@ case "$1:$2" in
   run:list)
     case " $* " in
       *' --event pull_request '*) printf '%s\\n' "$FAKE_PR_RUN" ;;
-      *) printf '%s\\n' "$FAKE_MAIN_RESULT" ;;
+      *)
+        if [ -e "$FAKE_MAIN_SEEN" ]; then
+          printf '%s\\n' "$FAKE_MAIN_RESULT"
+        else
+          : > "$FAKE_MAIN_SEEN"
+          printf '%s\\n' "$FAKE_MAIN_INITIAL"
+        fi ;;
     esac ;;
   run:download)
     while [ "$#" -gt 0 ]; do
@@ -79,6 +85,8 @@ esac
         CI_WAIT_ATTEMPTS="1",
         CI_WAIT_INTERVAL="0",
         FAKE_LOG=str(log),
+        FAKE_MAIN_SEEN=str(tmp_path / "main-seen"),
+        FAKE_MAIN_INITIAL="completed\tfailure" if case == "main already failed" else "in_progress\t",
         FAKE_PR_HEAD="b" * 40 if pr_head else "",
         FAKE_PR_RUN="123\t2" if pr_run else "",
         FAKE_ARTIFACT_NAME=artifact_name if artifact else "missing",
@@ -90,4 +98,7 @@ esac
         ["bash", str(ROOT / "scripts/wait-for-ci.sh")], env=env, capture_output=True, text=True, check=False
     )
     assert run.returncode == expected, run.stdout + run.stderr
-    assert ("--event push" in log.read_text(encoding="utf-8")) == uses_main
+    calls = log.read_text(encoding="utf-8")
+    assert "--event push" in calls
+    assert ("--event pull_request" not in calls) == (case == "main already failed" or not pr_head)
+    assert (calls.count("--event push") > 1) == (uses_main and case != "main already failed")
