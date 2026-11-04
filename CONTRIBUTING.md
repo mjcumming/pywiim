@@ -31,8 +31,9 @@ response means that a device applied a setting.
   communication.
 - Run the relevant tests while developing. After pushing a release candidate
   PR and before merging it, run `python scripts/prepare_release.py` with Docker
-  running. It checks the clean, committed tree on Python 3.11 and 3.12 and
-  reuses a previous local success for the same tree. Use `--force` to rerun.
+  running and BuildKit enabled. It checks the clean, committed tree on Python
+  3.11 and 3.12 and reuses a previous local success for the same tree. Use
+  `--force` to rerun.
   GitHub CI and Codecov still run independently; see the
   [release process](docs/RELEASE_PROCESS.md). `make check` remains useful
   during development.

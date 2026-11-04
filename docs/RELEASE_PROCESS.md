@@ -9,10 +9,10 @@ publishing path; local commands do not stage, commit, or push unrelated work.
 1. Update `pyproject.toml` and `pywiim/__init__.py` to the same version.
 2. Add a versioned entry to [CHANGELOG.md](../CHANGELOG.md). Describe
    user-visible fixes and compatibility changes.
-3. Push the committed candidate and open or update its PR. With Docker running,
-   run `python scripts/prepare_release.py` while GitHub checks run. It uses
-   cached Linux dependencies to run formatting, lint, type, and non-device
-   tests on Python 3.11 and 3.12. A successful local result is reused for the
+3. Push the committed candidate and open or update its PR. With Docker running
+   and BuildKit enabled, run `python scripts/prepare_release.py` while GitHub
+   checks run. It uses cached Linux dependencies to run formatting, lint, type,
+   and non-device tests on Python 3.11 and 3.12. A successful local result is reused for the
    same clean Git tree; use `--force` to rerun it. Uncommitted or untracked
    files must be committed or moved to another worktree first. The local run
    does not upload coverage or replace GitHub CI and Codecov.
