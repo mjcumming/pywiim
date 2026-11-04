@@ -29,11 +29,13 @@ response means that a device applied a setting.
 - Add focused tests for changed behavior, including meaningful failure paths
   and regression tests for bugs. Use existing fixtures and mocks for device
   communication.
-- Run the relevant tests while developing. For a release candidate, run
-  `make check` locally unless that candidate was already checked. It runs
-  formatting, lint, type, and non-device tests; CI verifies the supported
-  Python versions before merge. Coverage settings live in [codecov.yml](codecov.yml) and the
-  [CI workflow](.github/workflows/ci.yml).
+- Run the relevant tests while developing. After pushing a release candidate
+  PR and before merging it, run `python scripts/prepare_release.py` with Docker
+  running. It checks the clean, committed tree on Python 3.11 and 3.12 and
+  reuses a previous local success for the same tree. Use `--force` to rerun.
+  GitHub CI and Codecov still run independently; see the
+  [release process](docs/RELEASE_PROCESS.md). `make check` remains useful
+  during development.
 - Test on hardware when the behavior depends on device or firmware responses
   and a suitable device is available. Record the model and firmware, preserve
   device settings, and state clearly when hardware validation was not possible.
