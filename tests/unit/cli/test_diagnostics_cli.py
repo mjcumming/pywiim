@@ -380,6 +380,56 @@ async def test_eq_feature_keeps_state_when_preset_list_is_unavailable():
 
 
 @pytest.mark.asyncio
+async def test_feature_output_distinguishes_unsaved_graphic_and_active_peq(capsys):
+    diagnostics = DeviceDiagnostics(DummyClient())  # type: ignore[arg-type]
+    for name in vars(DeviceDiagnostics):
+        if name.startswith("_test_") and name != "_test_features":
+            setattr(diagnostics, name, AsyncMock(return_value={"supported": False}))
+    diagnostics._test_eq = AsyncMock(
+        return_value={
+            "supported": True,
+            "source_name": "wifi",
+            "current_preset": "Custom",
+            "is_custom": True,
+            "available_presets": ["Custom", "Rock"],
+        }
+    )
+    diagnostics._test_peq = AsyncMock(
+        return_value={
+            "supported": True,
+            "source_name": "wifi",
+            "enabled": True,
+            "name": "Night",
+            "channel_mode": "Stereo",
+            "bands": [{"letter": "a", "mode": 1, "frequency": 100, "q": 1, "gain": 2}],
+            "custom_presets": ["Night"],
+            "preset_names": ["Flat"],
+        }
+    )
+    diagnostics._test_graphic_eq = AsyncMock(
+        return_value={
+            "supported": True,
+            "source_name": "wifi",
+            "enabled": False,
+            "name": "Stale preset",
+            "band_count": 1,
+            "bands": [{"name": "band31hz", "gain": 2}],
+            "preset_names": None,
+        }
+    )
+
+    await diagnostics._test_features()
+
+    output = capsys.readouterr().out
+    assert "Current graphic EQ: Custom (unsaved)" in output
+    assert "Custom ← current" not in output
+    assert "Current PEQ: Night" in output
+    assert "gain=2 dB" in output
+    assert "Current preset: Off" in output
+    assert "Built-in presets: Unknown" in output
+
+
+@pytest.mark.asyncio
 async def test_room_correction_feature_supported():
     """_test_room_correction summarizes read-only room correction state."""
     client = DummyClient()
