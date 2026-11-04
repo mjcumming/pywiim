@@ -45,30 +45,32 @@ class TestPlayStateDebouncer:
         debouncer = PlayStateDebouncer(mock_player, delay=1.0)
         assert debouncer.delay == 1.0
 
-    def test_schedule_state_change(self, debouncer, mock_player):
+    @pytest.mark.asyncio
+    async def test_schedule_state_change(self, debouncer, mock_player):
         """Test scheduling delayed update."""
-        with patch("asyncio.get_event_loop") as mock_loop:
-            mock_task = MagicMock()
-            mock_loop.return_value.create_task = MagicMock(return_value=mock_task)
+        debouncer.delay = 0
+        debouncer.schedule_state_change("pause")
 
-            debouncer.schedule_state_change("pause")
+        task = debouncer._pending_task
+        assert isinstance(task, asyncio.Task)
+        await task
+        mock_player._state_synchronizer.update_from_upnp.assert_called_once_with({"play_state": "pause"})
 
-            assert debouncer._pending_task == mock_task
-
-    def test_schedule_state_change_cancels_existing(self, debouncer, mock_player):
+    @pytest.mark.asyncio
+    async def test_schedule_state_change_cancels_existing(self, debouncer, mock_player):
         """Test scheduling cancels existing pending task."""
         existing_task = MagicMock()
         existing_task.done.return_value = False
         debouncer._pending_task = existing_task
 
-        with patch("asyncio.get_event_loop") as mock_loop:
-            mock_task = MagicMock()
-            mock_loop.return_value.create_task = MagicMock(return_value=mock_task)
+        debouncer.delay = 0
+        debouncer.schedule_state_change("pause")
 
-            debouncer.schedule_state_change("pause")
-
-            existing_task.cancel.assert_called_once()
-            assert debouncer._pending_task == mock_task
+        existing_task.cancel.assert_called_once()
+        task = debouncer._pending_task
+        assert isinstance(task, asyncio.Task)
+        await task
+        mock_player._state_synchronizer.update_from_upnp.assert_called_once_with({"play_state": "pause"})
 
     def test_schedule_state_change_no_event_loop(self, debouncer, mock_player):
         """Test scheduling when no event loop."""
@@ -77,6 +79,15 @@ class TestPlayStateDebouncer:
 
             # Should apply immediately
             mock_player._state_synchronizer.update_from_upnp.assert_called_once_with({"play_state": "pause"})
+
+    def test_schedule_state_change_closed_event_loop(self, debouncer, mock_player):
+        """Apply immediately without leaking the coroutine when the loop is closed."""
+        loop = asyncio.new_event_loop()
+        loop.close()
+        with patch("asyncio.get_event_loop", return_value=loop):
+            debouncer.schedule_state_change("pause")
+
+        mock_player._state_synchronizer.update_from_upnp.assert_called_once_with({"play_state": "pause"})
 
     def test_cancel_pending(self, debouncer):
         """Test cancelling pending state change."""
