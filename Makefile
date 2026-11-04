@@ -1,4 +1,4 @@
-.PHONY: help format lint typecheck test clean install dev-install check release
+.PHONY: help format lint typecheck test clean install dev-install check prepare-release release
 
 help:
 	@echo "Available targets:"
@@ -7,6 +7,7 @@ help:
 	@echo "  make typecheck   - Type check with mypy"
 	@echo "  make test        - Run tests with pytest"
 	@echo "  make check       - Run all CI checks (format + lint + test + coverage >= 55%)"
+	@echo "  make prepare-release - Run cached Linux release checks for the committed candidate"
 	@echo "  make release     - Publish a version already merged to main via GitHub Actions"
 	@echo "                    Usage: make release VERSION=3.0.1"
 	@echo "  make clean       - Clean build artifacts"
@@ -55,6 +56,9 @@ test:
 test-cov:
 	@echo "Running tests with coverage..."
 	pytest --cov=pywiim --cov-report=html --cov-report=term
+
+prepare-release:
+	python scripts/prepare_release.py
 
 clean:
 	@echo "Cleaning build artifacts..."
