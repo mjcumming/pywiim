@@ -332,7 +332,7 @@ wiim-verify 192.168.1.100 --port 443
 - Source controls (set_source, get_source)
 - Audio output controls (set_audio_output_mode)
 - EQ reads (get_eq, get_eq_presets, get_eq_status, and supported advanced EQ reads)
-- Group operations (create_group, join_group, leave_group)
+- Multiroom status and group membership reads
 - Preset operations (play_preset)
 - And more...
 
