@@ -8,29 +8,19 @@ Python library for WiiM and LinkPlay device control with command-line tools for 
 
 ## Overview
 
-`pywiim` provides control of WiiM and LinkPlay-based audio devices through a Python API and command-line tools. The library handles playback control, volume management, queues, multiroom audio, EQ settings, presets, and more.
+`pywiim` is an asynchronous Python library for controlling WiiM and other LinkPlay-based audio devices. It combines device APIs and UPnP with capability detection, source-aware state, multiroom support, and command-line tools. It powers the [WiiM Home Assistant integration](https://github.com/mjcumming/wiim) and can be used directly in Python applications.
 
 ## Key Features
 
-- **MCP Server** - Expose WiiM control to Cursor, Claude Desktop, and other MCP hosts. `pip install pywiim[mcp]` then `wiim-mcp`. Control playback, volume, and more via AI assistants.
-- **Playback Control** - Play, pause, stop, next/previous track, seek
-- **Queue Management** - Enqueue, insert, play, remove, and browse via AVTransport `AddURIToQueue` or WiiM PlayQueue (Pro / Pro Plus). `queue_count` / `queue_position` overlay when HTTP fields are empty.
-- **Volume & Audio** - Volume, mute, channel balance, and model-specific audio outputs (Line Out, Optical, Coax, Speaker Out, USB Out, HDMI Out, headphone). Paired Bluetooth devices appear as `BT: …`.
-- **Sources** - Intelligent model-specific source management (Bluetooth, Line In, Optical In, Coaxial, USB, HDMI ARC, Phono) and streaming services. Authoritative hardware filtering and UI-ready formatting.
-- **Source Catalog** - Structured source metadata via `player.source_catalog` (source type, selectability, and per-source capability flags) for integrations like Music Assistant.
-- **Multiroom Audio** - Create/join/leave groups, synchronized volume and playback
-- **EQ & Presets** - 10-band EQ with presets, 20 preset stations; **Parametric EQ (PEQ)** on WiiM (10-band per-source, stereo/L-R, presets; see [PR #12]
-- **Timers & Alarms** - Sleep timers and alarm clocks (WiiM devices)
-- **State Synchronization** - UPnP events with HTTP polling fallback
-- **Device Discovery** - SSDP/UPnP discovery with network scanning fallback
-- **Multi-vendor Support** - WiiM, Arylic, Audio Pro, and generic LinkPlay devices
+- **Playback and queues** — Control playback, volume, mute, source selection, favorites, and supported queues.
+- **Multiroom audio** — Create, join, and leave groups, with group-aware playback and volume controls.
+- **Graphic and parametric EQ** — Track EQ per input, distinguish saved presets, unsaved curves, Off, and unknown, and verify supported band and preset changes by reading the device back. Compatible WiiM devices also support PEQ profiles and per-band editing.
+- **Device state and events** — Combine HTTP polling with optional UPnP events; expose device information, playback state, source capabilities, and audio outputs through `Player`.
+- **Sources and audio outputs** — Discover model-specific inputs and outputs, including supported Bluetooth, analog, optical, USB, HDMI, and streaming sources. `player.source_catalog` provides structured source information for integrations.
+- **Discovery and diagnostics** — Find devices with SSDP/UPnP or network scanning, inspect capabilities, and monitor or verify devices with the included command-line tools.
+- **More device controls** — Use supported alarms, sleep timers, firmware information, and other model-dependent settings.
 
-**Device Compatibility:**
-- **All LinkPlay devices**: Core playback, volume, sources, multiroom, presets
-- **Device-dependent features**: EQ support (varies by device)
-- **WiiM devices only**: Alarm clocks, sleep timers, audio output mode selection, and **Parametric EQ (PEQ)** (LV2 PEQ API). Output lists are model-specific (for example Speaker Out on Sound / Sound Lite).
-
-The library automatically detects device capabilities and adapts functionality accordingly.
+WiiM, Audio Pro, Arylic, and other LinkPlay-based devices differ by model, firmware, and input. The library detects capabilities where possible; a feature listed above is not available on every device. PEQ is supported on compatible WiiM devices.
 
 ## Installation
 
@@ -60,6 +50,37 @@ wiim-discover --help
 
 **Note for Windows users:** If the commands are not found after installation, ensure Python's Scripts directory is in your PATH (usually `C:\Users\YourName\AppData\Local\Programs\Python\Python3X\Scripts`), or restart your terminal.
 
+## Quick start: Python
+
+Create a client for the device, then use `Player` for its cached state and controls. Replace the example address with your device's IP or hostname.
+
+```python
+import asyncio
+
+from pywiim import Player, WiiMClient
+
+
+async def main():
+    client = WiiMClient("192.168.1.100")
+    player = Player(client)
+    try:
+        await player.refresh(full=True)
+        print(f"Device: {player.name} ({player.model_name or player.model})")
+        print(f"Playing: {player.play_state}; volume: {player.volume_level}")
+        print(f"Input: {player.source}; graphic EQ: {player.eq_preset}")
+    finally:
+        await client.close()
+
+
+asyncio.run(main())
+```
+
+`player.eq_preset` can be a device-reported preset, `Custom` for an unsaved graphic curve, `Off`, or `None` when unknown. `player.peq_enabled` reports the separate parametric EQ state when supported. See the [API reference](docs/integration/API_REFERENCE.md) for playback, grouping, and [EQ and PEQ examples](docs/integration/API_REFERENCE.md#parametric-eq-peq--wiim-only), including band writes and saved profiles.
+
+### Upgrading from 2.x
+
+Version 3.0 makes unknown EQ status explicit: `get_eq_status()` can return `None`, and invalid preset-list responses raise an error. `set_eq_custom()` takes ten gains in dB (-12 to +12), while replacing a saved PEQ profile requires `overwrite=True`. See the [3.0.0 changelog](CHANGELOG.md) for the complete compatibility notes.
+
 ## Command-Line Tools
 
 The library includes four powerful CLI tools that are automatically installed with `pywiim`. These tools provide an easy way to discover, diagnose, monitor, and test your WiiM/LinkPlay devices without writing any code.
@@ -71,7 +92,7 @@ The library includes four powerful CLI tools that are automatically installed wi
    wiim-discover
    ```
 
-2. **Test a device** (replace `192.168.1.100` with your device IP):
+2. **Test a device** (this can interrupt playback and change settings; replace `192.168.1.100` with your device IP):
    ```bash
    wiim-verify 192.168.1.100
    ```
@@ -302,11 +323,7 @@ wiim-verify 192.168.1.100 --port 443
 - `--port <port>` - Device port (default: 80, use 443 for HTTPS)
 - `--verbose, -v` - Enable verbose output (shows detailed test data)
 
-**Safety Features:**
-- Volume never exceeds 10% during testing
-- Original device state is saved and restored
-- Non-destructive testing (doesn't disrupt normal use)
-- Graceful error handling
+**Before running:** The verifier changes playback, volume, sources, and output settings, so it can interrupt normal use. It attempts to restore the original volume, mute, and source, but complete restoration is not guaranteed. EQ checks are read-only to avoid overwriting custom curves.
 
 **What it tests:**
 - Status endpoints (get_player_status, get_device_info, etc.)
@@ -314,7 +331,7 @@ wiim-verify 192.168.1.100 --port 443
 - Volume controls (set_volume, set_mute)
 - Source controls (set_source, get_source)
 - Audio output controls (set_audio_output_mode)
-- EQ controls (get_eq, set_eq_preset, set_eq_custom, etc.)
+- EQ reads (get_eq, get_eq_presets, get_eq_status, and supported advanced EQ reads)
 - Group operations (create_group, join_group, leave_group)
 - Preset operations (play_preset)
 - And more...
@@ -364,90 +381,6 @@ Total tests: 45
 - `0` - All tests passed
 - `1` - One or more tests failed or interrupted
 
-### MCP Server (`wiim-mcp`)
-
-Expose WiiM/LinkPlay control as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io) server for use with Cursor, Claude Desktop, and other MCP hosts.
-
-**Install:**
-```bash
-pip install pywiim[mcp]
-```
-
-**Run:**
-```bash
-wiim-mcp
-# or
-python -m pywiim.mcp
-```
-
-**Config** (config file or env vars; env overrides file):
-
-Config file: `~/.config/wiim/config.json` (or `WIIM_CONFIG_FILE` to override path). Copy from example:
-```bash
-mkdir -p ~/.config/wiim
-cp $(python -c "import pywiim.mcp, os; print(os.path.join(os.path.dirname(pywiim.mcp.__file__), 'config.example.json'))") ~/.config/wiim/config.json
-```
-Edit with your device IPs (e.g. 192.168.1.115, 192.168.1.116, 192.168.1.68).
-
-Config file keys: `default_device`, `named_devices`, `discovery_disabled`, `timeout`, `discovery_timeout`
-
-Env vars (override file): `WIIM_DEFAULT_DEVICE`, `WIIM_NAMED_DEVICES` (JSON), `WIIM_DISCOVERY_DISABLED`, `WIIM_TIMEOUT`, `WIIM_DISCOVERY_TIMEOUT`, `WIIM_CONFIG_FILE`
-
-**WSL / discovery doesn't work?** Set `discovery_disabled: true` in config and use pre-configured `named_devices` with your device IPs.
-
-**Tools:** `wiim_discover`, `wiim_status`, `wiim_play`, `wiim_pause`, `wiim_media_play_pause`, `wiim_stop`, `wiim_next_track`, `wiim_previous_track`, `wiim_volume`, `wiim_mute`, `wiim_unmute`, `wiim_sources`, `wiim_set_source`, `wiim_play_url`, `wiim_group_join`, `wiim_group_leave`
-
-**Cursor config** (add to MCP settings):
-```json
-{
-  "mcpServers": {
-    "wiim": {
-      "command": "wiim-mcp",
-      "args": []
-    }
-  }
-}
-```
-
-**Claude Desktop config** (`claude_desktop_config.json`):
-```json
-{
-  "mcpServers": {
-    "wiim": {
-      "command": "wiim-mcp",
-      "args": []
-    }
-  }
-}
-```
-
-## Quick Start
-
-```python
-import asyncio
-from pywiim import Player
-
-async def main():
-    player = Player("192.168.1.100")
-    await player.refresh()  # Load initial state
-    
-    # Access device properties
-    print(f"Device: {player.name} ({player.model_name or player.model})")
-    print(f"Playing: {player.play_state}")
-    print(f"Volume: {player.volume}")
-    
-    # Control playback
-    await player.set_volume(0.5)
-    await player.play()
-    
-    await player.close()
-
-asyncio.run(main())
-```
-
-See [API Reference](docs/integration/API_REFERENCE.md) for complete Player API documentation.
-
-
 ## Notification Playback Limitations
 
 `play_notification()` uses a source-aware strategy so notifications are audible across more real-world scenarios:
@@ -493,6 +426,32 @@ Prompt behavior (duck, play, resume) is **firmware- and source-dependent**. Some
   - Hardware constraints (A98 SoM, RAM limits, queue management)
   - Why shuffle/repeat controls work differently for different sources
   - Integration strategies for automation systems
+
+## Optional MCP server (`wiim-mcp`)
+
+The optional [Model Context Protocol](https://modelcontextprotocol.io) server exposes device controls to compatible MCP hosts.
+
+```bash
+pip install 'pywiim[mcp]'
+wiim-mcp
+```
+
+For Cursor or Claude Desktop, add the server to the host's MCP configuration:
+
+```json
+{
+  "mcpServers": {
+    "wiim": {
+      "command": "wiim-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+The server reads `~/.config/wiim/config.json` by default; `WIIM_CONFIG_FILE` changes the path. Start with the [example configuration](pywiim/mcp/config.example.json) and add your device addresses. The file supports `default_device`, `named_devices`, `discovery_disabled`, `timeout`, and `discovery_timeout`. Environment variables `WIIM_DEFAULT_DEVICE`, `WIIM_NAMED_DEVICES` (JSON), `WIIM_DISCOVERY_DISABLED`, `WIIM_TIMEOUT`, and `WIIM_DISCOVERY_TIMEOUT` override the file. If discovery is unavailable, such as in some WSL setups, configure named devices and set `discovery_disabled` to `true`.
+
+Available tools cover discovery, status, playback, volume, mute, source selection, URL playback, and group join/leave.
 
 ## Development Setup
 

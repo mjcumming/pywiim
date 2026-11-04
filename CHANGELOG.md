@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Breaking:** `get_eq_status()` returns `None` when the device state is unavailable instead of `False`. Invalid EQ preset-list responses raise `WiiMResponseError` instead of returning an empty list. Numeric playback-status EQ values are no longer converted to named presets unless a verified legacy profile opts in.
 - **Breaking:** `set_eq_custom` now accepts ten dB gains from -12 to +12 and requires a confirmed Eq10HP write. Graphic band reads no longer invent zero gains for missing bands. `save_peq` requires `overwrite=True` to replace a custom profile, and PEQ band/profile operations verify device readback and reject invalid or ambiguous input.
+- `wiim-verify` checks EQ state and presets without writing them, preserving custom curves that cannot be safely restored.
 
 ### Added
 
