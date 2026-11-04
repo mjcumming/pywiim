@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Preserve bare JSON arrays through endpoint discovery and legacy validation so Audio Pro preset lists reach the player cache ([wiim #187](https://github.com/mjcumming/wiim/issues/187)). Unsupported command responses no longer establish EQ or PEQ capability, and failed list reads retain the last valid list.
-- Track graphic and parametric EQ on the current input. An unsaved graphic curve is `Custom`; unreadable state is unknown rather than Off or Flat. Read back EQ commands and reconcile the other EQ type ([wiim #301](https://github.com/mjcumming/wiim/issues/301), [#302](https://github.com/mjcumming/wiim/issues/302)).
+- Track graphic and parametric EQ on the current input. An unsaved graphic curve is `Custom`; unreadable state is unknown rather than Off or Flat. Read back graphic preset/enable and PEQ preset/disable commands and reconcile the other EQ type ([wiim #301](https://github.com/mjcumming/wiim/issues/301), [#302](https://github.com/mjcumming/wiim/issues/302)).
 - Interpret numeric playback-status EQ values only for explicitly verified legacy profiles. Keep the device's EQGetBand name through later polls ([wiim #165](https://github.com/mjcumming/wiim/issues/165)).
 
 ## [2.3.22] - 2026-11-03
