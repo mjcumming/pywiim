@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-11-04
+
+### Fixed
+
+- Avoid an unawaited coroutine when applying a play-state update after the event loop has closed.
+
 ## [3.0.1] - 2026-11-03
 
 ### Changed

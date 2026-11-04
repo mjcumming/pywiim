@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pywiim"
-version = "3.0.1"
+version = "3.0.2"
 description = "Python library for WiiM/LinkPlay device communication"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -113,4 +113,6 @@ addopts = "-m 'not integration'"
 filterwarnings = [
     "ignore:Unclosed client session:ResourceWarning",
     "ignore:Unclosed connector:ResourceWarning",
+    "error:coroutine .* was never awaited:RuntimeWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
 ]

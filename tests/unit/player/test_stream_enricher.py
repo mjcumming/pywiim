@@ -4,7 +4,7 @@ Tests stream metadata enrichment for raw URL playback.
 """
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -129,14 +129,14 @@ class TestStreamEnricher:
         """Test enrichment starts new task for new URL."""
         status = PlayerStatus(source="wifi", title="http://example.com/stream.mp3", play_state="play")
 
-        with patch("asyncio.get_running_loop") as mock_loop:
-            mock_task = MagicMock()
-            mock_loop.return_value.create_task = MagicMock(return_value=mock_task)
-
+        with patch.object(stream_enricher, "_fetch_and_apply_stream_metadata", new_callable=AsyncMock) as fetch:
             await stream_enricher.enrich_if_needed(status)
 
-            assert stream_enricher._enrichment_task == mock_task
+            task = stream_enricher._enrichment_task
+            assert isinstance(task, asyncio.Task)
             assert stream_enricher._last_stream_url == "http://example.com/stream.mp3"
+            await task
+            fetch.assert_awaited_once_with("http://example.com/stream.mp3")
 
     @pytest.mark.asyncio
     async def test_enrich_if_needed_cancels_existing(self, stream_enricher):
@@ -148,14 +148,14 @@ class TestStreamEnricher:
 
         status = PlayerStatus(source="wifi", title="http://example.com/new.mp3", play_state="play")
 
-        with patch("asyncio.get_running_loop") as mock_loop:
-            mock_task = MagicMock()
-            mock_loop.return_value.create_task = MagicMock(return_value=mock_task)
-
+        with patch.object(stream_enricher, "_fetch_and_apply_stream_metadata", new_callable=AsyncMock) as fetch:
             await stream_enricher.enrich_if_needed(status)
 
             existing_task.cancel.assert_called_once()
-            assert stream_enricher._enrichment_task == mock_task
+            task = stream_enricher._enrichment_task
+            assert isinstance(task, asyncio.Task)
+            await task
+            fetch.assert_awaited_once_with("http://example.com/new.mp3")
 
     @pytest.mark.asyncio
     async def test_enrich_if_needed_no_event_loop(self, stream_enricher):

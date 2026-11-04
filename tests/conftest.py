@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
-from aiohttp import ClientSession
+from aiohttp import ClientConnectionError, ClientSession
 
 # Configure pytest-asyncio
 pytest_plugins = ("pytest_asyncio",)
@@ -186,6 +186,9 @@ def mock_aiohttp_session(request):
     session._closed = False
     session.closed = False
     session.close = AsyncMock()
+    # Unconfigured requests must fail like a real connection, not return
+    # nested AsyncMocks that silently reach unrelated device-discovery paths.
+    session.request = MagicMock(side_effect=ClientConnectionError("Unexpected HTTP request in unit test"))
 
     # Mark session as closed after test to prevent warnings
     def cleanup():

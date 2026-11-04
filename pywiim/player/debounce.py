@@ -46,7 +46,12 @@ class PlayStateDebouncer:
 
         try:
             loop = asyncio.get_event_loop()
-            self._pending_task = loop.create_task(self._apply_delayed_state(new_state))
+            pending = self._apply_delayed_state(new_state)
+            try:
+                self._pending_task = loop.create_task(pending)
+            except RuntimeError:
+                pending.close()
+                raise
         except RuntimeError:
             # No event loop (sync context) - apply immediately
             _LOGGER.debug("No event loop available, applying state immediately: %s", new_state)

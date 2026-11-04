@@ -274,11 +274,14 @@ class TestFetchIcecastMetadata:
         mock_session = MagicMock()
         mock_response = MagicMock()
         mock_response.headers = {}
-        mock_session.get = AsyncMock(return_value=mock_response)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=None)
+        mock_session.get = MagicMock(return_value=mock_response)
 
         result = await _fetch_icecast_metadata(url, mock_session, timeout=5)
 
         assert result is None
+        mock_response.__aenter__.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_station_name_only(self):

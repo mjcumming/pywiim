@@ -320,6 +320,7 @@ class TestPlayerRefresh:
         # Setup UPnP client with RenderingControl
         mock_upnp_client = MagicMock(spec=UpnpClient)
         mock_upnp_client.rendering_control = MagicMock()
+        mock_upnp_client.get_info_ex.return_value = {}
         mock_upnp_client.get_volume = AsyncMock(return_value=75)  # UPnP volume = 75
         mock_upnp_client.get_mute = AsyncMock(return_value=True)  # UPnP mute = True
 
@@ -393,6 +394,7 @@ class TestPlayerRefresh:
         # Setup UPnP client but GetVolume fails
         mock_upnp_client = MagicMock(spec=UpnpClient)
         mock_upnp_client.rendering_control = MagicMock()
+        mock_upnp_client.get_info_ex.return_value = {}
         mock_upnp_client.get_volume = AsyncMock(side_effect=Exception("UPnP error"))
         mock_upnp_client.get_mute = AsyncMock(side_effect=Exception("UPnP error"))
 
@@ -1515,6 +1517,7 @@ class TestPlayerSourceConflicts:
         # UPnP reports bluetooth (via transport state)
         mock_upnp_client = MagicMock(spec=UpnpClient)
         mock_upnp_client.rendering_control = MagicMock()
+        mock_upnp_client.get_info_ex.return_value = {}
         mock_upnp_client.get_volume = AsyncMock(return_value=50)
         mock_upnp_client.get_mute = AsyncMock(return_value=False)
 
@@ -2888,8 +2891,6 @@ class TestPlayerMediaMetadata:
     @pytest.mark.asyncio
     async def test_fetch_cover_art_network_error(self, mock_client):
         """Test fetching cover art handles network errors gracefully."""
-        from unittest.mock import AsyncMock, MagicMock
-
         import aiohttp
 
         from pywiim.player import Player
@@ -2898,13 +2899,14 @@ class TestPlayerMediaMetadata:
 
         # Mock aiohttp session that raises exception
         mock_session = MagicMock()
-        mock_session.get = AsyncMock(side_effect=aiohttp.ClientError("Network error"))
+        mock_session.get = MagicMock(side_effect=aiohttp.ClientError("Network error"))
         mock_session.closed = False
 
         mock_client._session = mock_session
 
         result = await player.fetch_cover_art("http://example.com/error.jpg")
         assert result is None
+        mock_session.get.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_fetch_cover_art_creates_session_when_needed(self, mock_client):
@@ -6629,6 +6631,7 @@ class TestPlayerSourceConflictScenarios:
         # Setup player with UPnP client
         mock_upnp_client = MagicMock(spec=UpnpClient)
         mock_upnp_client.rendering_control = MagicMock()
+        mock_upnp_client.get_info_ex.return_value = {}
         mock_upnp_client.get_volume = AsyncMock(return_value=75)
         mock_upnp_client.get_mute = AsyncMock(return_value=False)
 
