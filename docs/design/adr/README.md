@@ -4,11 +4,11 @@ ADRs capture **decisions we have committed to** so future changes don’t accide
 
 ## When to write an ADR
 
-Write an ADR when the decision:
-
-- Affects **user-facing behavior** or **API contracts** (e.g. naming, stability guarantees)
-- Is something we want to **stick to** unless we explicitly revisit it (e.g. “we will not change X without a major version”)
-- Would be easy to **reverse by mistake** if undocumented (e.g. “use capability probing, not hardcoded device checks”)
+Write or update an ADR for a durable, non-obvious contract or trade-off that
+future maintainers need in order to avoid undoing the decision. Examples are
+stability guarantees, device capability probing, or an explicit reversal of an
+earlier decision. A user-facing change or ordinary bug fix does not by itself
+require a new ADR.
 
 You do **not** need an ADR for:
 

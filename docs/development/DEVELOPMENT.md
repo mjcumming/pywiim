@@ -1,6 +1,8 @@
 # Development Guide
 
-This document outlines coding standards, best practices, development guidelines, and testing strategies for pywiim.
+This document provides development patterns and examples. The current
+[contribution guide](../../CONTRIBUTING.md), CI workflow, and
+[release process](../RELEASE_PROCESS.md) define the working process.
 
 ## Table of Contents
 
@@ -56,9 +58,6 @@ source .venv/bin/activate
 # Install the package in development mode with dev dependencies
 pip install -e ".[dev]"
 
-# Or install dependencies separately:
-pip install -e .
-pip install -r requirements-dev.txt  # if you create one
 ```
 
 **4. Verify Installation**
@@ -75,21 +74,6 @@ make lint
 ```
 
 ### Git Setup
-
-**Initial Commit**
-
-If this is a new repository:
-
-```bash
-# Initialize git (if not already done)
-git init
-
-# Add all files
-git add .
-
-# Create initial commit
-git commit -m "Initial commit: pywiim library extraction"
-```
 
 **Git Configuration**
 
@@ -165,10 +149,9 @@ Settings (`.vscode/settings.json`):
 If you have issues with the virtual environment:
 
 ```bash
-# Remove and recreate
-rm -rf .venv
-python3 -m venv .venv
-source .venv/bin/activate
+# Create a separate environment to preserve any existing one
+python3 -m venv .venv-new
+source .venv-new/bin/activate
 pip install -e ".[dev]"
 ```
 
@@ -186,15 +169,8 @@ pip install -e .
 
 **Pre-commit Hook Issues**
 
-If pre-commit hooks fail:
-
-```bash
-# Update hooks
-pre-commit autoupdate
-
-# Skip hooks for a commit (not recommended)
-git commit --no-verify
-```
+If pre-commit hooks fail, inspect the reported check and use the project's
+virtual environment. Preserve existing hook configuration.
 
 ## Development Workflow
 
@@ -209,7 +185,7 @@ pytest tests/unit/ --cov=pywiim --cov-report=html
 
 # Run integration tests (requires device)
 export WIIM_TEST_DEVICE=192.168.1.100
-pytest tests/integration/ -v
+pytest tests/integration/ -m integration -v
 ```
 
 ### Code Quality
@@ -393,56 +369,10 @@ pywiim/
 - Development helpers
 - Not part of package distribution
 
-### Current Organization Status
+### Maintaining structure
 
-**Overall Assessment: ✅ Well Organized**
-
-The project follows good Python packaging practices and maintains clear separation of concerns.
-
-**✅ Strengths**
-
-**Package Structure:**
-- Clear module organization: `pywiim/`, `pywiim/api/`, `pywiim/upnp/`
-- Logical grouping: Related functionality grouped together
-- Public API: Clean exports in `__init__.py`
-- Mixin pattern: Well-organized API mixins
-
-**Documentation Structure:**
-- User docs: Organized in `docs/` directory
-- Design docs: Comprehensive design documentation
-- Clear separation: User-facing vs developer-facing docs
-
-**Test Structure:**
-- Unit tests: Separate from integration tests
-- Fixtures: Centralized in `conftest.py`
-- Documentation: Test README explains structure
-
-**Tooling:**
-- CLI tools: Organized in `pywiim/cli/`, properly configured in `pyproject.toml`
-- Code quality: Pre-commit hooks, Makefile
-- Type hints: PEP 561 support (`py.typed`)
-
-**⚠️ Areas for Improvement**
-
-**File Size Compliance:**
-
-Some files exceed recommended limits:
-
-| File | Lines | Limit | Status |
-|------|-------|-------|--------|
-| `api/base.py` | 988 | 600 (hard) | ❌ **Exceeds hard limit** |
-| `upnp/eventer.py` | 618 | 600 (hard) | ❌ **Exceeds hard limit** |
-| `upnp/client.py` | 594 | 600 (hard) | ⚠️ **Close to limit** |
-| `state.py` | 558 | 400 (soft) | ⚠️ **Exceeds soft limit** |
-| `capabilities.py` | 500 | 400 (soft) | ⚠️ **Exceeds soft limit** |
-
-**Recommendations:**
-- `api/base.py`: Consider splitting transport layer from client logic
-- `upnp/eventer.py`: Could extract event parsing to separate module
-- `state.py`: Consider splitting synchronization from state models
-- `capabilities.py`: Could split detection from registry
-
-**Note**: Some files may be acceptable if they're cohesive and difficult to split. Document justification if keeping as-is.
+Keep related behavior cohesive. Split modules when it improves clarity or reuse;
+line count alone is not a reason to create more files.
 
 ## Code Style
 
@@ -495,10 +425,10 @@ isort pywiim tests
 
 ## File Organization
 
-### File Size Limits
-- **Soft Limit**: 400 lines of code (LOC)
-- **Hard Limit**: 600 LOC
-- **Exceeding Hard Limit**: Requires `# pragma: allow-long-file <issue>` and justification
+### File size
+
+Prefer cohesive modules and clear functions. There is no hard line-count limit
+or issue/pragma requirement for larger files.
 
 ### Module Organization
 - **One Responsibility**: Each module should have a single, clear responsibility
@@ -1084,30 +1014,11 @@ async def test_get_player_status():
         mock_request.assert_called_once()
 ```
 
-### Coverage Goals
+### Coverage
 
-**Target Coverage Levels:**
-- **Overall Coverage:** 85%+ (aim for 90%+)
-- **Core Modules:** 95%+ (client, base API, models, exceptions)
-- **API Mixins:** 85%+ (all API methods)
-- **Utilities:** 90%+ (helpers, normalization, parsing)
-- **CLI Tools:** 70%+ (lower priority, integration-focused)
-
-**Coverage Exclusions:**
-
-**Acceptable to Exclude:**
-- CLI entry points (`if __name__ == "__main__"`)
-- Deprecated code paths
-- Platform-specific code that can't be tested
-- Integration test fixtures
-
-**Use Coverage Comments:**
-```python
-def some_function():
-    # pragma: no cover - CLI entry point
-    if __name__ == "__main__":
-        main()
-```
+Use coverage to find untested behavior, not as a substitute for meaningful
+tests. Current enforced thresholds are in [codecov.yml](../../codecov.yml) and
+the [CI workflow](../../.github/workflows/ci.yml).
 
 ### Test Execution Strategy
 
@@ -1121,7 +1032,7 @@ pytest tests/unit/ -v
 pytest tests/unit/ --cov=pywiim --cov-report=html --cov-report=term
 
 # Run integration tests (requires device)
-WIIM_TEST_DEVICE=192.168.1.100 pytest tests/integration/ -v
+WIIM_TEST_DEVICE=192.168.1.100 pytest tests/integration/ -m integration -v
 
 # Run specific test file
 pytest tests/unit/test_playback.py -v
@@ -1138,24 +1049,9 @@ pytest tests/ -v -m "not slow"
 
 **CI/CD Integration**
 
-**Recommended CI Strategy:**
-1. **Unit Tests** - Run on every commit (fast, no external dependencies)
-2. **Integration Tests** - Run on PRs and nightly builds (requires device)
-3. **Coverage Reports** - Generate and track coverage trends
-4. **Linting** - Run ruff, mypy, black checks
-
-**Example GitHub Actions:**
-```yaml
-# Run unit tests on every push
-- name: Run unit tests
-  run: pytest tests/unit/ --cov=pywiim --cov-report=xml
-
-# Run integration tests on schedule or manual trigger
-- name: Run integration tests
-  env:
-    WIIM_TEST_DEVICE: ${{ secrets.WIIM_TEST_DEVICE }}
-  run: pytest tests/integration/ -v
-```
+GitHub CI runs formatting, lint, type checks, and tests marked as non-integration
+on supported Python versions. Device tests are separate and run when suitable
+hardware is available; see [tests/README.md](../../tests/README.md).
 
 ### Testing Async Code
 
@@ -1185,382 +1081,22 @@ async def test_concurrent_requests(mock_client):
     assert mock_client._request.call_count == 3
 ```
 
-### Pre-Release Real Device Testing
+### Real-device testing
 
-**Current State**
-
-**✅ What We Have:**
-- **Comprehensive unit tests** with mocks - run in CI/CD for every commit
-- **Minimal integration tests** (`test_real_device.py`) - 4 basic smoke tests
-- **Comprehensive multiroom tests** (`test_multiroom_group.py`) - thorough group testing
-- **CLI verification tool** (`wiim-verify`) - comprehensive but manual
-- **Various test scripts** - for specific features (playback, shuffle/repeat, etc.)
-
-**⚠️ Gaps:**
-- **No Player-level integration tests** - only client-level basic tests
-- **No playback control integration tests** - play/pause/shuffle/repeat only in scripts
-- **No volume/audio integration tests** - only in `wiim-verify` CLI
-- **No source switching integration tests**
-- **No EQ/preset integration tests**
-- **No state management/caching integration tests**
-- **Integration tests not part of release process** - only unit tests run
-
-**Strategy: Two-Tier Approach**
-
-1. **Core Integration Tests** (always run if device available)
-   - Expand `test_real_device.py` with essential Player-level tests
-   - Keep fast, non-destructive tests
-   - Run automatically if `WIIM_TEST_DEVICE` is set
-
-2. **Pre-Release Integration Tests** (optional, before releases)
-   - Comprehensive test suite covering all major features
-   - Can be run manually before important releases
-   - More thorough than core tests, but still automated
-
-**Proposed Test Expansion**
-
-**1. Core Integration Tests (`test_real_device.py`)**
-
-Add these essential tests that should run if a device is available:
-
-```python
-# Player-level basic operations
-- test_player_initialization
-- test_player_refresh
-- test_player_properties_access
-
-# Playback controls (non-destructive)
-- test_playback_state_read
-- test_shuffle_repeat_state_read
-
-# Volume controls (safe - low volume only)
-- test_volume_read
-- test_mute_read
-- test_volume_set_safe (max 10%)
-
-# Source and audio
-- test_source_list
-- test_audio_output_modes
-- test_current_source_read
-
-# State management
-- test_state_caching
-- test_state_refresh
-```
-
-**2. Pre-Release Integration Tests (`test_prerelease.py`)**
-
-Create a new comprehensive test suite for pre-release validation:
-
-```python
-# Comprehensive playback testing
-- test_playback_controls_full (play/pause/stop/resume)
-- test_shuffle_controls_full (with state preservation)
-- test_repeat_controls_full (all modes, state preservation)
-- test_next_previous_track
-
-# Volume and audio
-- test_volume_controls_full (with restoration)
-- test_mute_controls_full
-- test_audio_output_switching
-
-# Source management
-- test_source_switching (if multiple sources available)
-- test_source_specific_features
-
-# EQ and presets (if supported)
-- test_eq_presets
-- test_eq_custom_settings
-- test_preset_playback
-
-# State management
-- test_state_synchronization
-- test_cache_consistency
-- test_upnp_event_integration
-
-# Error handling
-- test_invalid_commands
-- test_network_timeout_handling
-- test_device_unavailable_handling
-```
-
-**When to Run Pre-Release Tests**
-
-**Always Run Before:**
-- **Major releases** (X.0.0) - breaking changes
-- **Minor releases** (X.Y.0) - new features
-- **After significant refactoring** - even for patch releases
-
-**Optional Before:**
-- **Patch releases** - if they touch core functionality
-- **Regular development** - when working on Player/state management
-
-**Not Required:**
-- **Documentation-only releases**
-- **Dependency updates** (unless major)
-- **Minor bug fixes** (unless in critical paths)
-
-**Test Organization**
-
-**Markers for Test Selection:**
-
-```python
-@pytest.mark.integration          # All integration tests
-@pytest.mark.integration.core     # Core tests (fast, safe)
-@pytest.mark.integration.prerelease  # Pre-release tests (comprehensive)
-@pytest.mark.integration.slow     # Slow tests (state changes, delays)
-@pytest.mark.integration.destructive  # Tests that change device state
-```
-
-**Running Tests:**
+Test device- or firmware-dependent behavior on suitable hardware when available.
+Check what a test changes, preserve and restore device settings, and record the
+model, firmware, and any limitations. Do not claim a device test was run when it
+was not. See [tests/README.md](../../tests/README.md) for current commands.
 
 ```bash
-# Core integration tests only (fast)
-pytest tests/integration/ -m "integration.core" -v
-
-# Pre-release tests (comprehensive)
-pytest tests/integration/ -m "integration.prerelease" -v
-
-# All integration tests
-pytest tests/integration/ -v
-
-# Skip slow/destructive tests
-pytest tests/integration/ -m "not slow and not destructive" -v
+WIIM_TEST_DEVICE=192.168.1.100 pytest tests/integration/ -m integration -v
 ```
 
-**Safety Features**
-
-All integration tests should:
-
-1. **Save initial state** before making changes
-2. **Restore state** after tests (in finally blocks)
-3. **Use safe volumes** (max 10-20% during testing)
-4. **Skip gracefully** if device unavailable
-5. **Handle errors** without leaving device in bad state
-6. **Log operations** for debugging
-
-**Example: Expanded Core Test**
-
-```python
-@pytest.mark.integration
-@pytest.mark.integration.core
-@pytest.mark.asyncio
-async def test_player_volume_controls_safe(real_device_client, integration_test_marker):
-    """Test volume controls with safe limits and state restoration."""
-    from pywiim.player import Player
-    
-    player = Player(real_device_client)
-    await player.refresh()
-    
-    # Save initial state
-    initial_volume = await player.get_volume()
-    initial_mute = await player.get_muted()
-    
-    try:
-        # Test volume read
-        volume = await player.get_volume()
-        assert volume is not None
-        assert 0.0 <= volume <= 1.0
-        
-        # Test safe volume change (max 10%)
-        safe_volume = min(0.10, volume + 0.05) if volume < 0.10 else 0.10
-        await player.set_volume(safe_volume)
-        await asyncio.sleep(0.5)
-        
-        new_volume = await player.get_volume()
-        assert abs(new_volume - safe_volume) < 0.05
-        
-        # Test mute toggle
-        await player.set_mute(True)
-        await asyncio.sleep(0.5)
-        assert await player.get_muted() is True
-        
-        await player.set_mute(False)
-        await asyncio.sleep(0.5)
-        assert await player.get_muted() is False
-        
-    finally:
-        # Restore initial state
-        await player.set_volume(initial_volume)
-        await player.set_mute(initial_mute)
-        await asyncio.sleep(0.5)
-```
-
-### Testing Against Real Devices
-
-**Quick Test Script**
-
-We've included a simple test script to quickly test your devices:
-
-```bash
-# Test a single device
-python scripts/test_my_devices.py 192.168.1.100
-
-# Test multiple devices
-python scripts/test_my_devices.py 192.168.1.100 192.168.1.101
-```
-
-This script will:
-- Connect to each device
-- Get device information
-- Detect capabilities
-- Test basic features
-- Show a summary
-
-**Full Diagnostic Tool**
-
-For comprehensive device analysis:
-
-```bash
-# Run full diagnostics (using console script)
-wiim-diagnostics 192.168.1.100
-
-# Or using Python module
-python -m pywiim.cli.diagnostics 192.168.1.100
-
-# Save report to file
-wiim-diagnostics 192.168.1.100 --output device-report.json
-
-# Verbose output
-wiim-diagnostics 192.168.1.100 --verbose
-```
-
-**Raw HTTP with `curl`**
-
-For manual `httpapi.asp` probes on your LAN (read-only checks, firmware diffs, research), see **[docs/testing/CURL_HTTPAPI.md](../testing/CURL_HTTPAPI.md)**.
-
-**Integration Tests**
-
-Run the full integration test suite:
-
-```bash
-# Set device IP
-export WIIM_TEST_DEVICE=192.168.1.100
-
-# Run all integration tests
-pytest tests/integration/ -v
-
-# Run specific test
-pytest tests/integration/test_real_device.py::TestRealDevice::test_device_connection -v
-
-# Skip slow tests (ones that change device state)
-pytest tests/integration/ -v -m "not slow"
-```
-
-**Finding Your Device IP**
-
-**Method 1: Router Admin Panel**
-- Log into your router's admin panel
-- Look for connected devices
-- Find your WiiM device by name
-
-**Method 2: Network Scan**
-```bash
-# Using nmap (if installed)
-nmap -sn 192.168.1.0/24 | grep -B 2 "WiiM"
-
-# Or use the discovery example in docs/EXAMPLES.md
-```
-
-**Method 3: Device Display**
-- Some WiiM devices show their IP on the display
-- Check the device's network settings menu
-
-**Testing Different Device Types**
-
-**WiiM Devices (Pro, Mini, Amp, Ultra)**
-```bash
-# Standard HTTP
-python scripts/test_my_devices.py 192.168.1.100
-
-# Should work with default settings
-```
-
-**Audio Pro Devices**
-```bash
-# May require HTTPS on port 4443
-wiim-diagnostics 192.168.1.100 --port 4443
-
-# Or test with HTTPS
-python -c "
-import asyncio
-from pywiim import WiiMClient
-
-async def test():
-    client = WiiMClient('192.168.1.100', port=4443)
-    info = await client.get_device_info_model()
-    print(f'Device: {info.name}')
-    await client.close()
-
-asyncio.run(test())
-"
-```
-
-**Arylic Devices**
-```bash
-# Should work with standard HTTP
-python scripts/test_my_devices.py 192.168.1.100
-```
-
-**Common Issues**
-
-**Connection Timeout**
-
-If you get timeout errors:
-- Verify the IP address is correct
-- Check device is on the same network
-- Try increasing timeout:
-  ```python
-  client = WiiMClient("192.168.1.100", timeout=10.0)
-  ```
-
-**HTTPS Required**
-
-Some devices require HTTPS:
-```python
-client = WiiMClient("192.168.1.100", port=443)
-```
-
-**Port Issues**
-
-Try different ports:
-- 80 (HTTP)
-- 443 (HTTPS)
-- 4443 (Audio Pro MkII HTTPS)
-- 8443 (Alternative HTTPS)
-
-**Test Checklist**
-
-When testing a new device, check:
-
-- [ ] Device info retrieval
-- [ ] Capability detection
-- [ ] Player status
-- [ ] Volume control
-- [ ] Playback control (play/pause/stop)
-- [ ] Presets (if supported)
-- [ ] EQ (if supported)
-- [ ] Multiroom (if supported)
-- [ ] Bluetooth (if supported)
-- [ ] Audio settings (if supported)
-
-**Sharing Test Results**
-
-If you find issues or want to share test results:
-
-1. Run diagnostics:
-   ```bash
-   wiim-diagnostics <device_ip> --output report.json
-   ```
-
-2. Share the `report.json` file
-
-3. Include:
-   - Device model
-   - Firmware version
-   - What worked
-   - What didn't work
-   - Error messages
+Use `wiim-discover` to find devices. Run
+`wiim-diagnostics <device_ip> --output report.json` to capture diagnostics.
+Remove sensitive information before
+sharing the report. For read-only HTTP probes, see the
+[curl HTTP API guide](../testing/CURL_HTTPAPI.md).
 
 ## Async/Await
 
