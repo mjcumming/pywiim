@@ -7,7 +7,7 @@ that adds group awareness, role management, and cached state with getter methods
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
 from ..api.constants import DISPLAY_DEFAULT_BRIGHTNESS
@@ -453,6 +453,16 @@ class Player(PlayerBase):
         if self.client.capabilities.get("supports_peq", False):
             await self.refresh_peq_preset()
 
+    async def _reconcile_failed_eq_command(self) -> None:
+        """Refresh after an ambiguous write without clearing the last valid state."""
+        try:
+            await self.refresh_eq_state()
+        except WiiMError:
+            _LOGGER.debug("Could not reconcile EQ after an unconfirmed command", exc_info=True)
+        finally:
+            if self._on_state_changed:
+                self._on_state_changed()
+
     async def disable_peq(self) -> None:
         """Disable active PEQ on the current input and verify the result."""
         # An external app may have activated PEQ since the last poll.
@@ -478,7 +488,11 @@ class Player(PlayerBase):
             return
         if name not in (self._peq_presets or []):
             raise WiiMError(f"Unknown PEQ preset {name!r}")
-        await self.client.load_peq(name)
+        try:
+            await self.client.load_peq(name)
+        except WiiMError:
+            await self._reconcile_failed_eq_command()
+            raise
         self._state_mgr._invalidate_eq_state()
         try:
             await self.refresh_eq_state()
@@ -563,7 +577,7 @@ class Player(PlayerBase):
         """Set equalizer preset."""
         await self._audio_config.set_eq_preset(preset)
 
-    async def set_eq_custom(self, eq_values: list[int]) -> None:
+    async def set_eq_custom(self, eq_values: Sequence[float]) -> None:
         """Set custom 10-band equalizer values."""
         await self._audio_config.set_eq_custom(eq_values)
 

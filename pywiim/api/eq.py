@@ -9,11 +9,11 @@ all results come from the device each call.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, cast
 
 from ..exceptions import WiiMResponseError
 from .constants import (
-    API_ENDPOINT_EQ_CUSTOM,
     API_ENDPOINT_EQ_GET,
     API_ENDPOINT_EQ_LIST,
     API_ENDPOINT_EQ_OFF,
@@ -21,6 +21,7 @@ from .constants import (
     API_ENDPOINT_EQ_PRESET,
     EQ_PRESET_MAP,
 )
+from .peq import GEQ_BAND_NAMES, GraphicEQBand
 
 
 class EQAPI:
@@ -161,20 +162,20 @@ class EQAPI:
     # Custom 10-band upload
     # ------------------------------------------------------------------
 
-    async def set_eq_custom(self, eq_values: list[int]) -> None:
-        """Upload custom 10-band EQ in LinkPlay format (list of 10 ints).
+    async def set_eq_custom(self, eq_values: Sequence[float]) -> None:
+        """Apply and verify a 10-band graphic EQ curve in dB.
 
         Args:
-            eq_values: List of exactly 10 integer values for the EQ bands.
+            eq_values: Ten gains from 31 Hz to 16 kHz, each -12 to +12 dB.
 
         Raises:
             ValueError: If eq_values doesn't have exactly 10 bands.
-            WiiMError: If the request fails.
+            WiiMError: If the device cannot confirm Eq10HP support or the write.
         """
         if len(eq_values) != 10:
             raise ValueError("EQ must have exactly 10 bands")
-        eq_str = ",".join(str(v) for v in eq_values)
-        await self._request(f"{API_ENDPOINT_EQ_CUSTOM}{eq_str}")  # type: ignore[attr-defined]
+        bands = [GraphicEQBand(name, value) for name, value in zip(GEQ_BAND_NAMES, eq_values, strict=True)]
+        await self.set_graphic_eq_bands(bands)  # type: ignore[attr-defined]
 
     async def get_eq(self) -> dict[str, Any]:
         """Get current EQ band values.

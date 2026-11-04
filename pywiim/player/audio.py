@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from ..api.audio_settings import output_channel_value
@@ -510,18 +511,23 @@ class AudioConfiguration:
             if changed and self.player._on_state_changed:
                 self.player._on_state_changed()
 
-    async def set_eq_custom(self, eq_values: list[int]) -> None:
+    async def set_eq_custom(self, eq_values: Sequence[float]) -> None:
         """Set custom 10-band equalizer values.
 
         Args:
-            eq_values: List of exactly 10 integer values.
+            eq_values: Ten band gains in dB.
         """
-        # Call API (raises on failure)
-        await self.player.client.set_eq_custom(eq_values)
-
-        # Call callback to notify state change (EQ values changed)
-        if self.player._on_state_changed:
-            self.player._on_state_changed()
+        try:
+            await self.player.client.set_eq_custom(eq_values)
+        except WiiMError:
+            await self.player._reconcile_failed_eq_command()
+            raise
+        self.player._state_mgr._invalidate_eq_state()
+        try:
+            await self.player.refresh_eq_state()
+        finally:
+            if self.player._on_state_changed:
+                self.player._on_state_changed()
 
     async def set_eq_enabled(self, enabled: bool) -> None:
         """Enable or disable the equalizer.

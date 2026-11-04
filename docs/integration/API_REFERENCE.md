@@ -321,29 +321,42 @@ detailed = await player.client.get_peq_preset_list_detailed()    # List[PEQPrese
 
 # Write (see pywiim.api.peq for PEQBand, validation, and full API)
 await player.client.set_peq_bands(bands, source_name="wifi")
-await player.client.set_peq_enabled(True, source_name="wifi")
-await player.client.save_peq("My Preset", source_name="wifi")
+await player.client.save_peq("My Preset", source_name="wifi")  # creates; rejects existing names
+await player.client.save_peq("My Preset", source_name="wifi", overwrite=True)  # replaces explicitly
 await player.client.load_peq("My Preset", source_name="wifi")
+await player.client.rename_peq("My Preset", "Desk")
+await player.client.delete_peq("Desk")
 ```
 
 **Data models** (from `pywiim.api.peq`): `PEQBand`, `PEQSettings`, `PEQPresetInfo`. Constants: `PEQ_MODE_OFF`, `PEQ_MODE_LOW_SHELF`, `PEQ_MODE_PEAK`, `PEQ_MODE_HIGH_SHELF`, `PEQ_CHANNEL_MODE_STEREO`, `PEQ_CHANNEL_MODE_LR`.
 
-##### LV2 graphic 10-band EQ (`Eq10HP`) — WiiM only, read-only
+Setting bands activates PEQ. Band writes are read back from the same input, and profile saves are reloaded to verify the stored curve. Saving an existing custom name requires `overwrite=True`; factory names cannot be overwritten. Saving and reloading are separate device commands, not an atomic transaction: if verification fails after a reload, pywiim attempts to restore the previous bands and reports if restoration also fails. Rename and delete verify the updated preset list. Player preset caches are not automatically refreshed by these client methods.
 
-WiiM firmware can also load a **10-band graphic** LV2 plugin (**`http://moddevices.com/plugins/caps/Eq10HP`**) for per-source EQ. Reports indicate the **same HTTP command family** as above (`EQGetLV2SourceBandEx`, `EQSetLV2SourceBand`, `EQChangeSourceFX`, etc.), but with **`pluginURI`** set to **`http://moddevices.com/plugins/caps/Eq10HP`** and band parameters such as `band31hz`, `band63hz`, … instead of the parametric `a_mode` / `a_freq` / … shape used by **`EqNp`**.
+##### LV2 graphic 10-band EQ (`Eq10HP`)
 
-pywiim exposes read-only helpers for this plugin. Use the WiiM app for setup/write workflows until write behavior is validated across more firmware versions.
+Some WiiM firmware exposes a **10-band graphic** LV2 plugin (**`http://moddevices.com/plugins/caps/Eq10HP`**) through the same command family. The setter requires a valid plugin response, works on the identified input, and verifies every requested gain independently. It does not infer support from the PEQ capability. Only stereo mode is supported by this writer. Changing bands activates graphic EQ and creates an unsaved curve; it does not create a saved preset.
 
 ```python
 settings = await player.client.get_graphic_eq_bands()
 settings = await player.client.get_graphic_eq_bands(source_name="wifi")
 # settings: GraphicEQSettings (enabled, channel_mode, name, eq_level, bands)
+# Only bands actually reported by the device are included.
+
+from pywiim import GraphicEQBand
+await player.client.set_graphic_eq_bands(
+    [GraphicEQBand("band31hz", 2.0), GraphicEQBand("band1khz", -1.0)],
+    source_name="wifi",  # omit for the current input
+)
+# Or set all ten gains in order, -12 to +12 dB:
+await player.client.set_eq_custom([-2, 0, 2, 3, 1, 0, 0, -1, 2, 4])
 
 presets = await player.client.get_graphic_eq_preset_list()
 # {"custom": [...], "preset": ["Flat", "Acoustic", ...]}
 ```
 
 **Data models** (from `pywiim.api.peq`): `GraphicEQBand`, `GraphicEQSettings`. Constant: `GEQ_PLUGIN_URI`.
+
+The old comma-separated `EQSetBand` request was acknowledged without changing the curve on a WiiM Pro running `Linkplay.4.8.833748`. The verified LV2 writer was tested on that player; other models, firmware, inputs and graphic L/R behavior remain unconfirmed. Unsupported or unverifiable writes raise an error rather than reporting success.
 
 ##### RoomFit — WiiM only
 
@@ -887,6 +900,7 @@ queue_items = await player.get_queue()  # list[dict] when supports_queue_browse
 
 # EQ control
 await player.set_eq_preset(preset: str)
+await player.set_eq_custom(eq_values)  # ten gains in dB; verified Eq10HP write
 await player.get_eq()  # Returns dict[str, Any]
 await player.get_eq_presets()  # Returns list[str]
 await player.get_eq_status()  # Returns bool | None when unavailable
@@ -896,7 +910,7 @@ await player.client.get_peq_bands(source_name=None)
 await player.client.set_peq_bands(bands, channel_mode="Stereo", source_name=None)
 await player.client.set_peq_enabled(enabled, source_name=None)
 await player.client.get_peq_preset_list()
-await player.client.save_peq(name, source_name=None)
+await player.client.save_peq(name, source_name=None, overwrite=False)
 await player.client.load_peq(name, source_name=None)
 await player.client.delete_peq(name)
 await player.client.rename_peq(name, new_name)

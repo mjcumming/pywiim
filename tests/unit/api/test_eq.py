@@ -129,15 +129,16 @@ class TestEQAPICustom:
 
     @pytest.mark.asyncio
     async def test_set_eq_custom(self, mock_client):
-        """Test setting custom 10-band EQ."""
-        mock_client._request = AsyncMock(return_value={"raw": "OK"})
+        """The existing API delegates to the verified graphic dB writer."""
+        mock_client.set_graphic_eq_bands = AsyncMock()
         eq_values = [0, 2, 4, 6, 8, 10, 8, 6, 4, 2]
 
         await mock_client.set_eq_custom(eq_values)
 
-        mock_client._request.assert_called_once()
-        call_args = mock_client._request.call_args[0]
-        assert "0,2,4,6,8,10,8,6,4,2" in call_args[0]
+        sent = mock_client.set_graphic_eq_bands.await_args.args[0]
+        assert [band.gain for band in sent] == eq_values
+        assert sent[0].name == "band31hz"
+        assert sent[-1].name == "band16khz"
 
     @pytest.mark.asyncio
     async def test_set_eq_custom_wrong_length(self, mock_client):

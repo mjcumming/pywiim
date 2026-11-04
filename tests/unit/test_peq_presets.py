@@ -51,6 +51,35 @@ async def test_failed_peq_load_does_not_update_player(mock_client):
 
 
 @pytest.mark.asyncio
+async def test_unconfirmed_peq_load_reconciles_if_device_did_apply_it(mock_client):
+    callback = MagicMock()
+    player = Player(mock_client, on_state_changed=callback)
+    player._peq_presets = ["Night"]
+    mock_client._capabilities["supports_peq"] = True
+    mock_client.load_peq = AsyncMock(side_effect=WiiMResponseError("readback failed"))
+    mock_client.get_eq = AsyncMock(return_value={"EQStat": "Off", "Name": "Flat"})
+    mock_client.get_peq_bands = AsyncMock(return_value=PEQSettings(enabled=True, name="Night"))
+    with pytest.raises(WiiMResponseError, match="readback failed"):
+        await player.set_peq_preset("Night")
+    assert player.peq_preset == "Night"
+    callback.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_peq_load_keeps_previous_state_when_refresh_also_fails(mock_client):
+    player = Player(mock_client)
+    player._peq_presets = ["Night", "Day"]
+    player._peq_enabled = True
+    player._peq_preset = "Day"
+    mock_client.load_peq = AsyncMock(side_effect=WiiMResponseError("write uncertain"))
+    mock_client.get_eq = AsyncMock(side_effect=WiiMResponseError("read unavailable"))
+    with pytest.raises(WiiMResponseError, match="write uncertain"):
+        await player.set_peq_preset("Night")
+    assert player.peq_preset == "Day"
+    assert player.peq_enabled is True
+
+
+@pytest.mark.asyncio
 async def test_empty_list_is_cached_and_failed_list_can_be_retried(mock_client):
     player = Player(mock_client)
     mock_client.get_peq_preset_list = AsyncMock(side_effect=[WiiMResponseError("failed"), {"custom": [], "preset": []}])

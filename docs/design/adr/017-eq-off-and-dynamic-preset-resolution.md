@@ -25,10 +25,15 @@ The Audio Pro A10 MkII reports an EQ preset for each input and returns `EQGetLis
 - Invalidate the current EQ state and preset list when the active input changes, then fetch the new input's data. Reject in-flight results for an old input. An empty `Name` with graphic EQ on means unsaved `Custom` bands, not a saved preset. Failed or malformed reads do not replace valid same-input state with Off; list reads retry on the configuration polling cadence.
 - After a graphic preset or enable/disable command, or a PEQ preset or disable command, read back graphic and supported PEQ state. An acknowledgment alone does not establish the resulting state. Numeric playback-status EQ mappings are opt-in for verified legacy profiles.
 
+### 4. Custom bands and PEQ profiles
+- The LV2 band writer requires a valid response identifying the requested plugin and input, pins a current-input operation to the observed source, then checks every written parameter against device readback. Missing gains are not converted to zero. Graphic writes use `Eq10HP` stereo gains in dB; they do not depend on `supports_peq`, and unverified graphic L/R writes are rejected.
+- The old comma-separated `set_eq_custom` command is replaced by the verified graphic writer. Its ten values are dB gains from -12 to +12, and a successful Player write refreshes both EQ states. A device without a confirmed Eq10HP response fails explicitly rather than falling back to an unproven legacy upload.
+- PEQ custom profiles are created, edited and managed in pywiim. Replacing an existing custom name requires explicit `overwrite=True`; an existing factory name cannot be replaced. Save checks the list and active bands, reloads the stored profile, and compares its bands. If verification after reload fails, it attempts to restore the prior bands and reports a failed restoration. This sequence cannot be atomic. Rename and delete check the resulting list.
+
 ## Verification and limits
 
 - Regression coverage includes the supplied A10 and Pro Plus responses, source changes, temporary failures, and repeated configuration polls. Device confirmation is specific to the model and firmware actually tested; the reported A10 and Pro Plus have not yet been tested with this change.
-- The existing `set_eq_custom` band upload is outside the verified selector commands. On one WiiM Pro (`Linkplay.4.8.833748`), the comma-separated `EQSetBand` request returned `OK` without changing the readback. Do not treat its acknowledgment as evidence that the bands were applied; its device-specific write behavior needs separate investigation.
+- On one WiiM Pro (`Linkplay.4.8.833748`), comma-separated `EQSetBand` returned `OK` without changing the readback. Source-scoped and current-input LV2 graphic writes, ten-band custom writes, and PEQ create/overwrite/load/rename/delete were checked against device responses; the original curves and preset list were restored. No A10, Pro Plus, Yamaha, other firmware, or other input was available for those write tests.
 - Yamaha sound programs need their own verified sound-state protocol and capability evidence. Linkplay identification alone does not establish support for WiiM presets.
 
 ## Consequences

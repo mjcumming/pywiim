@@ -307,11 +307,7 @@ async def adjust_eq():
         print(f"Current EQ: {eq}")
         
         # Set custom EQ
-        await client.set_eq_custom(
-            bass=6,      # Boost bass
-            treble=3,   # Slight treble boost
-            balance=0.0 # Center balance
-        )
+        await client.set_eq_custom([6, 3, 1, 0, 0, 0, 0, 1, 2, 3])  # ten gains in dB
         print("Custom EQ applied")
         
         # Enable/disable EQ

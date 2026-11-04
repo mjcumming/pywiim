@@ -393,11 +393,29 @@ class TestAudioConfiguration:
         """Test setting custom EQ values."""
         mock_player.client.set_eq_custom = AsyncMock()
         mock_player._on_state_changed = MagicMock()
+        mock_player._status_model = PlayerStatus(source="wifi", eq_preset="Rock")
+        mock_player._state_mgr._set_eq_source("wifi")
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "", "source_name": "wifi"})
 
         eq_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         await audio_config.set_eq_custom(eq_values)
 
         mock_player.client.set_eq_custom.assert_called_once_with(eq_values)
+        assert mock_player.eq_is_custom is True
+        mock_player._on_state_changed.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_unconfirmed_custom_write_reconciles_when_device_did_apply_it(self, audio_config, mock_player):
+        from pywiim.exceptions import WiiMResponseError
+
+        mock_player.client.set_eq_custom = AsyncMock(side_effect=WiiMResponseError("readback failed"))
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "", "source_name": "wifi"})
+        mock_player._status_model = PlayerStatus(source="wifi", eq_preset="Rock")
+        mock_player._state_mgr._set_eq_source("wifi")
+        mock_player._on_state_changed = MagicMock()
+        with pytest.raises(WiiMResponseError, match="readback failed"):
+            await audio_config.set_eq_custom([0] * 10)
+        assert mock_player.eq_is_custom is True
         mock_player._on_state_changed.assert_called_once()
 
     @pytest.mark.asyncio
