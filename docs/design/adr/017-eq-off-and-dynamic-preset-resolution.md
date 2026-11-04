@@ -1,7 +1,7 @@
 # ADR 017: EQ Presets — “Off” Semantics and Device-Native Preset Names
 
 ## Status
-Accepted - 2026-04-20. The 2026-11-03 amendments are proposed in [PR #37](https://github.com/mjcumming/pywiim/pull/37).
+Accepted - 2026-04-20. The 2026-11-03 amendments are tracked in [PR #37](https://github.com/mjcumming/pywiim/pull/37).
 
 ## Context
 Users expect **EQ fully bypassed** as a first-class sound mode. Firmware can expose **custom preset names** and new labels (e.g. “Vocal Booster”) that are not in a static library map. Hardcoding only legacy names caused **`set_eq_preset`** to fail on newer firmware while the device list showed valid options.
