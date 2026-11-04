@@ -580,7 +580,7 @@ class TestStateManager:
 
     @pytest.mark.asyncio
     async def test_refresh_fetches_eq_presets(self, state_manager, mock_player):
-        """Test refresh fetches EQ presets on track change."""
+        """Test refresh fetches EQ presets when the list is not cached."""
         mock_status = PlayerStatus(play_state="play", title="New Track")
         mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
         TestStateManager._setup_refresh_mocks(mock_player, state_manager)
@@ -780,15 +780,17 @@ class TestStateManager:
         TestStateManager._setup_refresh_mocks(mock_player, state_manager)
         type(mock_player.client).capabilities = PropertyMock(return_value={"supports_peq": True})
         mock_player._peq_presets = ["Night"]
+        mock_player._last_peq_presets_check = time.time()
         mock_player.client.get_peq_bands = AsyncMock(
             side_effect=[PEQSettings(enabled=True, name="Night"), PEQSettings(enabled=False, name="Night")]
         )
         mock_player.client.get_peq_preset_list = AsyncMock()
         with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
             mock_groupops.return_value._synchronize_group_state = AsyncMock()
-            await state_manager.refresh(full=True)
+            await state_manager.refresh(full=False)
             assert mock_player.peq_preset == "Night"
-            await state_manager.refresh(full=True)
+            mock_player._last_peq_state_check -= 61
+            await state_manager.refresh(full=False)
         assert mock_player.peq_preset is None
         mock_player.client.get_peq_preset_list.assert_not_awaited()
 

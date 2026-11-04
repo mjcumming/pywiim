@@ -53,5 +53,6 @@ File naming: `NNN-short-slug.md` (e.g. `002-trust-api-after-success.md`). Number
 | [020](020-solo-and-group-channel-selection.md) | Solo and Group Output Channel Selection | Proposed |
 
 | [021](021-a10-mkii-aux-input-evidence.md) | A10 MkII AUX Input — Advertised Command Evidence and Selectable Inputs | Proposed |
+| [022](022-eq-preset-list-refresh.md) | Refresh EQ Preset Lists Separately from Active State | Accepted |
 
 When adding a new ADR, add a row to this table.

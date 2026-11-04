@@ -7,6 +7,7 @@ that adds group awareness, role management, and cached state with getter methods
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -410,15 +411,24 @@ class Player(PlayerBase):
             self._on_state_changed()
 
     async def initialize_peq_presets(self) -> None:
-        """Read saved PEQ preset names once per player session."""
+        """Read saved PEQ names if the player's cache is not initialized."""
         if self._peq_presets is not None:
             return
-        presets = await self.client.get_peq_preset_list()
-        self._peq_presets = list(dict.fromkeys(name for key in ("custom", "preset") for name in presets[key] if name))
+        await self._refresh_peq_presets()
         try:
             await self.refresh_peq_preset()
         except WiiMError as err:
             _LOGGER.debug("Could not read initial PEQ state for %s: %s", self.host, err)
+
+    async def _refresh_peq_presets(self) -> None:
+        """Refresh saved names without changing the active PEQ state."""
+        try:
+            presets = await self.client.get_peq_preset_list()
+            self._peq_presets = list(
+                dict.fromkeys(name for key in ("custom", "preset") for name in presets[key] if name)
+            )
+        finally:
+            self._last_peq_presets_check = time.time()
 
     async def refresh_peq_preset(self) -> None:
         """Refresh the current input's active PEQ preset."""

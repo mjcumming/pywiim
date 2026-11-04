@@ -63,7 +63,7 @@ class PollingStrategy:
     # Polling interval constants (in seconds)
     FAST_POLL_INTERVAL = 1.0  # Active Playback / UI Responsiveness
     NORMAL_POLL_INTERVAL = 5.0  # Idle / Background
-    CONFIGURATION_INTERVAL = 60.0  # Bluetooth, EQ presets, device info
+    CONFIGURATION_INTERVAL = 60.0  # Bluetooth, active EQ state, device info
     # Faster tier for user-toggled hardware (12V trigger, subwoofer) — light GETs, visible in HA/monitor
     HARDWARE_STATUS_INTERVAL = 15.0
     METADATA_CHECK_INTERVAL = 1.0  # Check for track changes
