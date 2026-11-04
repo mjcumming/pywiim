@@ -58,6 +58,10 @@ def _coerce_player_play_state(value: str | None) -> _PlayerPlayState | None:
 # UPnP retry cooldown - wait this many seconds between failed creation attempts
 UPNP_RETRY_COOLDOWN = 60.0
 
+# Saved EQ names change infrequently; retry an empty initial cache sooner.
+EQ_PRESET_LIST_INTERVAL = 15 * 60.0
+EQ_PRESET_INITIAL_RETRY_INTERVAL = 60.0
+
 # Sources where play_url() filename fallback is the intended title.
 # WiiM reports URL playback as custompushurl (display name "URL Stream").
 _URL_PLAYBACK_SOURCES = frozenset({"wifi", "network", "ethernet", "usb", "udisk", "http", "custompushurl"})
@@ -1079,21 +1083,14 @@ class StateManager:
                 # Clear cached state on exception to avoid showing stale information
                 self.player._audio_output_status = None
 
-        # EQ Preset List - Fetch on full refresh, track change, or periodically (every 60s)
-        # Track changes may indicate preset changes (user switched to different preset/station)
-        # Periodic fetch ensures list stays current even without activity
+        # Saved lists change infrequently and are independent of track changes.
+        # A new input invalidates the graphic list and needs an immediate read.
         eq_supported = self.player.client.capabilities.get("supports_eq", False)
-        should_fetch_eq_presets = (
-            full
-            or track_changed
-            or (self.player._eq_presets is None and now - (self.player._last_eq_presets_check or 0) >= 60)
-            or (
-                self._polling_strategy
-                and self._polling_strategy.should_fetch_eq_info(
-                    self.player._last_eq_presets_check, eq_supported, now=now
-                )
-            )
+        last_eq_list_check = self.player._last_eq_presets_check or 0
+        eq_list_interval = (
+            EQ_PRESET_INITIAL_RETRY_INTERVAL if self.player._eq_presets is None else EQ_PRESET_LIST_INTERVAL
         )
+        should_fetch_eq_presets = full or not last_eq_list_check or now - last_eq_list_check >= eq_list_interval
         if should_fetch_eq_presets and eq_supported:
             source = self.player._eq_state_source
             revision = self.player._eq_state_revision
@@ -1107,9 +1104,8 @@ class StateManager:
                 if source == self.player._eq_state_source and revision == self.player._eq_state_revision:
                     self.player._last_eq_presets_check = now
 
-        # EQGetBand - enabled flag and preset name. Same cadence as the preset list,
-        # plus once when getPlayerStatus eq changes, so a real app change is confirmed
-        # without trusting the stale status field.
+        # EQGetBand - enabled flag and preset name. Active state retains its own
+        # shorter cadence and can change without the saved preset list changing.
         should_fetch_eq_status = (
             full
             or track_changed
@@ -1289,9 +1285,18 @@ class StateManager:
             except Exception as err:
                 _LOGGER.debug("Failed to fetch DAC digital filter for %s: %s", self.player.host, err)
 
-        # RoomFit. The profile list changes in the app, so refresh names and the
-        # switch together on the same 60s tier. supports_peq is the gate.
+        # PEQ names are cached independently of the current input's active state.
         peq_supported = bool(self.player.client.capabilities.get("supports_peq", False))
+        last_peq_list_check = self.player._last_peq_presets_check or 0
+        peq_list_interval = (
+            EQ_PRESET_INITIAL_RETRY_INTERVAL if self.player._peq_presets is None else EQ_PRESET_LIST_INTERVAL
+        )
+        if peq_supported and (full or not last_peq_list_check or now - last_peq_list_check >= peq_list_interval):
+            try:
+                await self.player._refresh_peq_presets()
+            except Exception as err:
+                _LOGGER.debug("Failed to fetch PEQ presets for %s: %s", self.player.host, err)
+
         should_fetch_peq = (
             full
             or eq_source_changed
@@ -1309,6 +1314,7 @@ class StateManager:
                 self.player._last_peq_state_check = now
             except Exception as err:
                 _LOGGER.debug("Failed to fetch PEQ state for %s: %s", self.player.host, err)
+        # RoomFit profiles and state remain on their existing configuration tier.
         should_fetch_room = full or (
             self._polling_strategy
             and self._polling_strategy.should_fetch_led_indicator(

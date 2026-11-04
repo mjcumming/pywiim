@@ -306,7 +306,7 @@ if player.client.capabilities.get("supports_peq", False):
     # ...
 ```
 
-For a saved-preset selector, call `await player.initialize_peq_presets()` once per player session. The cached `player.peq_presets` list is not refreshed automatically; create a new player session to discover changes. `player.peq_preset` is the active name, if known; `player.peq_enabled` distinguishes active, inactive, and unknown. Use `await player.set_peq_preset(name)` to load a listed preset and `await player.disable_peq()` to disable active PEQ. An existing saved preset named `Off` remains loadable. Player refresh updates the current state independently of the preset list.
+Player refresh loads supported saved EQ preset lists at startup and approximately every 15 minutes while the application continues polling. `await player.initialize_peq_presets()` initializes the PEQ list if needed; an explicit `await player.refresh(full=True)` also refreshes lists. Failed reads retain the last valid list and initial failures are retried sooner. `player.peq_preset` is the active name, if known; `player.peq_enabled` distinguishes active, inactive, and unknown. Use `await player.set_peq_preset(name)` to load a listed preset and `await player.disable_peq()` to disable active PEQ. An existing saved preset named `Off` remains loadable. Active state refreshes independently of the preset list.
 
 **Client methods (use when `supports_peq` is True):**
 
@@ -332,7 +332,7 @@ await player.client.delete_peq("Desk")
 
 PEQ and RoomFit band lists contain only bands for which the device supplied all four unambiguous numeric parameters. Missing or malformed parameters do not become default-looking bands; the lists may be empty or shorter than ten. PEQ enabled state and name can still be available when bands are incomplete.
 
-Setting bands activates PEQ. Band writes are read back from the same input, and profile saves are reloaded to verify the stored curve. Saving an existing custom name requires `overwrite=True`; factory names cannot be overwritten. Saving and reloading are separate device commands, not an atomic transaction: if verification fails after a reload, pywiim attempts to restore the previous bands and reports if restoration also fails. Rename and delete verify the updated preset list. Player preset caches are not automatically refreshed by these client methods.
+Setting bands activates PEQ. Band writes are read back from the same input, and profile saves are reloaded to verify the stored curve. Saving an existing custom name requires `overwrite=True`; factory names cannot be overwritten. Saving and reloading are separate device commands, not an atomic transaction: if verification fails after a reload, pywiim attempts to restore the previous bands and reports if restoration also fails. Rename and delete verify the updated preset list. These client methods do not immediately update Player preset caches; the next scheduled or full Player refresh does.
 
 ##### LV2 graphic 10-band EQ (`Eq10HP`)
 

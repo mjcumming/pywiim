@@ -158,6 +158,7 @@ class PlayerBase:
         self._room_correction_name: str = ""
         self._last_room_correction_check: float = 0
         self._peq_presets: list[str] | None = None
+        self._last_peq_presets_check: float = 0
         self._peq_preset: str | None = None
         self._peq_enabled: bool | None = None
         self._last_peq_state_check: float = 0

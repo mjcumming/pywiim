@@ -21,8 +21,8 @@ The Audio Pro A10 MkII reports an EQ preset for each input and returns `EQGetLis
 
 ### 3. Refresh
 - The current preset **name** is `EQGetBand` `Name`. `getPlayerStatus` `eq` stays stale on current firmware (often `flat` / `0` after `EQLoad`) and must not replace a name already read from `EQGetBand`.
-- EQ **enabled** state, that name, and the preset list refresh on the same **periodic** cadence as other configuration-tier features (~60s), and again when `getPlayerStatus` `eq` changes to a new value.
-- Invalidate the current EQ state and preset list when the active input changes, then fetch the new input's data. Reject in-flight results for an old input. An empty `Name` with graphic EQ on means unsaved `Custom` bands, not a saved preset. Failed or malformed reads do not replace valid same-input state with Off; list reads retry on the configuration polling cadence.
+- EQ **enabled** state and that name refresh on the configuration-tier cadence (~60s), and again when `getPlayerStatus` `eq` changes to a new value. Saved preset lists use the separate 15-minute policy in [ADR 022](022-eq-preset-list-refresh.md).
+- Invalidate the current EQ state and graphic preset list when the active input changes, then fetch the new input's data. Reject in-flight results for an old input. An empty `Name` with graphic EQ on means unsaved `Custom` bands, not a saved preset. Failed or malformed reads do not replace valid same-input state with Off.
 - After a graphic preset or enable/disable command, or a PEQ preset or disable command, read back graphic and supported PEQ state. An acknowledgment alone does not establish the resulting state. Numeric playback-status EQ mappings are opt-in for verified legacy profiles.
 
 ### 4. Custom bands and PEQ profiles

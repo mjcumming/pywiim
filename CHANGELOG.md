@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-11-03
+
+### Changed
+
+- Refresh saved graphic and parametric EQ preset names on startup and approximately every 15 minutes while the player is polled. Graphic lists also refresh on input changes and both lists on an explicit full refresh. Active EQ state keeps its separate polling cadence.
+
+### Fixed
+
+- Retry an initially unavailable EQ preset list after 60 seconds and preserve the last valid list if a later read fails. Track changes no longer trigger graphic preset-list reads.
+
 ## [3.0.0] - 2026-11-03
 
 ### Changed
