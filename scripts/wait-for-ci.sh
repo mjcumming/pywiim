@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# A release must use a commit whose main-branch CI has passed.
+# Reuse a successful PR run for the same tree, or wait for main-branch CI.
 set -euo pipefail
 
+if bash "$(dirname "$0")/has-tested-pr-tree.sh" ci.yml 3.11 3.12; then
+    exit 0
+fi
+
+echo "No matching successful PR CI; waiting for main-branch CI"
 attempts=${CI_WAIT_ATTEMPTS:-90}
 interval=${CI_WAIT_INTERVAL:-10}
 

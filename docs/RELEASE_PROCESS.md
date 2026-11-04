@@ -10,8 +10,10 @@ publishing path; local commands do not stage, commit, or push unrelated work.
 2. Add a versioned entry to [CHANGELOG.md](../CHANGELOG.md). Describe
    user-visible fixes and compatibility changes.
 3. Open a PR, review the changes, and pass CI. Merge it to `main`.
-4. Confirm the `main` CI run for the merged commit succeeds. Device tests
-   are useful when relevant and hardware is available; record what was tested.
+4. Verify the release workflow succeeds. It may reuse successful PR CI when
+   that run recorded the exact release tree; otherwise it waits for CI on the
+   merged commit. Device tests are useful when relevant and hardware is
+   available; record what was tested.
 
 Use semantic versioning and avoid a release containing no product changes.
 Do not publish an unpublished dependency or commit the contents of another
@@ -28,8 +30,8 @@ make release VERSION=3.0.1
 Replace the example with the version already merged to `main`. Alternatively,
 run the **Release and Publish** GitHub Actions workflow on `main` and supply
 that version. The workflow checks that the commit is on `main`, the version
-files match, a changelog entry exists, and main-branch CI passed for that
-commit. It builds and publishes to PyPI, then creates the GitHub tag and
+files match, a changelog entry exists, and CI passed for the exact release
+tree. It builds and publishes to PyPI, then creates the GitHub tag and
 release with the same artifacts. A pushed version tag can also trigger the
 same workflow and checks.
 

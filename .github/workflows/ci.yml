@@ -65,3 +65,17 @@ jobs:
         # Fail if below 55% (matches codecov.yml target)
         python -c "import sys; sys.exit(0 if float('${COVERAGE}') >= 55.0 else 1)" || (echo "❌ Coverage ${COVERAGE}% is below 55% threshold!" && exit 1)
 
+    # The entire matrix must pass before either artifact can be used for release.
+    - name: Record tested tree
+      if: github.event_name == 'pull_request'
+      run: git rev-parse 'HEAD^{tree}' > "$RUNNER_TEMP/tested-tree"
+
+    - name: Save tested tree
+      if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ci-tested-tree-${{ matrix.python-version }}-${{ github.run_attempt }}
+        path: ${{ runner.temp }}/tested-tree
+        if-no-files-found: error
+        retention-days: 30
+

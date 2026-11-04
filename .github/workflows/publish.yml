@@ -17,7 +17,8 @@ jobs:
     permissions:
       contents: write  # Required for creating releases
       id-token: write  # Required for PyPI trusted publishing
-      actions: read    # Read CI results for the release commit
+      actions: read    # Read CI results and the tested-tree artifact
+      pull-requests: read  # Find the merged PR for the release commit
     
     env:
       TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
@@ -45,7 +46,7 @@ jobs:
           fi
         fi
 
-    - name: Wait for main-branch CI
+    - name: Verify CI for release
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: bash scripts/wait-for-ci.sh
