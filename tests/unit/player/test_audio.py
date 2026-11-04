@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock
 import pytest
 
 from pywiim.api.base import ApiResponse
+from pywiim.api.peq import PEQSettings
 from pywiim.models import PlayerStatus
 
 
@@ -20,6 +21,7 @@ class TestAudioConfiguration:
         from pywiim.player import Player
 
         player = Player(mock_client)
+        player.client.get_peq_bands = AsyncMock(return_value=PEQSettings(enabled=False))
         player._status_model = PlayerStatus()
         player._audio_output_status = None
         player._on_state_changed = None
@@ -362,11 +364,12 @@ class TestAudioConfiguration:
         mock_player.client.set_eq_preset = AsyncMock()
         mock_player._on_state_changed = MagicMock()
         mock_player._eq_presets = ["Flat", "Rock"]
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "Rock"})
 
         await audio_config.set_eq_preset("rock")
 
         mock_player.client.set_eq_preset.assert_called_once_with("rock", available_presets=["Flat", "Rock"])
-        assert mock_player._status_model.eq_preset == "rock"
+        assert mock_player._status_model.eq_preset == "Rock"
         mock_player._on_state_changed.assert_called_once()
 
     @pytest.mark.asyncio
@@ -375,6 +378,7 @@ class TestAudioConfiguration:
         mock_player.client.set_eq_preset = AsyncMock()
         mock_player._on_state_changed = MagicMock()
         mock_player._eq_presets = ["Flat", "Vocal Booster", "My Movie Night"]
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "Vocal Booster"})
 
         await audio_config.set_eq_preset("vocal booster")
 
@@ -389,11 +393,29 @@ class TestAudioConfiguration:
         """Test setting custom EQ values."""
         mock_player.client.set_eq_custom = AsyncMock()
         mock_player._on_state_changed = MagicMock()
+        mock_player._status_model = PlayerStatus(source="wifi", eq_preset="Rock")
+        mock_player._state_mgr._set_eq_source("wifi")
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "", "source_name": "wifi"})
 
         eq_values = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         await audio_config.set_eq_custom(eq_values)
 
         mock_player.client.set_eq_custom.assert_called_once_with(eq_values)
+        assert mock_player.eq_is_custom is True
+        mock_player._on_state_changed.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_unconfirmed_custom_write_reconciles_when_device_did_apply_it(self, audio_config, mock_player):
+        from pywiim.exceptions import WiiMResponseError
+
+        mock_player.client.set_eq_custom = AsyncMock(side_effect=WiiMResponseError("readback failed"))
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "", "source_name": "wifi"})
+        mock_player._status_model = PlayerStatus(source="wifi", eq_preset="Rock")
+        mock_player._state_mgr._set_eq_source("wifi")
+        mock_player._on_state_changed = MagicMock()
+        with pytest.raises(WiiMResponseError, match="readback failed"):
+            await audio_config.set_eq_custom([0] * 10)
+        assert mock_player.eq_is_custom is True
         mock_player._on_state_changed.assert_called_once()
 
     @pytest.mark.asyncio
@@ -401,6 +423,7 @@ class TestAudioConfiguration:
         """Test enabling/disabling EQ."""
         mock_player.client.set_eq_enabled = AsyncMock()
         mock_player._on_state_changed = MagicMock()
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "Rock"})
 
         await audio_config.set_eq_enabled(True)
 
@@ -789,6 +812,7 @@ class TestEQOffBehavior:
         from pywiim.player import Player
 
         player = Player(mock_client)
+        player.client.get_peq_bands = AsyncMock(return_value=PEQSettings(enabled=False))
         player._status_model = PlayerStatus()
         player._eq_enabled = None  # Not yet fetched
         player._eq_presets = None
@@ -807,6 +831,7 @@ class TestEQOffBehavior:
         """Test that setting preset to 'Off' disables EQ instead of setting a preset."""
         mock_player.client.set_eq_enabled = AsyncMock()
         mock_player._on_state_changed = MagicMock()
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "Off", "Name": "Flat"})
 
         await audio_config.set_eq_preset("Off")
 
@@ -820,6 +845,7 @@ class TestEQOffBehavior:
         """Test that 'off', 'OFF', 'Off' all disable EQ."""
         mock_player.client.set_eq_enabled = AsyncMock()
         mock_player._on_state_changed = MagicMock()
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "Off", "Name": "Flat"})
 
         for off_value in ["off", "OFF", "Off", "oFf"]:
             mock_player.client.set_eq_enabled.reset_mock()
@@ -831,7 +857,7 @@ class TestEQOffBehavior:
         """Test that setting a preset when EQ is off enables EQ first."""
         mock_player.client.set_eq_enabled = AsyncMock()
         mock_player.client.set_eq_preset = AsyncMock()
-        mock_player.client.get_eq = AsyncMock(return_value={"Name": "rock"})
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "rock"})
         mock_player._eq_enabled = False  # EQ is currently off
         mock_player._on_state_changed = MagicMock()
 
@@ -848,7 +874,7 @@ class TestEQOffBehavior:
         """Test that setting a preset when EQ is on doesn't re-enable EQ."""
         mock_player.client.set_eq_enabled = AsyncMock()
         mock_player.client.set_eq_preset = AsyncMock()
-        mock_player.client.get_eq = AsyncMock(return_value={"Name": "rock"})
+        mock_player.client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "rock"})
         mock_player._eq_enabled = True  # EQ is already on
         mock_player._on_state_changed = MagicMock()
 
@@ -861,9 +887,12 @@ class TestEQOffBehavior:
 
     @pytest.mark.asyncio
     async def test_set_eq_enabled_updates_cached_state(self, audio_config, mock_player):
-        """Test that set_eq_enabled updates _eq_enabled immediately."""
+        """The cache follows the device readback after each command."""
         mock_player.client.set_eq_enabled = AsyncMock()
         mock_player._on_state_changed = MagicMock()
+        mock_player.client.get_eq = AsyncMock(
+            side_effect=[{"EQStat": "On", "Name": "Rock"}, {"EQStat": "Off", "Name": "Rock"}]
+        )
 
         # Enable EQ
         await audio_config.set_eq_enabled(True)
@@ -885,16 +914,16 @@ class TestEQOffBehavior:
         """Test that eq_preset property returns the preset when EQ is enabled."""
         mock_player._eq_enabled = True
         mock_player._status_model = PlayerStatus(eq_preset="rock")
+        mock_player._eq_band_preset = "Rock"
 
-        assert mock_player.eq_preset == "Rock"  # Title Case
+        assert mock_player.eq_preset == "Rock"
 
-    def test_eq_preset_property_returns_preset_when_eq_status_unknown(self, mock_player):
-        """Test that eq_preset returns preset when EQ status hasn't been fetched yet."""
+    def test_eq_preset_property_returns_unknown_when_eq_status_unknown(self, mock_player):
+        """Playback status alone does not establish the active EQ."""
         mock_player._eq_enabled = None  # Not yet fetched
         mock_player._status_model = PlayerStatus(eq_preset="jazz")
 
-        # Should return the preset (not "Off") when EQ status is unknown
-        assert mock_player.eq_preset == "Jazz"
+        assert mock_player.eq_preset is None
 
     def test_eq_presets_includes_off_option(self, mock_player):
         """Test that eq_presets list includes 'Off' as first option."""

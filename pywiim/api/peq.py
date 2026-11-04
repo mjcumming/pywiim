@@ -1,4 +1,4 @@
-"""Parametric Equalizer (PEQ) helpers for WiiM HTTP client.
+"""LV2 parametric and graphic equalizer helpers for the WiiM HTTP client.
 
 This mixin implements the official WiiM LV2 PEQ API for 10-band parametric
 equalization. Each band has four adjustable parameters:
@@ -10,8 +10,8 @@ equalization. Each band has four adjustable parameters:
 The PEQ is identified by pluginURI ``http://moddevices.com/plugins/caps/EqNp``.
 The same HTTP command family can target other LV2 plugins on the device (for
 example the 10-band graphic plugin ``http://moddevices.com/plugins/caps/Eq10HP``);
-this module implements **only** ``EqNp``.  See ``docs/integration/API_REFERENCE.md``
-(PEQ section) for integrators who need ``Eq10HP``.
+this module supports both ``EqNp`` and the stereo ``Eq10HP`` band API.
+See ``docs/integration/API_REFERENCE.md`` for usage and verification limits.
 
 All commands operate on a per-source basis (wifi, bluetooth, line-in, etc.).
 
@@ -19,10 +19,9 @@ It assumes the base client provides the ``_request`` coroutine.  No state is
 stored – all results come from the device on each call.
 
 .. note::
-    This API targets the WiiM LV2 PEQ system (``EQGetLV2BandEx``,
-    ``EQSetLV2Band``, etc.) and is **not** available on Audio Pro, Arylic, or
-    generic LinkPlay devices.  The client detects support via the
-    ``supports_peq`` capability flag populated at connect time.
+    PEQ requires the ``supports_peq`` capability. Graphic band operations
+    require an actual Eq10HP response; PEQ capability alone does not establish
+    graphic support on another model or firmware.
 
 # pragma: allow-long-file peq-cohesive
 # This file exceeds the 600 LOC hard limit but is kept as a cohesive unit
@@ -36,11 +35,14 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
 
 from ..exceptions import WiiMError, WiiMResponseError
+from ..normalize import canonical_source_key
+from .base import ApiResponse
 from .constants import (
     API_ENDPOINT_EQ_OFF,
     API_ENDPOINT_PEQ_CHANGE_FX,
@@ -50,10 +52,7 @@ from .constants import (
     API_ENDPOINT_PEQ_GET_LIST,
     API_ENDPOINT_PEQ_GET_NEW_LIST,
     API_ENDPOINT_PEQ_GET_SOURCE_BAND,
-    API_ENDPOINT_PEQ_LOAD,
     API_ENDPOINT_PEQ_RENAME,
-    API_ENDPOINT_PEQ_SAVE,
-    API_ENDPOINT_PEQ_SET_BAND,
     API_ENDPOINT_PEQ_SET_CHANNEL_MODE,
     API_ENDPOINT_PEQ_SET_SOURCE_BAND,
     API_ENDPOINT_PEQ_SOURCE_LOAD,
@@ -247,42 +246,67 @@ class RoomCorrectionSettings:
 
 
 def _parse_eq_band_array(band_array: list[dict[str, Any]]) -> list[PEQBand]:
-    """Parse a raw EQBand/EQBandL/EQBandR array into a list of PEQBand objects.
+    """Parse complete, unambiguous PEQ bands reported by the device.
 
     The device returns bands indexed 0–47 (4 params × 12 bands).
-    We only surface bands a–j (indices 0–39).
+    We only surface bands a–j (indices 0–39); incomplete bands are omitted
+    instead of filling missing parameters with defaults.
     """
-    # Build a flat param_name → value mapping
+    if not isinstance(band_array, list):
+        return []
     param_map: dict[str, float] = {}
+    seen: set[str] = set()
+    invalid: set[str] = set()
     for entry in band_array:
+        if not isinstance(entry, dict):
+            continue
         pname = entry.get("param_name")
         val = entry.get("value")
-        if pname and val is not None:
-            try:
-                param_map[str(pname)] = float(val)
-            except (ValueError, TypeError):
-                _LOGGER.debug("PEQ: skipping unreadable param %r = %r", pname, val)
+        if not isinstance(pname, str) or not pname:
+            continue
+        if pname in seen:
+            invalid.add(pname)
+            continue
+        seen.add(pname)
+        try:
+            if val is None or isinstance(val, bool):
+                raise ValueError("missing or boolean EQ parameter")
+            parsed = float(val)
+            if not math.isfinite(parsed):
+                raise ValueError("non-finite EQ parameter")
+            param_map[pname] = parsed
+        except (ValueError, TypeError):
+            invalid.add(pname)
+            _LOGGER.debug("PEQ: skipping unreadable param %r = %r", pname, val)
 
     bands: list[PEQBand] = []
     for letter in PEQ_BAND_LETTERS:
-        band = PEQBand.from_api_params(letter, param_map)
-        bands.append(band)
+        keys = {f"{letter}_{suffix}" for suffix in ("mode", "freq", "q", "gain")}
+        if not keys.issubset(param_map) or keys & invalid:
+            continue
+        if not param_map[f"{letter}_mode"].is_integer() or param_map[f"{letter}_freq"] <= 0:
+            continue
+        bands.append(PEQBand.from_api_params(letter, param_map))
     return bands
 
 
 def _parse_graphic_eq_band_array(band_array: list[dict[str, Any]]) -> list[GraphicEQBand]:
-    """Parse Eq10HP band array into stable 10-band graphic EQ objects."""
+    """Parse reported Eq10HP bands without inventing missing gains."""
     gains: dict[str, float] = {}
     for entry in band_array:
+        if not isinstance(entry, dict):
+            continue
         pname = entry.get("param_name")
         val = entry.get("value")
         if pname and val is not None:
             try:
-                gains[str(pname)] = float(val)
+                gain = float(val)
+                if math.isfinite(gain):
+                    gains[str(pname)] = gain
             except (ValueError, TypeError):
                 _LOGGER.debug("GEQ: skipping unreadable param %r = %r", pname, val)
 
-    return [GraphicEQBand(name=name, gain=gains.get(name, 0.0)) for name in GEQ_BAND_NAMES]
+    return [GraphicEQBand(name=name, gain=gains[name]) for name in GEQ_BAND_NAMES if name in gains]
 
 
 def _parse_graphic_eq_settings(raw: dict[str, Any]) -> GraphicEQSettings:
@@ -371,6 +395,87 @@ def _bands_to_api_list(bands: list[PEQBand]) -> list[dict[str, Any]]:
     return result
 
 
+def _require_write_ack(response: ApiResponse, endpoint: str) -> None:
+    """Reject explicit errors and unknown acknowledgments before readback."""
+    if isinstance(response.parsed, dict):
+        if not response.parsed.get("error") and str(response.parsed.get("status", "")).lower() == "ok":
+            return
+    elif response.parsed is None and isinstance(response.raw, str) and response.raw.strip().lower() == "ok":
+        return
+    raise WiiMResponseError("EQ command was rejected or returned an invalid acknowledgment", endpoint=endpoint)
+
+
+def _confirm_band_values(actual: Any, expected: list[dict[str, Any]], endpoint: str) -> None:
+    """Require real, finite readback for each requested parameter."""
+    if not isinstance(actual, list):
+        raise WiiMResponseError("EQ band readback is missing", endpoint=endpoint)
+    values: dict[str, float] = {}
+    for entry in actual:
+        if not isinstance(entry, dict) or not isinstance(entry.get("param_name"), str):
+            continue
+        name = entry["param_name"]
+        try:
+            value = float(entry["value"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if name in values or not math.isfinite(value):
+            raise WiiMResponseError("EQ band readback is ambiguous or invalid", endpoint=endpoint)
+        values[name] = value
+    for entry in expected:
+        name = entry["param_name"]
+        tolerance = 0.001 if name.endswith("_mode") else 0.0051 if name.endswith("_q") else 0.051
+        if name not in values or not math.isclose(values[name], float(entry["value"]), rel_tol=0.0, abs_tol=tolerance):
+            raise WiiMResponseError(f"EQ band {name!r} was not confirmed by the device", endpoint=endpoint)
+
+
+def _full_peq_parameters(data: dict[str, Any], endpoint: str) -> dict[str, list[dict[str, Any]]]:
+    """Collect all reported PEQ parameters only when the ten bands are complete."""
+    keys = ("EQBandL", "EQBandR") if data["channelMode"] == PEQ_CHANNEL_MODE_LR else ("EQBand",)
+    required = {f"{letter}_{suffix}" for letter in PEQ_BAND_LETTERS for suffix in ("mode", "freq", "q", "gain")}
+    result: dict[str, list[dict[str, Any]]] = {}
+    for key in keys:
+        entries = data.get(key)
+        if not isinstance(entries, list):
+            raise WiiMResponseError("PEQ bands are incomplete", endpoint=endpoint)
+        params: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("param_name"), str):
+                raise WiiMResponseError("Invalid PEQ bands", endpoint=endpoint)
+            name = entry["param_name"]
+            if not name or name in seen:
+                raise WiiMResponseError("Ambiguous PEQ bands", endpoint=endpoint)
+            seen.add(name)
+            raw_value = entry.get("value")
+            if raw_value is None:
+                raise WiiMResponseError("Invalid PEQ bands", endpoint=endpoint)
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                raise WiiMResponseError("Invalid PEQ bands", endpoint=endpoint) from None
+            if not math.isfinite(value):
+                raise WiiMResponseError("Invalid PEQ bands", endpoint=endpoint)
+            params.append({"param_name": name, "value": value})
+        if not required.issubset(seen):
+            raise WiiMResponseError("PEQ bands are incomplete", endpoint=endpoint)
+        result[key] = params
+    return result
+
+
+def _validate_peq_bands(bands: list[PEQBand]) -> None:
+    if not bands:
+        raise ValueError("At least one PEQ band is required")
+    letters: set[str] = set()
+    for band in bands:
+        if band.letter not in PEQ_BAND_LETTERS or band.letter in letters:
+            raise ValueError(f"Invalid or duplicate PEQ band: {band.letter!r}")
+        letters.add(band.letter)
+        _validate_mode(band.mode)
+        _validate_frequency(band.frequency)
+        _validate_q(band.q)
+        _validate_gain(band.gain)
+
+
 # ---------------------------------------------------------------------------
 # PEQAPI mixin
 # ---------------------------------------------------------------------------
@@ -391,6 +496,61 @@ class PEQAPI:
         if hasattr(self, "_capabilities") and self._capabilities:
             if not self._capabilities.get("supports_peq", False):
                 raise WiiMError("Device does not support the WiiM LV2 PEQ API (supports_peq=False)")
+
+    async def _read_lv2_state(self, plugin_uri: str, source_name: str | None) -> tuple[dict[str, Any], str]:
+        """Read and validate the requested plugin and source without manufacturing state."""
+        if source_name is None:
+            endpoint = API_ENDPOINT_PEQ_GET_BAND + quote(plugin_uri, safe="")
+        else:
+            payload = {"source_name": source_name, "pluginURI": plugin_uri}
+            endpoint = API_ENDPOINT_PEQ_GET_SOURCE_BAND + _encode_json_param(payload)
+        response = await self._request(endpoint)  # type: ignore[attr-defined]
+        data = response.parsed
+        if (
+            not isinstance(data, dict)
+            or str(data.get("status", "")).lower() != "ok"
+            or data.get("pluginURI") != plugin_uri
+            or not isinstance(data.get("source_name"), str)
+            or not data["source_name"].strip()
+            or str(data.get("EQStat", "")).lower() not in ("on", "off")
+            or data.get("channelMode") not in (PEQ_CHANNEL_MODE_STEREO, PEQ_CHANNEL_MODE_LR)
+        ):
+            raise WiiMResponseError("Invalid or unsupported LV2 EQ state response", endpoint=endpoint)
+        if source_name is not None and canonical_source_key(data["source_name"]) != canonical_source_key(source_name):
+            raise WiiMResponseError("EQ state belongs to a different source", endpoint=endpoint)
+        return data, endpoint
+
+    async def _write_lv2_bands(
+        self,
+        plugin_uri: str,
+        source_name: str | None,
+        channel_mode: str,
+        band_arrays: dict[str, list[dict[str, Any]]],
+    ) -> dict[str, Any]:
+        """Write to the resolved source and verify each parameter independently."""
+        before, _ = await self._read_lv2_state(plugin_uri, source_name)
+        if plugin_uri == GEQ_PLUGIN_URI and before["channelMode"] != PEQ_CHANNEL_MODE_STEREO:
+            raise WiiMResponseError("Graphic EQ L/R mode is not supported by this writer")
+        target_source = before["source_name"]
+        payload: dict[str, Any] = {
+            "source_name": target_source,
+            "pluginURI": plugin_uri,
+            "channelMode": channel_mode,
+            **band_arrays,
+        }
+        endpoint = API_ENDPOINT_PEQ_SET_SOURCE_BAND + _encode_json_param(payload)
+        response = await self._request(endpoint)  # type: ignore[attr-defined]
+        _require_write_ack(response, endpoint)
+        after, read_endpoint = await self._read_lv2_state(plugin_uri, target_source)
+        if str(after["EQStat"]).lower() != "on" or after["channelMode"] != channel_mode:
+            raise WiiMResponseError("EQ write was not activated", endpoint=read_endpoint)
+        for key, expected in band_arrays.items():
+            _confirm_band_values(after.get(key), expected, read_endpoint)
+        if source_name is None:
+            current, current_endpoint = await self._read_lv2_state(plugin_uri, None)
+            if canonical_source_key(current["source_name"]) != canonical_source_key(target_source):
+                raise WiiMResponseError("Active source changed during the EQ write", endpoint=current_endpoint)
+        return after
 
     # ------------------------------------------------------------------
     # Display (get)
@@ -434,30 +594,54 @@ class PEQAPI:
     async def get_graphic_eq_bands(self, source_name: str | None = None) -> GraphicEQSettings:
         """Get WiiM LV2 graphic 10-band EQ settings.
 
-        This targets the ``Eq10HP`` LV2 plugin used by WiiM's graphic EQ. It is
-        read-only for now; use the WiiM app for setup until write behavior is
-        tested across more firmware versions.
+        This targets the ``Eq10HP`` LV2 plugin. A valid plugin response is
+        required; PEQ capability alone does not establish graphic support.
         """
-        self._require_peq()
         _LOGGER.debug("get_graphic_eq_bands source=%s", source_name)
-        if source_name is not None:
-            payload = {"source_name": source_name, "pluginURI": GEQ_PLUGIN_URI}
-            endpoint = API_ENDPOINT_PEQ_GET_SOURCE_BAND + _encode_json_param(payload)
-        else:
-            endpoint = API_ENDPOINT_PEQ_GET_BAND + quote(GEQ_PLUGIN_URI, safe="")
+        raw, endpoint = await self._read_lv2_state(GEQ_PLUGIN_URI, source_name)
+        if raw["channelMode"] != PEQ_CHANNEL_MODE_STEREO or not isinstance(raw.get("EQBand"), list):
+            raise WiiMResponseError("Graphic EQ bands are unavailable", endpoint=endpoint)
+        settings = _parse_graphic_eq_settings(raw)
+        if not settings.bands:
+            raise WiiMResponseError("Graphic EQ bands are unavailable", endpoint=endpoint)
+        return settings
 
-        raw = await self._request(endpoint)  # type: ignore[attr-defined]
-        return _parse_graphic_eq_settings(raw.parsed if isinstance(raw.parsed, dict) else {})
+    async def set_graphic_eq_bands(
+        self, bands: list[GraphicEQBand], *, source_name: str | None = None
+    ) -> GraphicEQSettings:
+        """Apply graphic bands in dB and verify them on the requested source.
+
+        The device must identify the Eq10HP plugin. This activates graphic EQ;
+        omitted bands are left unchanged. Gain limits are -12 to +12 dB.
+        """
+        if not bands:
+            raise ValueError("At least one graphic EQ band is required")
+        names: set[str] = set()
+        for band in bands:
+            if band.name not in GEQ_BAND_NAMES or band.name in names:
+                raise ValueError(f"Invalid or duplicate graphic EQ band: {band.name!r}")
+            names.add(band.name)
+            _validate_gain(band.gain)
+        parameters = [{"param_name": band.name, "value": float(band.gain)} for band in bands]
+        raw = await self._write_lv2_bands(GEQ_PLUGIN_URI, source_name, PEQ_CHANNEL_MODE_STEREO, {"EQBand": parameters})
+        return _parse_graphic_eq_settings(raw)
 
     async def get_graphic_eq_preset_list(self) -> dict[str, list[str]]:
-        """Get all custom and preset names for the WiiM graphic EQ plugin."""
-        self._require_peq()
+        """Get custom and preset names for a device's Eq10HP graphic plugin."""
         endpoint = API_ENDPOINT_PEQ_GET_LIST + quote(GEQ_PLUGIN_URI, safe="")
         raw = await self._request(endpoint)  # type: ignore[attr-defined]
-        data = raw.parsed if isinstance(raw.parsed, dict) else {}
+        data = raw.parsed
+        if (
+            not isinstance(data, dict)
+            or data.get("error")
+            or str(data.get("status", "ok")).lower() != "ok"
+            or not all(isinstance(data.get(key), list) for key in ("custom", "preset"))
+            or not all(isinstance(name, str) for key in ("custom", "preset") for name in data[key])
+        ):
+            raise WiiMResponseError("Invalid graphic EQ preset list response", endpoint=endpoint)
         return {
-            "custom": list(data.get("custom", [])),
-            "preset": list(data.get("preset", [])),
+            "custom": list(data["custom"]),
+            "preset": list(data["preset"]),
         }
 
     async def get_room_correction(self) -> RoomCorrectionSettings:
@@ -522,29 +706,21 @@ class PEQAPI:
             bands:        List of :class:`PEQBand` objects.  You may pass a
                           subset of the 10 bands – only those supplied are
                           updated on the device.
-            channel_mode: ``"Stereo"`` (default) or ``"L/R"``.  For
-                          ``"Stereo"`` pass all bands via *bands*.  For
-                          ``"L/R"`` see :meth:`set_peq_bands_lr`.
+            channel_mode: ``"Stereo"``. For independent channels use
+                          :meth:`set_peq_bands_lr`.
             source_name:  Optional source to target.  If *None*, the device's
                           current source is used.
 
         Raises:
             ValueError:  If *channel_mode* is invalid.
-            WiiMError:   If the request fails.
+            WiiMError:   If the write or its device readback fails.
         """
         self._require_peq()
         _validate_channel_mode(channel_mode)
-        payload: dict[str, Any] = {
-            "pluginURI": PEQ_PLUGIN_URI,
-            "channelMode": channel_mode,
-            "EQBand": _bands_to_api_list(bands),
-        }
-        if source_name is not None:
-            payload["source_name"] = source_name
-            endpoint = API_ENDPOINT_PEQ_SET_SOURCE_BAND + _encode_json_param(payload)
-        else:
-            endpoint = API_ENDPOINT_PEQ_SET_BAND + _encode_json_param(payload)
-        await self._request(endpoint)  # type: ignore[attr-defined]
+        if channel_mode != PEQ_CHANNEL_MODE_STEREO:
+            raise ValueError("Use set_peq_bands_lr for independent L/R bands")
+        _validate_peq_bands(bands)
+        await self._write_lv2_bands(PEQ_PLUGIN_URI, source_name, channel_mode, {"EQBand": _bands_to_api_list(bands)})
 
     async def set_peq_bands_lr(
         self,
@@ -564,18 +740,14 @@ class PEQAPI:
             WiiMError: If the request fails.
         """
         self._require_peq()
-        payload: dict[str, Any] = {
-            "pluginURI": PEQ_PLUGIN_URI,
-            "channelMode": PEQ_CHANNEL_MODE_LR,
-            "EQBandL": _bands_to_api_list(bands_l),
-            "EQBandR": _bands_to_api_list(bands_r),
-        }
-        if source_name is not None:
-            payload["source_name"] = source_name
-            endpoint = API_ENDPOINT_PEQ_SET_SOURCE_BAND + _encode_json_param(payload)
-        else:
-            endpoint = API_ENDPOINT_PEQ_SET_BAND + _encode_json_param(payload)
-        await self._request(endpoint)  # type: ignore[attr-defined]
+        _validate_peq_bands(bands_l)
+        _validate_peq_bands(bands_r)
+        await self._write_lv2_bands(
+            PEQ_PLUGIN_URI,
+            source_name,
+            PEQ_CHANNEL_MODE_LR,
+            {"EQBandL": _bands_to_api_list(bands_l), "EQBandR": _bands_to_api_list(bands_r)},
+        )
 
     async def set_peq_band(
         self,
@@ -628,17 +800,9 @@ class PEQAPI:
             raise ValueError("At least one of mode, frequency, q, or gain must be provided.")
 
         _validate_channel_mode(channel_mode)
-        payload: dict[str, Any] = {
-            "pluginURI": PEQ_PLUGIN_URI,
-            "channelMode": channel_mode,
-            "EQBand": params,
-        }
-        if source_name is not None:
-            payload["source_name"] = source_name
-            endpoint = API_ENDPOINT_PEQ_SET_SOURCE_BAND + _encode_json_param(payload)
-        else:
-            endpoint = API_ENDPOINT_PEQ_SET_BAND + _encode_json_param(payload)
-        await self._request(endpoint)  # type: ignore[attr-defined]
+        if channel_mode != PEQ_CHANNEL_MODE_STEREO:
+            raise ValueError("Use set_peq_bands_lr for independent L/R bands")
+        await self._write_lv2_bands(PEQ_PLUGIN_URI, source_name, channel_mode, {"EQBand": params})
 
     # ------------------------------------------------------------------
     # Enable / disable
@@ -785,6 +949,8 @@ class PEQAPI:
         self,
         name: str,
         source_name: str | None = None,
+        *,
+        overwrite: bool = False,
     ) -> None:
         """Save the current PEQ settings as a custom preset.
 
@@ -792,21 +958,90 @@ class PEQAPI:
             name:        Custom preset name to save.
             source_name: Optional source to save settings from.  If *None*,
                          saves the current source's settings.
+            overwrite:   Explicitly allow replacing an existing custom profile.
+
+        Saving loads the resulting profile to verify its stored bands. If that
+        verification fails, the library attempts to restore the previous bands;
+        the operation is not atomic and a failed restoration is reported.
 
         Raises:
             WiiMError: If the request fails.
         """
         self._require_peq()
-        if source_name is not None:
-            payload: dict[str, Any] = {
-                "source_name": source_name,
-                "pluginURI": PEQ_PLUGIN_URI,
-                "Name": name,
-            }
-            endpoint = API_ENDPOINT_PEQ_SOURCE_SAVE + _encode_json_param(payload)
-        else:
-            endpoint = API_ENDPOINT_PEQ_SAVE + quote(name, safe="")
-        await self._request(endpoint)  # type: ignore[attr-defined]
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("PEQ preset name must not be empty")
+        existing = await self.get_peq_preset_list()
+        if any(item.casefold() == name.casefold() for item in existing["preset"]):
+            raise ValueError(f"PEQ preset {name!r} already exists as a factory preset")
+        matching = [item for item in existing["custom"] if item.casefold() == name.casefold()]
+        if matching and (not overwrite or matching != [name]):
+            raise ValueError(f"PEQ preset {name!r} already exists; use its exact name and overwrite=True")
+
+        before, read_endpoint = await self._read_lv2_state(PEQ_PLUGIN_URI, source_name)
+        if str(before["EQStat"]).lower() != "on":
+            raise WiiMResponseError("Cannot save an inactive PEQ", endpoint=read_endpoint)
+        channel_mode = before["channelMode"]
+        expected = _full_peq_parameters(before, read_endpoint)
+        target_source = before["source_name"]
+        payload = {"source_name": target_source, "pluginURI": PEQ_PLUGIN_URI, "Name": name}
+        endpoint = API_ENDPOINT_PEQ_SOURCE_SAVE + _encode_json_param(payload)
+        response = await self._request(endpoint)  # type: ignore[attr-defined]
+        _require_write_ack(response, endpoint)
+        saved = await self.get_peq_preset_list()
+        if name not in saved["custom"]:
+            raise WiiMResponseError(f"PEQ preset {name!r} was not saved", endpoint=endpoint)
+        after, read_endpoint = await self._read_lv2_state(PEQ_PLUGIN_URI, target_source)
+        if after.get("Name") != name or str(after["EQStat"]).lower() != "on" or after["channelMode"] != channel_mode:
+            raise WiiMResponseError(f"PEQ preset {name!r} was not confirmed", endpoint=read_endpoint)
+        for key, params in expected.items():
+            _confirm_band_values(after.get(key), params, read_endpoint)
+        if source_name is None:
+            current, current_endpoint = await self._read_lv2_state(PEQ_PLUGIN_URI, None)
+            if canonical_source_key(current["source_name"]) != canonical_source_key(target_source):
+                raise WiiMResponseError("Active source changed during the PEQ save", endpoint=current_endpoint)
+
+        # A profile already appearing in the list does not prove an overwrite.
+        # Reload the stored data and compare it with the pre-save curve.
+        try:
+            after_load, read_endpoint = await self._load_peq_on_source(name, target_source)
+            if (
+                after_load.get("Name") != name
+                or str(after_load["EQStat"]).lower() != "on"
+                or after_load["channelMode"] != channel_mode
+            ):
+                raise WiiMResponseError(f"Saved PEQ preset {name!r} was not loaded", endpoint=read_endpoint)
+            for key, params in expected.items():
+                _confirm_band_values(after_load.get(key), params, read_endpoint)
+            if source_name is None:
+                current, current_endpoint = await self._read_lv2_state(PEQ_PLUGIN_URI, None)
+                if canonical_source_key(current["source_name"]) != canonical_source_key(target_source):
+                    raise WiiMResponseError("Active source changed during the PEQ save", endpoint=current_endpoint)
+        except WiiMError as exc:
+            try:
+                await self._write_lv2_bands(PEQ_PLUGIN_URI, target_source, channel_mode, expected)
+            except WiiMError as restore_exc:
+                raise WiiMResponseError(
+                    f"PEQ save could not be verified and restoring the previous bands failed: {restore_exc}"
+                ) from exc
+            raise WiiMResponseError("PEQ save could not be verified; the previous bands were restored") from exc
+
+    async def _load_peq_on_source(self, name: str, target_source: str) -> tuple[dict[str, Any], str]:
+        """Load a profile onto a previously identified source and read it back."""
+        payload = {"source_name": target_source, "pluginURI": PEQ_PLUGIN_URI, "Name": name}
+        endpoint = API_ENDPOINT_PEQ_SOURCE_LOAD + _encode_json_param(payload)
+        raw = await self._request(endpoint)  # type: ignore[attr-defined]
+        if (
+            not isinstance(raw.parsed, dict)
+            or str(raw.parsed.get("status", "")).lower() != "ok"
+            or str(raw.parsed.get("EQStat", "")).lower() != "on"
+            or raw.parsed.get("Name") != name
+        ):
+            raise WiiMResponseError(f"Failed to load PEQ preset {name!r}", endpoint=endpoint)
+        after, read_endpoint = await self._read_lv2_state(PEQ_PLUGIN_URI, target_source)
+        if after.get("Name") != name or str(after["EQStat"]).lower() != "on":
+            raise WiiMResponseError(f"PEQ preset {name!r} was not confirmed", endpoint=read_endpoint)
+        _full_peq_parameters(after, read_endpoint)
+        return after, read_endpoint
 
     async def load_peq(
         self,
@@ -829,25 +1064,16 @@ class PEQAPI:
             WiiMError: If the request fails.
         """
         self._require_peq()
-        if source_name is not None:
-            payload: dict[str, Any] = {
-                "source_name": source_name,
-                "pluginURI": PEQ_PLUGIN_URI,
-                "Name": name,
-            }
-            endpoint = API_ENDPOINT_PEQ_SOURCE_LOAD + _encode_json_param(payload)
-        else:
-            payload = {"pluginURI": PEQ_PLUGIN_URI, "Name": name}
-            endpoint = API_ENDPOINT_PEQ_LOAD + _encode_json_param(payload)
-        raw = await self._request(endpoint)  # type: ignore[attr-defined]
-        if (
-            not isinstance(raw.parsed, dict)
-            or str(raw.parsed.get("status", "")).lower() != "ok"
-            or str(raw.parsed.get("EQStat", "")).lower() != "on"
-            or raw.parsed.get("Name") != name
-        ):
-            raise WiiMResponseError(f"Failed to load PEQ preset {name!r}", endpoint=endpoint)
-        return _parse_peq_settings(raw.parsed)
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("PEQ preset name must not be empty")
+        before, _ = await self._read_lv2_state(PEQ_PLUGIN_URI, source_name)
+        target_source = before["source_name"]
+        after, _ = await self._load_peq_on_source(name, target_source)
+        if source_name is None:
+            current, current_endpoint = await self._read_lv2_state(PEQ_PLUGIN_URI, None)
+            if canonical_source_key(current["source_name"]) != canonical_source_key(target_source):
+                raise WiiMResponseError("Active source changed during the PEQ load", endpoint=current_endpoint)
+        return _parse_peq_settings(after)
 
     async def delete_peq(self, name: str) -> None:
         """Delete a custom PEQ preset by name.
@@ -859,9 +1085,17 @@ class PEQAPI:
             WiiMError: If the request fails.
         """
         self._require_peq()
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("PEQ preset name must not be empty")
+        existing = await self.get_peq_preset_list()
+        if name not in existing["custom"]:
+            raise ValueError(f"Custom PEQ preset {name!r} does not exist")
         payload = {"pluginURI": PEQ_PLUGIN_URI, "Name": name}
         endpoint = API_ENDPOINT_PEQ_DELETE + _encode_json_param(payload)
-        await self._request(endpoint)  # type: ignore[attr-defined]
+        response = await self._request(endpoint)  # type: ignore[attr-defined]
+        _require_write_ack(response, endpoint)
+        if name in (await self.get_peq_preset_list())["custom"]:
+            raise WiiMResponseError(f"PEQ preset {name!r} was not deleted", endpoint=endpoint)
 
     async def rename_peq(self, name: str, new_name: str) -> None:
         """Rename a custom PEQ preset.
@@ -877,11 +1111,22 @@ class PEQAPI:
             WiiMError:  If the request fails.
         """
         self._require_peq()
+        if not isinstance(name, str) or not name.strip() or not isinstance(new_name, str) or not new_name.strip():
+            raise ValueError("PEQ preset names must not be empty")
         if name == new_name:
             raise ValueError(f"name and new_name must differ (both are {name!r}).")
+        existing = await self.get_peq_preset_list()
+        if name not in existing["custom"]:
+            raise ValueError(f"Custom PEQ preset {name!r} does not exist")
+        if any(item.casefold() == new_name.casefold() for group in existing.values() for item in group):
+            raise ValueError(f"PEQ preset {new_name!r} already exists")
         payload = {"pluginURI": PEQ_PLUGIN_URI, "Name": name, "newName": new_name}
         endpoint = API_ENDPOINT_PEQ_RENAME + _encode_json_param(payload)
-        await self._request(endpoint)  # type: ignore[attr-defined]
+        response = await self._request(endpoint)  # type: ignore[attr-defined]
+        _require_write_ack(response, endpoint)
+        saved = (await self.get_peq_preset_list())["custom"]
+        if name in saved or new_name not in saved:
+            raise WiiMResponseError(f"PEQ preset {name!r} was not renamed", endpoint=endpoint)
 
 
 # ---------------------------------------------------------------------------

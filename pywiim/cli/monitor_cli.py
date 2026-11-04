@@ -58,7 +58,6 @@ class PlayerMonitor:
         self.max_events = 5
 
         # Cached data for TUI display (Player doesn't cache these, so we cache for display)
-        self.last_eq_data: dict[str, Any] | None = None
         self.last_eq_check = 0.0
         self.last_group_info_check = 0.0  # Only track when to fetch, not the data itself
         self.last_group_info: Any | None = None  # Cached DeviceGroupInfo for display
@@ -142,6 +141,23 @@ class PlayerMonitor:
             return f"Status LED: {state_str} (read {age}s ago)"
         return f"Status LED: {state_str}"
 
+    def _format_eq_display(self) -> list[str]:
+        """Show the Player's current-input EQ state without guessing a preset."""
+        capabilities = self.player.client.capabilities
+        parts = []
+        if capabilities.get("supports_eq", False):
+            parts.append(f"Graphic EQ: {self.player.eq_preset or 'Unknown'}")
+        if capabilities.get("supports_peq", False):
+            enabled = self.player.peq_enabled
+            if enabled is True:
+                state = self.player.peq_preset or "On (unnamed)"
+            elif enabled is False:
+                state = "Off"
+            else:
+                state = "Unknown"
+            parts.append(f"PEQ: {state}")
+        return parts
+
     def _detect_callback_host(self) -> str | None:
         """Detect the local network IP address for UPnP callback URL.
 
@@ -190,6 +206,11 @@ class PlayerMonitor:
             "shuffle": self.player.shuffle_state,
             "repeat": self.player.repeat_mode,
         }
+        if self.player.client.capabilities.get("supports_eq", False):
+            current_state["graphic_eq"] = self.player.eq_preset
+        if self.player.client.capabilities.get("supports_peq", False):
+            current_state["peq_enabled"] = self.player.peq_enabled
+            current_state["peq_preset"] = self.player.peq_preset
         if self.player.supports_trigger_out:
             current_state["trigger_out"] = self.player.trigger_out_on
         if self.player.supports_subwoofer:
@@ -587,13 +608,16 @@ class PlayerMonitor:
                 # Channel balance has no UPnP path — refresh periodically so the monitor stays
                 # accurate when UPnP events are absent (e.g. some dev environments).
                 if (now - self.last_eq_check) > eq_interval:
-                    if self.player.client.capabilities.get("supports_eq", False):
+                    capabilities = self.player.client.capabilities
+                    if capabilities.get("supports_eq", False) or capabilities.get("supports_peq", False):
                         try:
-                            self.last_eq_data = await self.player.get_eq()
-                            # Update player's cached EQ preset from status if available
-                            # (EQ changes are reflected in status model's eq_preset field)
+                            if capabilities.get("supports_eq", False):
+                                await self.player.refresh_eq_state()
+                            else:
+                                await self.player.refresh_peq_preset()
+                            self.on_state_changed(source="polling")
                         except Exception:
-                            pass  # Don't fail if EQ fetch fails
+                            pass  # Keep the player's last known state on failed reads.
                     if self.player.client.capabilities.get("supports_channel_balance", False):
                         try:
                             await self.player.get_channel_balance()
@@ -1018,42 +1042,7 @@ class PlayerMonitor:
         # ===== AUDIO SETTINGS =====
         audio_settings = []
 
-        # EQ Preset - get from EQ data first (most accurate), fallback to status model
-        eq_preset = None
-        if self.last_eq_data and isinstance(self.last_eq_data, dict):
-            # Try multiple field names for current preset (as per diagnostics.py)
-            eq_preset = (
-                self.last_eq_data.get("Name")
-                or self.last_eq_data.get("name")
-                or self.last_eq_data.get("preset")
-                or self.last_eq_data.get("EQPreset")
-                or self.last_eq_data.get("eq_preset")
-            )
-
-        # Fallback to status model if EQ data doesn't have preset
-        if not eq_preset:
-            eq_preset = self.player.eq_preset
-
-        if eq_preset:
-            # Normalize preset name (handle case variations)
-            eq_preset_lower = str(eq_preset).lower()
-            # Map common variations
-            if "hip" in eq_preset_lower and "hop" in eq_preset_lower:
-                eq_preset = "Hip-Hop"
-            elif eq_preset_lower == "flat":
-                eq_preset = "Flat"
-            else:
-                # Capitalize first letter of each word
-                eq_preset = " ".join(word.capitalize() for word in str(eq_preset).split())
-            audio_settings.append(f"EQ: {eq_preset}")
-
-        # EQ Custom bands (if available)
-        if self.last_eq_data and isinstance(self.last_eq_data, dict):
-            eq_bands = self.last_eq_data.get("eq", [])
-            if isinstance(eq_bands, list) and len(eq_bands) == 10:
-                # Show EQ bands as a compact visualization
-                eq_str = " ".join(f"{b:+2d}" for b in eq_bands[:5])  # First 5 bands
-                audio_settings.append(f"EQ Bands: [{eq_str} ...]")
+        audio_settings.extend(self._format_eq_display())
 
         if self.player.supports_channel_balance:
             bal = self.player.channel_balance
@@ -1419,6 +1408,7 @@ class PlayerMonitor:
             # Capitalize first letter of each word
             source = " ".join(word.capitalize() for word in source.split())
         status_parts.append(f"Source: {source}")
+        status_parts.extend(self._format_eq_display())
 
         # Track info
         if self.player.media_title and self.player.media_title.lower() not in ("unknown", "unknow", "none"):

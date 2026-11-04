@@ -24,6 +24,7 @@ from ..api.constants import API_ENDPOINT_GET_DIGITAL_FILTER_TYPES
 from ..api.misc import parse_digital_filter_types
 from ..client import WiiMClient
 from ..exceptions import WiiMError
+from ..player import Player
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -307,8 +308,11 @@ class DeviceDiagnostics:
             try:
                 result = await test_func()
                 self.report["features"][name] = result
-                status = "supported" if result.get("supported") else "not supported"
+                supported = result.get("supported")
+                status = "supported" if supported is True else "not supported" if supported is False else "unknown"
                 print(f"   ✓ {name}: {status}")
+                if name in ("EQ", "Graphic EQ") and supported is None:
+                    print(f"      Read unavailable: {result.get('error') or result.get('state_error') or 'Unknown'}")
                 if name == "DAC Digital Filter":
                     if result.get("supported"):
                         print(f"      Current: {result.get('current')} (index {result.get('current_index')})")
@@ -378,25 +382,23 @@ class DeviceDiagnostics:
                 # Special handling for EQ to show ALL presets
                 if name == "EQ" and result.get("supported"):
                     current_preset = result.get("current_preset")
-                    available_presets = result.get("available_presets", [])
-                    print(f"      Current EQ Preset: {current_preset or 'Unknown'}")
-                    print(f"      Available EQ Presets ({len(available_presets)}):")
-                    if available_presets:
+                    available_presets = result.get("available_presets")
+                    print(f"      Input reported by EQ: {result.get('source_name') or 'Unknown'}")
+                    current_display = f"{current_preset} (unsaved)" if result.get("is_custom") else current_preset
+                    print(f"      Current graphic EQ: {current_display or 'Unknown'}")
+                    if available_presets is None:
+                        print("      Available EQ presets: Unknown (list unavailable)")
+                    elif available_presets:
+                        print(f"      Available EQ Presets ({len(available_presets)}):")
                         for i, preset in enumerate(available_presets, 1):
                             # Check if this is the current preset (handle case variations)
                             is_current = False
-                            if current_preset:
-                                preset_lower = str(preset).lower()
-                                current_lower = str(current_preset).lower()
-                                is_current = (
-                                    preset_lower == current_lower
-                                    or preset_lower in current_lower
-                                    or current_lower in preset_lower
-                                )
+                            if current_preset and not result.get("is_custom"):
+                                is_current = str(preset).casefold() == str(current_preset).casefold()
                             marker = " ← current" if is_current else ""
                             print(f"         {i:2d}. {preset}{marker}")
                     else:
-                        print("         (none)")
+                        print("      Available EQ presets: (none)")
 
                 # Special handling for Presets to show ALL button presets
                 if name == "Presets" and result.get("supported"):
@@ -451,8 +453,27 @@ class DeviceDiagnostics:
 
                 # Special handling for PEQ (Advanced EQ)
                 if name == "PEQ (Advanced EQ)" and result.get("supported"):
-                    custom = result.get("custom_presets", [])
-                    preset = result.get("preset_names", [])
+                    enabled = result.get("enabled")
+                    state = (
+                        (result.get("name") or "On (unnamed)")
+                        if enabled is True
+                        else "Off" if enabled is False else "Unknown"
+                    )
+                    print(f"      Input: {result.get('source_name') or 'Unknown'}")
+                    print(f"      Current PEQ: {state}")
+                    if enabled is not None:
+                        print(f"      Channel mode: {result.get('channel_mode')}")
+                        for channel in ("bands", "bands_l", "bands_r"):
+                            for band in result.get(channel) or []:
+                                print(
+                                    f"         {channel} {band['letter']}: mode={band['mode']}, "
+                                    f"{band['frequency']} Hz, Q={band['q']}, gain={band['gain']} dB"
+                                )
+                    custom = result.get("custom_presets")
+                    preset = result.get("preset_names")
+                    if custom is None or preset is None:
+                        print("      PEQ preset list: Unknown (list unavailable)")
+                        continue
                     print(f"      Custom presets: {len(custom)}")
                     if custom:
                         for p in custom[:15]:
@@ -468,11 +489,15 @@ class DeviceDiagnostics:
 
                 # Special handling for Graphic EQ
                 if name == "Graphic EQ" and result.get("supported"):
-                    print(f"      Current preset: {result.get('name') or 'Unknown'}")
+                    name_value = (result.get("name") or "Custom") if result.get("enabled") else "Off"
+                    print(f"      Input: {result.get('source_name') or 'Unknown'}")
+                    print(f"      Current preset: {name_value}")
                     print(f"      Enabled: {result.get('enabled')}")
                     print(f"      Bands: {result.get('band_count', 0)}")
-                    preset = result.get("preset_names", [])
-                    print(f"      Built-in presets: {len(preset)}")
+                    for band in result.get("bands") or []:
+                        print(f"         {band['name']}: {band['gain']} dB")
+                    preset = result.get("preset_names")
+                    print(f"      Built-in presets: {len(preset) if preset is not None else 'Unknown'}")
 
                 # Special handling for Room Correction
                 if name == "Room Correction" and result.get("supported"):
@@ -504,22 +529,30 @@ class DeviceDiagnostics:
             return {"supported": False}
 
     async def _test_eq(self) -> dict[str, Any]:
-        """Test EQ functionality."""
+        """Report a snapshot through the same EQ state rules used by Player."""
+        player = Player(self.client)
+        result: dict[str, Any] = {
+            "supported": None,
+            "current_preset": None,
+            "source_name": None,
+            "available_presets": None,
+        }
         try:
             eq = await self.client.get_eq()
-            presets = await self.client.get_eq_presets()
-            # Get current preset name from EQ response
-            current_preset = None
             if isinstance(eq, dict):
-                # Try multiple field names for current preset
-                current_preset = eq.get("Name") or eq.get("name") or eq.get("preset") or eq.get("EQPreset")
-            return {
-                "supported": True,
-                "current_preset": current_preset,
-                "available_presets": presets,  # Return ALL presets
-            }
-        except WiiMError:
-            return {"supported": False}
+                result["source_name"] = eq.get("source_name")
+                if player._state_mgr._remember_eq_band(eq):
+                    result["supported"] = True
+                    result["current_preset"] = player.eq_preset
+                    result["is_custom"] = player.eq_is_custom
+        except Exception as err:
+            result["state_error"] = str(err)
+        try:
+            result["available_presets"] = await self.client.get_eq_presets()
+            result["supported"] = True
+        except Exception as err:
+            result["preset_list_error"] = str(err)
+        return result
 
     async def _test_multiroom(self) -> dict[str, Any]:
         """Test multiroom functionality."""
@@ -834,29 +867,28 @@ class DeviceDiagnostics:
             return {"supported": False, "error": str(err)}
 
     async def _test_peq(self) -> dict[str, Any]:
-        """Test PEQ (Parametric / Advanced EQ) - WiiM LV2 PEQ API."""
+        """Report current-input PEQ bands and preset names independently."""
+        if not self.client.capabilities.get("supports_peq", False):
+            return {"supported": False, "reason": "PEQ capability not detected"}
+        result: dict[str, Any] = {"supported": True, "enabled": None, "custom_presets": None, "preset_names": None}
         try:
-            if not self.client.capabilities.get("supports_peq", False):
-                return {"supported": False, "reason": "PEQ not supported (WiiM only)"}
-            preset_list = await self.client.get_peq_preset_list()
-            return {
-                "supported": True,
-                "custom_presets": list(preset_list.get("custom", [])),
-                "preset_names": list(preset_list.get("preset", [])),
-            }
-        except WiiMError:
-            return {"supported": False, "reason": "PEQ not available"}
+            settings = await self.client.get_peq_bands()
+            result.update(asdict(settings))
         except Exception as err:
-            return {"supported": False, "error": str(err)}
+            result["state_error"] = str(err)
+        try:
+            preset_list = await self.client.get_peq_preset_list()
+            result["custom_presets"] = list(preset_list.get("custom", []))
+            result["preset_names"] = list(preset_list.get("preset", []))
+        except Exception as err:
+            result["preset_list_error"] = str(err)
+        return result
 
     async def _test_graphic_eq(self) -> dict[str, Any]:
         """Test read-only WiiM LV2 graphic EQ (Eq10HP)."""
         try:
-            if not self.client.capabilities.get("supports_peq", False):
-                return {"supported": False, "reason": "Graphic EQ not supported (WiiM only)"}
             settings = await self.client.get_graphic_eq_bands()
-            preset_list = await self.client.get_graphic_eq_preset_list()
-            return {
+            result: dict[str, Any] = {
                 "supported": True,
                 "enabled": settings.enabled,
                 "name": settings.name,
@@ -864,13 +896,18 @@ class DeviceDiagnostics:
                 "eq_level": settings.eq_level,
                 "band_count": len(settings.bands),
                 "bands": [asdict(band) for band in settings.bands],
-                "custom_presets": list(preset_list.get("custom", [])),
-                "preset_names": list(preset_list.get("preset", [])),
+                "custom_presets": None,
+                "preset_names": None,
             }
-        except WiiMError:
-            return {"supported": False, "reason": "Graphic EQ not available"}
+            try:
+                preset_list = await self.client.get_graphic_eq_preset_list()
+                result["custom_presets"] = list(preset_list.get("custom", []))
+                result["preset_names"] = list(preset_list.get("preset", []))
+            except Exception as err:
+                result["preset_list_error"] = str(err)
+            return result
         except Exception as err:
-            return {"supported": False, "error": str(err)}
+            return {"supported": None, "error": str(err)}
 
     async def _test_room_correction(self) -> dict[str, Any]:
         """Test read-only WiiM room-correction state."""
@@ -1105,19 +1142,8 @@ class DeviceDiagnostics:
         except Exception:
             self.report["display"] = {"supported": False}
 
-        # Add PEQ (Advanced EQ) preset list if supported
-        try:
-            if self.client.capabilities.get("supports_peq", False):
-                preset_list = await self.client.get_peq_preset_list()
-                self.report["peq"] = {
-                    "supported": True,
-                    "custom_presets": preset_list.get("custom", []),
-                    "preset_names": preset_list.get("preset", []),
-                }
-            else:
-                self.report["peq"] = {"supported": False}
-        except Exception:
-            self.report["peq"] = {"supported": False}
+        # PEQ state and preset-list failures are recorded independently.
+        self.report["peq"] = await self._test_peq()
 
         # Add Graphic EQ (Eq10HP) state if supported
         try:

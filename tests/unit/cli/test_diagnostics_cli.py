@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from pywiim.api.peq import GraphicEQBand, GraphicEQSettings, RoomCorrectionSettings
+from pywiim.api.constants import PEQ_PLUGIN_URI
+from pywiim.api.peq import GraphicEQBand, GraphicEQSettings, PEQBand, PEQSettings, RoomCorrectionSettings
 from pywiim.cli.diagnostics import DeviceDiagnostics
 
 
@@ -286,6 +287,146 @@ async def test_graphic_eq_feature_supported():
     assert result["name"] == "Acoustic"
     assert result["band_count"] == 1
     assert result["preset_names"] == ["Flat", "Acoustic"]
+
+
+@pytest.mark.asyncio
+async def test_graphic_eq_probe_does_not_depend_on_peq_or_preset_list():
+    client = DummyClient()
+    client.capabilities["supports_peq"] = False
+    client.get_graphic_eq_bands = AsyncMock(
+        return_value=GraphicEQSettings(
+            enabled=True, source_name="line-in", bands=[GraphicEQBand(name="band31hz", gain=-2)]
+        )
+    )
+    client.get_graphic_eq_preset_list = AsyncMock(side_effect=RuntimeError("list unavailable"))
+
+    result = await DeviceDiagnostics(client)._test_graphic_eq()  # type: ignore[arg-type]
+
+    assert result["supported"] is True
+    assert result["source_name"] == "line-in"
+    assert result["bands"] == [{"name": "band31hz", "gain": -2}]
+    assert result["preset_names"] is None
+    assert "list unavailable" in result["preset_list_error"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        ({"source_name": "wifi", "EQStat": "On", "Name": ""}, "Custom"),
+        ({"source_name": "wifi", "EQStat": "Off", "Name": "Rock"}, "Off"),
+        ({"source_name": "wifi", "EQStat": "On", "Name": "Night", "pluginURI": PEQ_PLUGIN_URI}, "Off"),
+        ({"source_name": "wifi", "Name": "Flat"}, None),
+    ],
+)
+async def test_eq_feature_reports_device_state_without_inventing_a_preset(response, expected):
+    client = DummyClient()
+    client.get_eq = AsyncMock(return_value=response)  # type: ignore[attr-defined]
+    client.get_eq_presets = AsyncMock(return_value=["Flat", "Rock"])  # type: ignore[attr-defined]
+    result = await DeviceDiagnostics(client)._test_eq()  # type: ignore[arg-type]
+    assert result["current_preset"] == expected
+    assert result["source_name"] == "wifi"
+    if expected == "Custom":
+        assert result["is_custom"] is True
+
+
+@pytest.mark.asyncio
+async def test_peq_feature_exposes_active_bands_and_survives_list_failure():
+    client = DummyClient()
+    client.capabilities["supports_peq"] = True
+    client.get_peq_bands = AsyncMock(  # type: ignore[attr-defined]
+        return_value=PEQSettings(source_name="wifi", enabled=True, name="Night", bands=[PEQBand("a", gain=2)])
+    )
+    client.get_peq_preset_list = AsyncMock(side_effect=RuntimeError("list unavailable"))  # type: ignore[attr-defined]
+
+    result = await DeviceDiagnostics(client)._test_peq()  # type: ignore[arg-type]
+
+    assert result["supported"] is True
+    assert result["enabled"] is True
+    assert result["source_name"] == "wifi"
+    assert result["name"] == "Night"
+    assert result["bands"][0]["gain"] == 2
+    assert result["custom_presets"] is None
+    assert "list unavailable" in result["preset_list_error"]
+
+
+@pytest.mark.asyncio
+async def test_peq_feature_keeps_list_when_state_is_unavailable():
+    client = DummyClient()
+    client.capabilities["supports_peq"] = True
+    client.get_peq_bands = AsyncMock(side_effect=RuntimeError("state unavailable"))  # type: ignore[attr-defined]
+    client.get_peq_preset_list = AsyncMock(  # type: ignore[attr-defined]
+        return_value={"custom": ["Night"], "preset": ["Flat"]}
+    )
+
+    result = await DeviceDiagnostics(client)._test_peq()  # type: ignore[arg-type]
+
+    assert result["enabled"] is None
+    assert result["custom_presets"] == ["Night"]
+    assert "state unavailable" in result["state_error"]
+
+
+@pytest.mark.asyncio
+async def test_eq_feature_keeps_state_when_preset_list_is_unavailable():
+    client = DummyClient()
+    client.get_eq = AsyncMock(return_value={"EQStat": "On", "Name": "", "source_name": "wifi"})  # type: ignore[attr-defined]
+    client.get_eq_presets = AsyncMock(side_effect=RuntimeError("list unavailable"))  # type: ignore[attr-defined]
+
+    result = await DeviceDiagnostics(client)._test_eq()  # type: ignore[arg-type]
+
+    assert result["current_preset"] == "Custom"
+    assert result["available_presets"] is None
+    assert "list unavailable" in result["preset_list_error"]
+
+
+@pytest.mark.asyncio
+async def test_feature_output_distinguishes_unsaved_graphic_and_active_peq(capsys):
+    diagnostics = DeviceDiagnostics(DummyClient())  # type: ignore[arg-type]
+    for name in vars(DeviceDiagnostics):
+        if name.startswith("_test_") and name != "_test_features":
+            setattr(diagnostics, name, AsyncMock(return_value={"supported": False}))
+    diagnostics._test_eq = AsyncMock(
+        return_value={
+            "supported": True,
+            "source_name": "wifi",
+            "current_preset": "Custom",
+            "is_custom": True,
+            "available_presets": ["Custom", "Rock"],
+        }
+    )
+    diagnostics._test_peq = AsyncMock(
+        return_value={
+            "supported": True,
+            "source_name": "wifi",
+            "enabled": True,
+            "name": "Night",
+            "channel_mode": "Stereo",
+            "bands": [{"letter": "a", "mode": 1, "frequency": 100, "q": 1, "gain": 2}],
+            "custom_presets": ["Night"],
+            "preset_names": ["Flat"],
+        }
+    )
+    diagnostics._test_graphic_eq = AsyncMock(
+        return_value={
+            "supported": True,
+            "source_name": "wifi",
+            "enabled": False,
+            "name": "Stale preset",
+            "band_count": 1,
+            "bands": [{"name": "band31hz", "gain": 2}],
+            "preset_names": None,
+        }
+    )
+
+    await diagnostics._test_features()
+
+    output = capsys.readouterr().out
+    assert "Current graphic EQ: Custom (unsaved)" in output
+    assert "Custom ← current" not in output
+    assert "Current PEQ: Night" in output
+    assert "gain=2 dB" in output
+    assert "Current preset: Off" in output
+    assert "Built-in presets: Unknown" in output
 
 
 @pytest.mark.asyncio

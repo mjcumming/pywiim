@@ -102,11 +102,10 @@ class PlayerBase:
         # Preset name from EQGetBand. getPlayerStatus eq stays at flat on current
         # firmware after EQLoad, so this name outranks that field (wiim #165).
         self._eq_band_preset: str | None = None
+        self._eq_is_custom: bool | None = None
         self._eq_band_reconcile: bool = False
-
-        # Track when EQ preset was set (for preserving optimistic updates during refresh)
-        # Device status endpoint returns stale EQ data; we preserve the optimistic update for a few seconds
-        self._last_eq_preset_set_time: float = 0
+        self._eq_state_source: str | None = None
+        self._eq_state_revision: int = 0
 
         # Track when loop_mode (shuffle/repeat) was set (for preserving optimistic updates during refresh)
         # Device status endpoint may return stale loop_mode data
@@ -160,6 +159,7 @@ class PlayerBase:
         self._last_room_correction_check: float = 0
         self._peq_presets: list[str] | None = None
         self._peq_preset: str | None = None
+        self._peq_enabled: bool | None = None
         self._last_peq_state_check: float = 0
         self._peq_lock = asyncio.Lock()
 

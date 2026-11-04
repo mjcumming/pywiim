@@ -3409,8 +3409,8 @@ class TestPlayerMediaMetadata:
         player = Player(mock_client)
         status = PlayerStatus(eq_preset="flat", play_state="play")
         player._status_model = status
+        player._state_mgr._remember_eq_band({"EQStat": "On", "Name": "Flat"})
 
-        # Property normalizes to Title Case
         assert player.eq_preset == "Flat"
 
     @pytest.mark.asyncio

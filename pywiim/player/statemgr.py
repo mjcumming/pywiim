@@ -20,10 +20,11 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import aiohttp
 
-from ..api.constants import MODE_MAP
+from ..api.constants import MODE_MAP, PEQ_PLUGIN_URI
 from ..exceptions import WiiMError, WiiMTimeoutError
 from ..metadata import is_valid_metadata_value
 from ..models import parse_output_channel
+from ..normalize import canonical_source_key
 from ..polling import PollingStrategy
 from ..state import PLAYING_STATES, normalize_play_state
 from .debounce import PlayStateDebouncer
@@ -34,7 +35,6 @@ if TYPE_CHECKING:
     from . import Player
 
 _LOGGER = logging.getLogger(__name__)
-_EQ_PRESET_PRESERVATION_SECONDS = 60.0
 
 
 def _eq_names_match(left: str | None, right: str | None) -> bool:
@@ -377,8 +377,7 @@ class StateManager:
     def _eq_preset_to_keep(self, polled: str | None) -> str | None:
         """Return the preset name that should replace a stale status poll.
 
-        ``EQGetBand`` ``Name`` wins over ``getPlayerStatus`` ``eq``. Until that
-        read exists, a preset set in the last minute is kept.
+        ``EQGetBand`` ``Name`` wins over ``getPlayerStatus`` ``eq``.
         """
         band = self.player._eq_band_preset
         if band:
@@ -391,32 +390,101 @@ class StateManager:
                 return band
             return None
 
-        model = self.player._status_model
-        set_at = self.player._last_eq_preset_set_time
-        if (
-            model is not None
-            and model.eq_preset
-            and set_at > 0
-            and (time.time() - set_at) < _EQ_PRESET_PRESERVATION_SECONDS
-        ):
-            return str(model.eq_preset)
         return None
 
-    def _remember_eq_band(self, eq_data: dict[str, Any] | None) -> None:
-        """Store EQGetBand enabled state and preset name."""
+    def _remember_eq_band(self, eq_data: dict[str, Any] | None) -> bool:
+        """Store a valid EQGetBand response; leave known state intact on failure."""
         if not isinstance(eq_data, dict):
-            return
-        if "EQStat" in eq_data:
-            self.player._eq_enabled = str(eq_data["EQStat"]).lower() == "on"
+            return False
+        status = str(eq_data.get("EQStat", "")).strip().lower()
+        if (
+            status not in ("on", "off")
+            or bool(eq_data.get("error"))
+            or str(eq_data.get("status", "ok")).lower() != "ok"
+            or not self._eq_source_matches(eq_data.get("source_name"))
+        ):
+            return False
+        if status == "on" and eq_data.get("pluginURI") == PEQ_PLUGIN_URI:
+            self.player._eq_enabled = False
+            self.player._eq_band_preset = None
+            self.player._eq_is_custom = False
+            self.player._peq_enabled = True
+            name = eq_data.get("Name")
+            self.player._peq_preset = name if isinstance(name, str) and name else None
+            return True
+        self.player._eq_enabled = status == "on"
+        if status == "off":
+            self.player._eq_band_preset = None
+            self.player._eq_is_custom = False
+            return True
         name = eq_data.get("Name")
         if name is None:
             name = eq_data.get("name")
-        if isinstance(name, str) and name.strip():
-            self.player._eq_band_preset = name.strip()
-            if self.player._status_model is not None and self.player._eq_enabled is not False:
+        if isinstance(name, str):
+            self.player._eq_is_custom = not bool(name.strip())
+            self.player._eq_band_preset = name.strip() or "Custom"
+            if self.player._status_model is not None:
                 self.player._status_model.eq_preset = self.player._eq_band_preset
                 self._last_eq_preset = self.player._eq_band_preset
             _LOGGER.debug("EQ preset from EQGetBand: %s", self.player._eq_band_preset)
+        else:
+            self.player._eq_band_preset = None
+            self.player._eq_is_custom = None
+        # WiiM's graphic and parametric processors are mutually exclusive.
+        self.player._peq_enabled = False
+        self.player._peq_preset = None
+        return True
+
+    def _eq_source_matches(self, reported: Any) -> bool:
+        """Reject a known different input while allowing unrecognized source labels."""
+        expected = self.player._eq_state_source
+        if not expected or not isinstance(reported, str) or not reported:
+            return True
+        known = {
+            "network",
+            "line_in",
+            "line_in_2",
+            "aux",
+            "rca",
+            "bluetooth",
+            "optical",
+            "coaxial",
+            "hdmi",
+            "usb",
+            "phono",
+        }
+        expected_key = canonical_source_key(expected)
+        reported_key = canonical_source_key(reported)
+        overrides = self.player.client.capabilities.get("source_command_overrides", {})
+        if isinstance(overrides, dict):
+            wire_name = overrides.get(expected_key)
+            if isinstance(wire_name, str) and canonical_source_key(wire_name) == reported_key:
+                return True
+        return expected_key not in known or reported_key not in known or expected_key == reported_key
+
+    def _set_eq_source(self, source: str | None) -> bool:
+        """Invalidate EQ state when the current input changes."""
+        if source == self.player._eq_state_source:
+            return False
+        self.player._eq_state_source = source
+        self.player._eq_presets = None
+        self.player._last_eq_presets_check = 0
+        self._invalidate_eq_state()
+        return True
+
+    def _invalidate_eq_state(self) -> None:
+        """Discard state made uncertain by a source or EQ command."""
+        self.player._eq_state_revision += 1
+        self.player._eq_enabled = None
+        self.player._eq_band_preset = None
+        self.player._eq_is_custom = None
+        self.player._peq_enabled = None
+        self.player._peq_preset = None
+        self.player._last_eq_status_check = 0
+        self.player._last_peq_state_check = 0
+        self.player._eq_band_reconcile = True
+        self._last_eq_preset = None
+        self._last_status_eq_preset = None
 
     async def _refresh_core_status(self) -> PlayerStatus:
         """Fetch core player status and update state synchronizer.
@@ -653,7 +721,9 @@ class StateManager:
             status.source = self.player._status_model.source
 
         # getPlayerStatus eq stays at flat after EQLoad on current firmware (wiim #165).
-        # Keep an EQGetBand name, and the short optimistic window before that read exists.
+        # Keep a verified EQGetBand name instead of the stale status value.
+        if status is not None:
+            self._set_eq_source(status.source)
         polled_eq_preset = status.eq_preset if status else None
         kept_eq_preset = self._eq_preset_to_keep(polled_eq_preset) if status else None
         if status is not None and kept_eq_preset is not None:
@@ -944,6 +1014,7 @@ class StateManager:
         # Detect source change
         current_source = status.source if status else None
         source_changed = self._last_source is not None and current_source != self._last_source
+        eq_source_changed = self._set_eq_source(current_source)
 
         # getMetaInfo (Audio Quality Metadata) - Fetch on startup, full refresh, track change,
         # or periodically while playing (every 60s).
@@ -1015,6 +1086,7 @@ class StateManager:
         should_fetch_eq_presets = (
             full
             or track_changed
+            or (self.player._eq_presets is None and now - (self.player._last_eq_presets_check or 0) >= 60)
             or (
                 self._polling_strategy
                 and self._polling_strategy.should_fetch_eq_info(
@@ -1023,13 +1095,17 @@ class StateManager:
             )
         )
         if should_fetch_eq_presets and eq_supported:
+            source = self.player._eq_state_source
+            revision = self.player._eq_state_revision
             try:
                 eq_presets = await self.player.client.get_eq_presets()
-                self.player._eq_presets = eq_presets if eq_presets else None
-                self.player._last_eq_presets_check = now
+                if source == self.player._eq_state_source and revision == self.player._eq_state_revision:
+                    self.player._eq_presets = eq_presets
+                    self.player._last_eq_presets_check = now
             except Exception as err:
                 _LOGGER.debug("Failed to fetch EQ presets for %s: %s", self.player.host, err)
-                self.player._eq_presets = None
+                if source == self.player._eq_state_source and revision == self.player._eq_state_revision:
+                    self.player._last_eq_presets_check = now
 
         # EQGetBand - enabled flag and preset name. Same cadence as the preset list,
         # plus once when getPlayerStatus eq changes, so a real app change is confirmed
@@ -1037,6 +1113,8 @@ class StateManager:
         should_fetch_eq_status = (
             full
             or track_changed
+            or eq_source_changed
+            or self.player._eq_enabled is None
             or self.player._eq_band_reconcile
             or (
                 self._polling_strategy
@@ -1048,14 +1126,22 @@ class StateManager:
         if not eq_supported:
             self.player._eq_band_reconcile = False
         elif should_fetch_eq_status:
+            source = self.player._eq_state_source
+            revision = self.player._eq_state_revision
             try:
-                self._remember_eq_band(await self.player.client.get_eq())
-                self.player._last_eq_status_check = now
+                eq_data = await self.player.client.get_eq()
+                if (
+                    source == self.player._eq_state_source
+                    and revision == self.player._eq_state_revision
+                    and self._remember_eq_band(eq_data)
+                ):
+                    self.player._last_eq_status_check = now
             except Exception as err:
                 _LOGGER.debug("Failed to fetch EQ status for %s: %s", self.player.host, err)
                 # Don't clear enabled/name - keep previous values if fetch fails
             finally:
-                self.player._eq_band_reconcile = False
+                if source == self.player._eq_state_source and revision == self.player._eq_state_revision:
+                    self.player._eq_band_reconcile = False
 
         # Channel balance (WiiM HTTP getChannelBalance only; no UPnP event path)
         cb_supported = self.player.client.capabilities.get("supports_channel_balance", False)
@@ -1206,13 +1292,18 @@ class StateManager:
         # RoomFit. The profile list changes in the app, so refresh names and the
         # switch together on the same 60s tier. supports_peq is the gate.
         peq_supported = bool(self.player.client.capabilities.get("supports_peq", False))
-        should_fetch_peq = full or (
-            self._polling_strategy
-            and self._polling_strategy.should_fetch_led_indicator(
-                self.player._last_peq_state_check, peq_supported, now=now
+        should_fetch_peq = (
+            full
+            or eq_source_changed
+            or self.player._peq_enabled is None
+            or (
+                self._polling_strategy
+                and self._polling_strategy.should_fetch_led_indicator(
+                    self.player._last_peq_state_check, peq_supported, now=now
+                )
             )
         )
-        if should_fetch_peq and peq_supported and self.player._peq_presets:
+        if should_fetch_peq and peq_supported:
             try:
                 await self.player.refresh_peq_preset()
                 self.player._last_peq_state_check = now

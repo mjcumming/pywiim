@@ -1,7 +1,7 @@
 """Command-line tool for testing all WiiM device features and endpoints.
 
-This tool exercises all available commands and endpoints with safety constraints
-(e.g., volume never exceeds 10%) to verify functionality without disrupting normal use.
+This tool exercises device commands and may interrupt playback or change settings.
+It attempts to restore some settings; EQ verification is read-only.
 """
 
 from __future__ import annotations
@@ -110,6 +110,8 @@ class FeatureTester:
             # Special handling for EQ data
             if label == "Current EQ" and isinstance(data, dict) and "EQBand" in data:
                 formatted = self._format_eq_data(data)
+            elif label in ("PEQ", "Graphic EQ"):
+                formatted = self._format_data(data, max_depth=4)
             else:
                 formatted = self._format_data(data)
             print(f"      {label}: {formatted}")
@@ -583,7 +585,7 @@ class FeatureTester:
             print(f"   ✗ Error: {e}")
 
     async def test_eq_controls(self) -> None:
-        """Test EQ controls."""
+        """Read EQ controls without overwriting unsaved device settings."""
         print("\n🎛️  Testing EQ Controls...")
 
         if not self.client.capabilities.get("supports_eq", False):
@@ -592,254 +594,77 @@ class FeatureTester:
             return
 
         try:
-            # Get current EQ
             eq = await self.client.get_eq()
             if eq:
                 self.results["passed"].append("eq: get_eq")
                 print("   ✓ get_eq")
                 self._print_data("Current EQ", eq, show_always=True)
+        except Exception as e:
+            self.results["warnings"].append(f"eq: get_eq - {e}")
+            print(f"   ⚠️  get_eq: {e}")
 
-            # Get EQ presets
+        try:
             presets = await self.client.get_eq_presets()
             if presets:
                 self.results["passed"].append("eq: get_eq_presets")
                 print(f"   ✓ get_eq_presets ({len(presets)} presets)")
                 self._print_data("EQ Presets", presets, show_always=True)
+        except Exception as e:
+            self.results["warnings"].append(f"eq: get_eq_presets - {e}")
+            print(f"   ⚠️  get_eq_presets: {e}")
 
-            # Test setting multiple EQ presets (enumerate and test)
-            if presets and len(presets) > 0:
-                from pywiim.api.constants import EQ_PRESET_MAP
-
-                # Save current EQ preset to restore later
-                original_preset = None
-                try:
-                    current_eq = await self.client.get_eq()
-                    if isinstance(current_eq, dict):
-                        original_preset = current_eq.get("Name") or current_eq.get("name")
-                except Exception:
-                    pass
-
-                # Normalize preset names (device may return capitalized names)
-                preset_lower = {p.lower(): p for p in presets}  # Map lowercase -> original
-
-                # Find presets that match our known preset keys (these are guaranteed to work)
-                testable_presets = []
-                for preset_name in presets:
-                    preset_lower_name = preset_name.lower()
-                    # Check if it matches our known preset map
-                    if preset_lower_name in EQ_PRESET_MAP:
-                        testable_presets.append(preset_lower_name)
-
-                # If we have testable presets, test a few of them (limit to 3-4 to keep test time reasonable)
-                if testable_presets:
-                    # Prioritize common presets: flat, rock, jazz, classical
-                    priority_presets = ["flat", "rock", "jazz", "classical"]
-                    presets_to_test = []
-
-                    # Add priority presets first if they're available
-                    for priority in priority_presets:
-                        if priority in testable_presets and priority not in presets_to_test:
-                            presets_to_test.append(priority)
-
-                    # Add remaining testable presets up to 4 total
-                    for preset in testable_presets:
-                        if preset not in presets_to_test and len(presets_to_test) < 4:
-                            presets_to_test.append(preset)
-
-                    # Test each preset
-                    tested_count = 0
-                    for preset_key in presets_to_test:
-                        try:
-                            await self.client.set_eq_preset(preset_key)
-                            await asyncio.sleep(0.5)
-
-                            # Verify it was set (optional - check current EQ)
-                            try:
-                                verify_eq = await self.client.get_eq()
-                                if isinstance(verify_eq, dict):
-                                    set_name = verify_eq.get("Name") or verify_eq.get("name", "")
-                                    # Check if preset was set (name might be capitalized)
-                                    if preset_key.lower() in set_name.lower() or set_name.lower() in preset_key.lower():
-                                        self.results["passed"].append(f"eq: set_eq_preset({preset_key})")
-                                        print(f"   ✓ set_eq_preset({preset_key})")
-                                        tested_count += 1
-                                    else:
-                                        # Preset was set but name doesn't match exactly (still success)
-                                        self.results["passed"].append(f"eq: set_eq_preset({preset_key})")
-                                        print(f"   ✓ set_eq_preset({preset_key}) [verified: {set_name}]")
-                                        tested_count += 1
-                                else:
-                                    # Can't verify but command succeeded
-                                    self.results["passed"].append(f"eq: set_eq_preset({preset_key})")
-                                    print(f"   ✓ set_eq_preset({preset_key})")
-                                    tested_count += 1
-                            except Exception:
-                                # Verification failed but setting might have worked
-                                self.results["passed"].append(f"eq: set_eq_preset({preset_key})")
-                                print(f"   ✓ set_eq_preset({preset_key})")
-                                tested_count += 1
-
-                            # Don't test more than 4 presets to keep test time reasonable
-                            if tested_count >= 4:
-                                break
-                        except Exception as e:
-                            self.results["warnings"].append(f"eq: set_eq_preset({preset_key}) - {str(e)}")
-                            print(f"   ⚠️  set_eq_preset({preset_key}): {e}")
-
-                    # Restore original preset if we had it
-                    if original_preset:
-                        try:
-                            # Try to find the original preset in our map
-                            original_lower = original_preset.lower()
-                            if original_lower in EQ_PRESET_MAP:
-                                await self.client.set_eq_preset(original_lower)
-                                await asyncio.sleep(0.3)
-                                print(f"   ✓ Restored original EQ preset: {original_preset}")
-                            elif original_lower in preset_lower:
-                                # Original preset is in device list but not in our map - try using device name
-                                await self.client.set_eq_preset(original_lower)
-                                await asyncio.sleep(0.3)
-                                print(f"   ✓ Restored original EQ preset: {original_preset}")
-                        except Exception:
-                            pass  # If restore fails, that's okay
-                else:
-                    # No presets match our known map - try first preset anyway
-                    try:
-                        first_preset = presets[0].lower()
-                        await self.client.set_eq_preset(first_preset)
-                        await asyncio.sleep(0.5)
-                        self.results["passed"].append(f"eq: set_eq_preset({first_preset})")
-                        print(f"   ✓ set_eq_preset({first_preset})")
-                    except Exception as e:
-                        self.results["warnings"].append(f"eq: set_eq_preset({first_preset}) - {str(e)}")
-                        print(f"   ⚠️  set_eq_preset({first_preset}): {e}")
-
-            # Test EQ status (get current enabled state)
-            try:
-                eq_status = await self.client.get_eq_status()
+        try:
+            eq_status = await self.client.get_eq_status()
+            if eq_status is None:
+                self.results["warnings"].append("eq: get_eq_status - state unavailable")
+                print("   ⚠️  get_eq_status: state unavailable")
+            else:
                 self.results["passed"].append("eq: get_eq_status")
                 print(f"   ✓ get_eq_status: {eq_status}")
-            except Exception as e:
-                # get_eq_status may not be supported on all devices
-                self.results["warnings"].append(f"eq: get_eq_status - {str(e)}")
-                print(f"   ⚠️  get_eq_status: {e}")
-
-            # Test EQ enable/disable
-            try:
-                # Get current state first to restore it
-                original_eq_state = None
-                try:
-                    original_eq_state = await self.client.get_eq_status()
-                except Exception:
-                    pass  # If we can't get status, just try to toggle
-
-                await self.client.set_eq_enabled(True)
-                await asyncio.sleep(0.3)
-                await self.client.set_eq_enabled(False)
-                await asyncio.sleep(0.3)
-
-                # Restore original state if we had it
-                if original_eq_state is not None:
-                    await self.client.set_eq_enabled(original_eq_state)
-                    await asyncio.sleep(0.2)
-
-                self.results["passed"].append("eq: set_eq_enabled")
-                print("   ✓ set_eq_enabled")
-            except Exception as e:
-                # Some devices may not support EQ enable/disable commands
-                error_str = str(e).lower()
-                if (
-                    "unknown command" in error_str
-                    or "not supported" in error_str
-                    or "404" in error_str
-                    or ("invalid json response" in error_str and "expecting value" in error_str)
-                ):
-                    self.results["not_supported"].append("eq: set_eq_enabled")
-                    print("   ⊘ set_eq_enabled: Not supported on this device")
-                else:
-                    self.results["failed"].append(f"eq: set_eq_enabled - {str(e)}")
-                    print(f"   ✗ set_eq_enabled: {e}")
-
-            # Test custom EQ (set 10-band EQ to flat)
-            try:
-                # Save current EQ if possible
-                current_eq_restore: dict[str, Any] | None = None
-                try:
-                    current_eq_restore = await self.client.get_eq()
-                except Exception:
-                    pass
-
-                # Set flat EQ (all zeros)
-                flat_eq = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-                await self.client.set_eq_custom(flat_eq)
-                await asyncio.sleep(0.5)
-
-                # Restore original EQ if we had it
-                if current_eq_restore and isinstance(current_eq_restore, dict) and "EQBand" in current_eq_restore:
-                    try:
-                        eq_bands = current_eq_restore.get("EQBand", [])
-                        if isinstance(eq_bands, list) and len(eq_bands) == 10:
-                            # Extract band values (may be dicts with "value" key or just ints)
-                            band_values: list[int] = []
-                            for band in eq_bands:
-                                if isinstance(band, dict):
-                                    val = band.get("value", band.get("Value", 0))
-                                    band_values.append(int(val) if val is not None else 0)
-                                else:
-                                    band_values.append(int(band) if isinstance(band, (int, str)) else 0)
-                            if len(band_values) == 10:
-                                await self.client.set_eq_custom(band_values)
-                                await asyncio.sleep(0.3)
-                    except Exception:
-                        pass  # If restore fails, that's okay
-
-                self.results["passed"].append("eq: set_eq_custom")
-                print("   ✓ set_eq_custom")
-            except Exception as e:
-                # Custom EQ may not be supported on all devices
-                error_str = str(e).lower()
-                if (
-                    "unknown command" in error_str
-                    or "not supported" in error_str
-                    or "404" in error_str
-                    or ("invalid json response" in error_str and "expecting value" in error_str)
-                ):
-                    self.results["not_supported"].append("eq: set_eq_custom")
-                    print("   ⊘ set_eq_custom: Not supported on this device")
-                else:
-                    self.results["warnings"].append(f"eq: set_eq_custom - {str(e)}")
-                    print(f"   ⚠️  set_eq_custom: {e}")
         except Exception as e:
-            self.results["failed"].append(f"eq: Error - {str(e)}")
-            print(f"   ✗ Error: {e}")
+            self.results["warnings"].append(f"eq: get_eq_status - {e}")
+            print(f"   ⚠️  get_eq_status: {e}")
+
+        self.results["skipped"].append("eq: write tests skipped to preserve current EQ")
+        print("   ⊘ EQ write tests skipped to preserve current EQ")
 
     async def test_advanced_eq_readonly(self) -> None:
         """Test advanced WiiM EQ read-only endpoints."""
         print("\n🎚️  Testing Advanced EQ Read-Only APIs...")
 
-        if not self.client.capabilities.get("supports_peq", False):
+        supports_peq = self.client.capabilities.get("supports_peq", False)
+        if not (supports_peq or self.client.capabilities.get("supports_eq", False)):
             self.results["skipped"].append("advanced_eq: Not supported")
             print("   ⊘ Advanced EQ not supported")
             return
 
-        try:
-            peq_presets = await self.client.get_peq_preset_list()
-            self.results["passed"].append("advanced_eq: get_peq_preset_list")
-            print(
-                "   ✓ get_peq_preset_list "
-                f"({len(peq_presets.get('preset', []))} built-in, {len(peq_presets.get('custom', []))} custom)"
-            )
-            self._print_data("PEQ Presets", peq_presets, show_always=True)
-        except Exception as e:
-            self.results["warnings"].append(f"advanced_eq: get_peq_preset_list - {str(e)}")
-            print(f"   ⚠️  get_peq_preset_list: {e}")
+        if supports_peq:
+            try:
+                peq = await self.client.get_peq_bands()
+                self.results["passed"].append("advanced_eq: get_peq_bands")
+                print(f"   ✓ get_peq_bands (input={peq.source_name}, enabled={peq.enabled})")
+                self._print_data("PEQ", asdict(peq), show_always=True)
+            except Exception as e:
+                self.results["warnings"].append(f"advanced_eq: get_peq_bands - {e}")
+                print(f"   ⚠️  get_peq_bands: {e}")
+
+            try:
+                peq_presets = await self.client.get_peq_preset_list()
+                self.results["passed"].append("advanced_eq: get_peq_preset_list")
+                print(
+                    "   ✓ get_peq_preset_list "
+                    f"({len(peq_presets.get('preset', []))} built-in, {len(peq_presets.get('custom', []))} custom)"
+                )
+                self._print_data("PEQ Presets", peq_presets, show_always=True)
+            except Exception as e:
+                self.results["warnings"].append(f"advanced_eq: get_peq_preset_list - {e}")
+                print(f"   ⚠️  get_peq_preset_list: {e}")
 
         try:
             graphic_eq = await self.client.get_graphic_eq_bands()
             self.results["passed"].append("advanced_eq: get_graphic_eq_bands")
-            print(
-                "   ✓ get_graphic_eq_bands " f"({len(graphic_eq.bands)} bands, preset={graphic_eq.name or 'Unknown'})"
-            )
+            state = (graphic_eq.name or "Custom") if graphic_eq.enabled else "Off"
+            print(f"   ✓ get_graphic_eq_bands ({len(graphic_eq.bands)} bands, preset={state})")
             self._print_data(
                 "Graphic EQ",
                 {
@@ -867,6 +692,10 @@ class FeatureTester:
         except Exception as e:
             self.results["warnings"].append(f"advanced_eq: get_graphic_eq_preset_list - {str(e)}")
             print(f"   ⚠️  get_graphic_eq_preset_list: {e}")
+
+        if not supports_peq:
+            self.results["skipped"].append("advanced_eq: PEQ and Room Correction not supported")
+            return
 
         try:
             room = await self.client.get_room_correction()

@@ -134,6 +134,7 @@ def parse_player_status(
     last_track: str | None = None,
     vendor: str | None = None,
     loop_mode_scheme: str | None = None,
+    legacy_eq_numeric_mapping: bool = False,
 ) -> tuple[dict[str, Any], str | None]:
     """Normalise *getPlayerStatusEx* / *getStatusEx* responses.
 
@@ -146,6 +147,7 @@ def parse_player_status(
         vendor: Device vendor (fallback when ``loop_mode_scheme`` is not set)
         loop_mode_scheme: Profile scheme ``wiim`` / ``arylic`` / ``legacy`` for ``loop_mode``
             decode (preferred over vendor alone; see ``get_device_profile``).
+        legacy_eq_numeric_mapping: Decode numeric EQ values only for a verified legacy profile.
 
     Returns:
         Tuple of (parsed_data, new_last_track)
@@ -511,7 +513,7 @@ def parse_player_status(
     # EQ numeric → textual preset.
     eq_raw = data.get("eq_preset")
     if isinstance(eq_raw, int | str) and str(eq_raw).isdigit():
-        data["eq_preset"] = EQ_NUMERIC_MAP.get(str(eq_raw), eq_raw)
+        data["eq_preset"] = EQ_NUMERIC_MAP.get(str(eq_raw), str(eq_raw)) if legacy_eq_numeric_mapping else str(eq_raw)
 
     # Enhanced Qobuz Connect state detection (addresses GitHub issue #35)
     # Qobuz Connect has complex state reporting issues that require sophisticated detection

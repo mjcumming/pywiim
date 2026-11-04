@@ -12,12 +12,14 @@ import pytest
 
 from pywiim.api.base import ApiResponse
 from pywiim.api.constants import (
+    GEQ_PLUGIN_URI,
     PEQ_CHANNEL_MODE_LR,
     PEQ_CHANNEL_MODE_STEREO,
     PEQ_MODE_HIGH_SHELF,
     PEQ_MODE_LOW_SHELF,
     PEQ_MODE_OFF,
     PEQ_MODE_PEAK,
+    PEQ_PLUGIN_URI,
 )
 from pywiim.api.peq import (
     GraphicEQSettings,
@@ -64,14 +66,8 @@ class TestParseEqBandArray:
         assert bands[0].gain == 3.0
 
     def test_empty_input(self):
-        """Empty band array returns 10 default bands."""
-        from pywiim.api.constants import PEQ_DEFAULT_GAIN, PEQ_DEFAULT_MODE
-
-        bands = _parse_eq_band_array([])
-        assert len(bands) == 10
-        for band in bands:
-            assert band.mode == PEQ_DEFAULT_MODE
-            assert band.gain == PEQ_DEFAULT_GAIN
+        """Empty band arrays do not invent default settings."""
+        assert _parse_eq_band_array([]) == []
 
     def test_malformed_non_numeric_value(self):
         """Non-numeric values are skipped gracefully (no exception)."""
@@ -80,37 +76,41 @@ class TestParseEqBandArray:
             {"param_name": "a_freq", "value": "--"},
             {"param_name": "a_gain", "value": 3.0},  # valid
         ]
-        bands = _parse_eq_band_array(band_array)
-        assert len(bands) == 10
-        # The valid gain entry is used; mode/freq fall back to defaults
-        assert bands[0].gain == 3.0
+        assert _parse_eq_band_array(band_array) == []
 
     def test_malformed_none_value(self):
         """Entries with value=None are skipped."""
         band_array = [{"param_name": "a_mode", "value": None}]
-        bands = _parse_eq_band_array(band_array)
-        assert len(bands) == 10
+        assert _parse_eq_band_array(band_array) == []
 
     def test_malformed_missing_param_name(self):
         """Entries without param_name are skipped."""
         band_array = [{"value": 1.0}]
-        bands = _parse_eq_band_array(band_array)
-        assert len(bands) == 10
+        assert _parse_eq_band_array(band_array) == []
 
     def test_partial_bands(self):
-        """Array with only some bands parsed; others get defaults."""
+        """Only a band with all four device-reported parameters is returned."""
         band_array = [
             {"param_name": "a_mode", "value": 2},
+            {"param_name": "a_freq", "value": 1000},
+            {"param_name": "a_q", "value": 1.2},
             {"param_name": "a_gain", "value": -6.0},
+            {"param_name": "b_gain", "value": 3.0},
         ]
         bands = _parse_eq_band_array(band_array)
+        assert len(bands) == 1
         assert bands[0].mode == 2
         assert bands[0].gain == -6.0
-        # Band b has all defaults
-        from pywiim.api.constants import PEQ_DEFAULT_GAIN, PEQ_DEFAULT_MODE
 
-        assert bands[1].mode == PEQ_DEFAULT_MODE
-        assert bands[1].gain == PEQ_DEFAULT_GAIN
+    @pytest.mark.parametrize("bad_value", [None, "NaN", "Infinity", "invalid"])
+    def test_invalid_parameter_does_not_fabricate_a_band(self, bad_value):
+        band = PEQBand("a").to_api_params()
+        band[0]["value"] = bad_value
+        assert _parse_eq_band_array(band) == []
+
+    def test_duplicate_parameter_does_not_fabricate_a_band(self):
+        band = PEQBand("a").to_api_params()
+        assert _parse_eq_band_array([*band, {"param_name": "a_gain", "value": 4}]) == []
 
 
 # ---------------------------------------------------------------------------
@@ -196,14 +196,14 @@ class TestParsePeqSettings:
         assert settings.channel_mode == PEQ_CHANNEL_MODE_STEREO
         assert settings.source_name == ""
         assert settings.name == ""
-        assert len(settings.bands) == 10
+        assert settings.bands == []
 
 
 class TestParseGraphicEqSettings:
     """Tests for Eq10HP graphic EQ parsing."""
 
     def test_graphic_eq_response(self):
-        """Graphic EQ response returns 10 named gain bands."""
+        """Graphic EQ response returns the named gain bands reported."""
         raw = {
             "EQStat": "On",
             "EQLevel": 1,
@@ -224,20 +224,19 @@ class TestParseGraphicEqSettings:
         assert settings.eq_level == 1
         assert settings.source_name == "wifi"
         assert settings.name == "Acoustic"
-        assert len(settings.bands) == 10
+        assert len(settings.bands) == 3
         assert settings.bands[0].name == "band31hz"
         assert settings.bands[0].gain == 5.0
-        assert settings.bands[5].name == "band1khz"
-        assert settings.bands[5].gain == 1.8
-        assert settings.bands[9].gain == 2.2
+        assert settings.bands[1].name == "band1khz"
+        assert settings.bands[1].gain == 1.8
+        assert settings.bands[2].gain == 2.2
 
     def test_graphic_eq_defaults(self):
-        """Missing graphic EQ bands default to 0 dB."""
+        """Missing graphic EQ bands are not fabricated as 0 dB."""
         settings = _parse_graphic_eq_settings({})
 
         assert settings.enabled is False
-        assert len(settings.bands) == 10
-        assert all(band.gain == 0.0 for band in settings.bands)
+        assert settings.bands == []
 
 
 class TestParseRoomCorrectionSettings:
@@ -267,7 +266,7 @@ class TestParseRoomCorrectionSettings:
         assert settings.eq_level == 2
         assert settings.source_name == "default"
         assert settings.name == "Room"
-        assert len(settings.bands) == 10
+        assert len(settings.bands) == 1
         assert settings.bands[0].frequency == 31.25
         assert settings.bands[0].gain == -2.5
 
@@ -286,11 +285,15 @@ class TestGetPeqBands:
         raw = {
             "EQStat": "On",
             "channelMode": PEQ_CHANNEL_MODE_STEREO,
+            "Name": "Night",
             "EQBand": [],
         }
         mock_client._request = AsyncMock(return_value=ApiResponse(parsed=raw, raw=None))
         result = await mock_client.get_peq_bands()
         assert isinstance(result, PEQSettings)
+        assert result.enabled is True
+        assert result.name == "Night"
+        assert result.bands == []
         call_args = mock_client._request.call_args[0][0]
         assert "EQGetLV2BandEx" in call_args
 
@@ -320,12 +323,15 @@ class TestGetPeqBands:
 
 
 class TestGetGraphicEqBands:
-    """Tests for read-only Eq10HP graphic EQ helpers."""
+    """Tests for Eq10HP graphic EQ helpers."""
 
     @pytest.mark.asyncio
     async def test_get_graphic_eq_bands_no_source(self, mock_client):
         """get_graphic_eq_bands without source calls Eq10HP endpoint."""
         raw = {
+            "status": "OK",
+            "pluginURI": GEQ_PLUGIN_URI,
+            "source_name": "wifi",
             "EQStat": "On",
             "channelMode": PEQ_CHANNEL_MODE_STEREO,
             "EQBand": [{"param_name": "band31hz", "value": 1.0}],
@@ -342,7 +348,15 @@ class TestGetGraphicEqBands:
     @pytest.mark.asyncio
     async def test_get_graphic_eq_bands_with_source(self, mock_client):
         """get_graphic_eq_bands with source calls source-scoped Eq10HP endpoint."""
-        mock_client._request = AsyncMock(return_value=ApiResponse(parsed={"EQBand": []}, raw=None))
+        raw = {
+            "status": "OK",
+            "pluginURI": GEQ_PLUGIN_URI,
+            "source_name": "wifi",
+            "EQStat": "On",
+            "channelMode": "Stereo",
+            "EQBand": [{"param_name": "band31hz", "value": 0}],
+        }
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=raw, raw=None))
 
         result = await mock_client.get_graphic_eq_bands(source_name="wifi")
 
@@ -390,7 +404,7 @@ class TestGetRoomCorrection:
         assert isinstance(result, RoomCorrectionSettings)
         assert result.enabled is True
         assert result.eq_level == 2
-        assert result.bands[0].gain == -3.0
+        assert result.bands == []
         call_args = mock_client._request.call_args[0][0]
         assert "EQGetLV2SourceBandEx" in call_args
         assert "EQLevel" in call_args
@@ -468,20 +482,50 @@ class TestSetPeqBands:
 
     @pytest.mark.asyncio
     async def test_set_peq_bands_stereo_no_source(self, mock_client):
-        """set_peq_bands in stereo mode calls EQSetLV2Band endpoint."""
-        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
+        """Current-source writes are pinned to the source observed before writing."""
         bands = [PEQBand(letter=letter) for letter in "abcdefghij"]
+        raw = {
+            "status": "OK",
+            "pluginURI": PEQ_PLUGIN_URI,
+            "source_name": "wifi",
+            "EQStat": "On",
+            "channelMode": "Stereo",
+            "EQBand": [param for band in bands for param in band.to_api_params()],
+        }
+        mock_client._request = AsyncMock(
+            side_effect=[
+                ApiResponse(parsed=raw, raw=None),
+                ApiResponse(parsed=None, raw="OK"),
+                ApiResponse(parsed=raw, raw=None),
+                ApiResponse(parsed=raw, raw=None),
+            ]
+        )
         await mock_client.set_peq_bands(bands)
-        call_args = mock_client._request.call_args[0][0]
-        assert "EQSetLV2Band" in call_args
+        call_args = mock_client._request.await_args_list[1].args[0]
+        assert "EQSetLV2SourceBand" in call_args
+        assert "wifi" in call_args
 
     @pytest.mark.asyncio
     async def test_set_peq_bands_with_source(self, mock_client):
         """set_peq_bands with source calls EQSetLV2SourceBand endpoint."""
-        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
         bands = [PEQBand(letter=letter) for letter in "abcdefghij"]
+        raw = {
+            "status": "OK",
+            "pluginURI": PEQ_PLUGIN_URI,
+            "source_name": "bluetooth",
+            "EQStat": "On",
+            "channelMode": "Stereo",
+            "EQBand": [param for band in bands for param in band.to_api_params()],
+        }
+        mock_client._request = AsyncMock(
+            side_effect=[
+                ApiResponse(parsed=raw, raw=None),
+                ApiResponse(parsed=None, raw="OK"),
+                ApiResponse(parsed=raw, raw=None),
+            ]
+        )
         await mock_client.set_peq_bands(bands, source_name="bluetooth")
-        call_args = mock_client._request.call_args[0][0]
+        call_args = mock_client._request.await_args_list[1].args[0]
         assert "EQSetLV2SourceBand" in call_args
         assert "bluetooth" in call_args
 
