@@ -28,22 +28,15 @@ Configure test devices in `tests/devices.yaml`.
 
 ### `release.sh`
 
-Automated release script that runs all checks, bumps version, and pushes to git.
+Start the GitHub Actions release for a version already reviewed and merged to
+main. This script does not stage, commit, or push local changes.
 
 ```bash
-./scripts/release.sh patch   # Bump patch version (default)
-./scripts/release.sh minor   # Bump minor version
-./scripts/release.sh major   # Bump major version
+bash scripts/release.sh 3.0.1
 ```
 
-**What it does:**
-1. Formats code with `black` and `isort`
-2. Runs linting with `ruff`
-3. Runs type checking with `mypy`
-4. Runs tests with `pytest`
-5. Bumps version in `pyproject.toml` and `pywiim/__init__.py`
-6. Commits changes with version bump message
-7. Creates git tag and pushes
+The workflow checks main-branch CI, version files, and the changelog before
+publishing. See the [release process](../docs/RELEASE_PROCESS.md).
 
 ### `prerelease-check.sh`
 
@@ -55,7 +48,8 @@ Pre-release integration test runner.
 
 ### `publish.sh`
 
-Manual PyPI publishing (rarely needed - GitHub Actions handles this automatically).
+Optional TestPyPI upload: `bash scripts/publish.sh test`. The script builds
+into a temporary directory; production publishing uses GitHub Actions.
 
 ### `create_releases_for_tags.sh`
 
@@ -73,13 +67,12 @@ Sets up GitHub CLI authentication.
 
 ### `setup_pypi_auth.sh`
 
-Configures PyPI authentication for manual publishing.
+Explains the supported authentication paths. It does not collect or store
+tokens; GitHub Actions uses trusted publishing for production.
 
 ## Git Hooks
 
-### `pre-push.sh`
-
-Git pre-push hook script. Runs automatically when pushing (if configured).
+Local Git hooks are optional. CI remains the authoritative merge gate.
 
 ## Subdirectories
 
@@ -132,8 +125,8 @@ pytest tests/integration/ -m features -v
 # 6. Check test reports
 cat tests/test_reports.json
 
-# 7. Do the release
-./scripts/release.sh patch
+# 7. Publish a version already reviewed and merged to main
+make release VERSION=X.Y.Z
 ```
 
 ## Configuration

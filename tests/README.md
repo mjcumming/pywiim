@@ -9,7 +9,7 @@ This directory contains both unit tests (with mocks) and integration tests (with
 pytest tests/unit/ -v
 
 # Run integration tests (requires real device)
-pytest tests/integration/ -v
+pytest tests/integration/ -m integration -v
 ```
 
 ## Test Structure
@@ -150,7 +150,7 @@ Integration tests require real WiiM devices on your network.
 
 ```bash
 # Run all integration tests
-pytest tests/integration/ -v
+pytest tests/integration/ -m integration -v
 
 # Run specific tier
 pytest tests/integration/ -m smoke -v

@@ -17,18 +17,45 @@ jobs:
     permissions:
       contents: write  # Required for creating releases
       id-token: write  # Required for PyPI trusted publishing
+      actions: read    # Read CI results for the release commit
     
     env:
       TAG: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
-    - name: Check version matches pyproject.toml
+    - name: Verify release commit is on main
+      run: |
+        if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+          echo "::error::Run manual releases from main"
+          exit 1
+        fi
+        git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+          echo "::error::Release commit is not on main"
+          exit 1
+        }
+        if git show-ref --verify --quiet "refs/tags/$TAG"; then
+          TAG_COMMIT=$(git rev-parse "refs/tags/$TAG^{commit}")
+          if [ "$TAG_COMMIT" != "$GITHUB_SHA" ]; then
+            echo "::error::Existing tag $TAG points to a different commit"
+            exit 1
+          fi
+        fi
+
+    - name: Wait for main-branch CI
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: bash scripts/wait-for-ci.sh
+
+    - name: Check version files match the release tag
       run: |
         VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
-        if [ "v$VERSION" != "$TAG" ]; then
-          echo "::error::Tag $TAG does not match pyproject.toml version $VERSION"
+        INIT_VERSION=$(grep '^__version__ = ' pywiim/__init__.py | sed 's/__version__ = "\(.*\)"/\1/')
+        if [ "v$VERSION" != "$TAG" ] || [ "$VERSION" != "$INIT_VERSION" ]; then
+          echo "::error::Tag $TAG does not match version files ($VERSION, $INIT_VERSION)"
           exit 1
         fi
     
@@ -55,6 +82,10 @@ jobs:
         echo "Extracting notes for version $VERSION"
         # Get content between this version header and the next version header
         NOTES=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
+        if [ -z "$NOTES" ]; then
+          echo "::error::No changelog entry for $VERSION"
+          exit 1
+        fi
         # Handle multi-line output
         echo "notes<<EOF" >> $GITHUB_OUTPUT
         echo "$NOTES" >> $GITHUB_OUTPUT
