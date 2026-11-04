@@ -107,11 +107,13 @@ Tests all API endpoints and reports:
 ### Feature Testing
 Tests specific features:
 - Presets support
-- EQ support
+- EQ support, the input reported by the device, current graphic and PEQ states, saved preset names, and available bands
 - Multiroom support
 - Bluetooth support
 - Audio settings support
 - LMS integration support
+
+An unsaved graphic curve is shown as `Custom (unsaved)`. A failed state or preset-list read is reported as unknown; it does not mean EQ is Off or that the preset list is empty. PEQ and RoomFit band lists include only complete, unambiguous device-reported bands. EQ diagnostics only read the device.
 
 ### Errors and Warnings
 Lists any errors or warnings encountered during testing.

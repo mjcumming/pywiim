@@ -246,28 +246,47 @@ class RoomCorrectionSettings:
 
 
 def _parse_eq_band_array(band_array: list[dict[str, Any]]) -> list[PEQBand]:
-    """Parse a raw EQBand/EQBandL/EQBandR array into a list of PEQBand objects.
+    """Parse complete, unambiguous PEQ bands reported by the device.
 
     The device returns bands indexed 0–47 (4 params × 12 bands).
-    We only surface bands a–j (indices 0–39).
+    We only surface bands a–j (indices 0–39); incomplete bands are omitted
+    instead of filling missing parameters with defaults.
     """
-    # Build a flat param_name → value mapping
+    if not isinstance(band_array, list):
+        return []
     param_map: dict[str, float] = {}
+    seen: set[str] = set()
+    invalid: set[str] = set()
     for entry in band_array:
         if not isinstance(entry, dict):
             continue
         pname = entry.get("param_name")
         val = entry.get("value")
-        if pname and val is not None:
-            try:
-                param_map[str(pname)] = float(val)
-            except (ValueError, TypeError):
-                _LOGGER.debug("PEQ: skipping unreadable param %r = %r", pname, val)
+        if not isinstance(pname, str) or not pname:
+            continue
+        if pname in seen:
+            invalid.add(pname)
+            continue
+        seen.add(pname)
+        try:
+            if val is None or isinstance(val, bool):
+                raise ValueError("missing or boolean EQ parameter")
+            parsed = float(val)
+            if not math.isfinite(parsed):
+                raise ValueError("non-finite EQ parameter")
+            param_map[pname] = parsed
+        except (ValueError, TypeError):
+            invalid.add(pname)
+            _LOGGER.debug("PEQ: skipping unreadable param %r = %r", pname, val)
 
     bands: list[PEQBand] = []
     for letter in PEQ_BAND_LETTERS:
-        band = PEQBand.from_api_params(letter, param_map)
-        bands.append(band)
+        keys = {f"{letter}_{suffix}" for suffix in ("mode", "freq", "q", "gain")}
+        if not keys.issubset(param_map) or keys & invalid:
+            continue
+        if not param_map[f"{letter}_mode"].is_integer() or param_map[f"{letter}_freq"] <= 0:
+            continue
+        bands.append(PEQBand.from_api_params(letter, param_map))
     return bands
 
 

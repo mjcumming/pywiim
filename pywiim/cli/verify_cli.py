@@ -110,6 +110,8 @@ class FeatureTester:
             # Special handling for EQ data
             if label == "Current EQ" and isinstance(data, dict) and "EQBand" in data:
                 formatted = self._format_eq_data(data)
+            elif label in ("PEQ", "Graphic EQ"):
+                formatted = self._format_data(data, max_depth=4)
             else:
                 formatted = self._format_data(data)
             print(f"      {label}: {formatted}")
@@ -630,29 +632,39 @@ class FeatureTester:
         """Test advanced WiiM EQ read-only endpoints."""
         print("\n🎚️  Testing Advanced EQ Read-Only APIs...")
 
-        if not self.client.capabilities.get("supports_peq", False):
+        supports_peq = self.client.capabilities.get("supports_peq", False)
+        if not (supports_peq or self.client.capabilities.get("supports_eq", False)):
             self.results["skipped"].append("advanced_eq: Not supported")
             print("   ⊘ Advanced EQ not supported")
             return
 
-        try:
-            peq_presets = await self.client.get_peq_preset_list()
-            self.results["passed"].append("advanced_eq: get_peq_preset_list")
-            print(
-                "   ✓ get_peq_preset_list "
-                f"({len(peq_presets.get('preset', []))} built-in, {len(peq_presets.get('custom', []))} custom)"
-            )
-            self._print_data("PEQ Presets", peq_presets, show_always=True)
-        except Exception as e:
-            self.results["warnings"].append(f"advanced_eq: get_peq_preset_list - {str(e)}")
-            print(f"   ⚠️  get_peq_preset_list: {e}")
+        if supports_peq:
+            try:
+                peq = await self.client.get_peq_bands()
+                self.results["passed"].append("advanced_eq: get_peq_bands")
+                print(f"   ✓ get_peq_bands (input={peq.source_name}, enabled={peq.enabled})")
+                self._print_data("PEQ", asdict(peq), show_always=True)
+            except Exception as e:
+                self.results["warnings"].append(f"advanced_eq: get_peq_bands - {e}")
+                print(f"   ⚠️  get_peq_bands: {e}")
+
+            try:
+                peq_presets = await self.client.get_peq_preset_list()
+                self.results["passed"].append("advanced_eq: get_peq_preset_list")
+                print(
+                    "   ✓ get_peq_preset_list "
+                    f"({len(peq_presets.get('preset', []))} built-in, {len(peq_presets.get('custom', []))} custom)"
+                )
+                self._print_data("PEQ Presets", peq_presets, show_always=True)
+            except Exception as e:
+                self.results["warnings"].append(f"advanced_eq: get_peq_preset_list - {e}")
+                print(f"   ⚠️  get_peq_preset_list: {e}")
 
         try:
             graphic_eq = await self.client.get_graphic_eq_bands()
             self.results["passed"].append("advanced_eq: get_graphic_eq_bands")
-            print(
-                "   ✓ get_graphic_eq_bands " f"({len(graphic_eq.bands)} bands, preset={graphic_eq.name or 'Unknown'})"
-            )
+            state = (graphic_eq.name or "Custom") if graphic_eq.enabled else "Off"
+            print(f"   ✓ get_graphic_eq_bands ({len(graphic_eq.bands)} bands, preset={state})")
             self._print_data(
                 "Graphic EQ",
                 {
@@ -680,6 +692,10 @@ class FeatureTester:
         except Exception as e:
             self.results["warnings"].append(f"advanced_eq: get_graphic_eq_preset_list - {str(e)}")
             print(f"   ⚠️  get_graphic_eq_preset_list: {e}")
+
+        if not supports_peq:
+            self.results["skipped"].append("advanced_eq: PEQ and Room Correction not supported")
+            return
 
         try:
             room = await self.client.get_room_correction()

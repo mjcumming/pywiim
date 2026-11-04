@@ -79,7 +79,7 @@ asyncio.run(main())
 
 ### Upgrading from 2.x
 
-Version 3.0 makes unknown EQ status explicit: `get_eq_status()` can return `None`, and invalid preset-list responses raise an error. `set_eq_custom()` takes ten gains in dB (-12 to +12), while replacing a saved PEQ profile requires `overwrite=True`. See the [3.0.0 changelog](CHANGELOG.md) for the complete compatibility notes.
+Version 3.0 makes unknown EQ status explicit: `get_eq_status()` can return `None`, and invalid preset-list responses raise an error. `set_eq_custom()` takes ten gains in dB (-12 to +12), while replacing a saved PEQ profile requires `overwrite=True`. PEQ and RoomFit reads omit incomplete bands rather than filling in default values. See the [3.0.0 changelog](CHANGELOG.md) for the complete compatibility notes.
 
 ## Command-Line Tools
 
@@ -168,6 +168,7 @@ Comprehensive diagnostic tool for troubleshooting device issues and gathering in
 - Includes UPnP `description.xml` capability enrichment (advertised services like PlayQueue/QPlay)
 - Tests all API endpoints to verify functionality
 - Tests feature support (presets, EQ, multiroom, Bluetooth, etc.)
+- Shows the reported input, graphic and parametric EQ state, available presets, and reported band values
 - Generates detailed JSON reports for sharing with developers
 - Identifies errors and warnings
 
@@ -229,6 +230,7 @@ Monitor your device in real-time with adaptive polling and UPnP event support.
 - Uses UPnP events for instant updates when available
 - Falls back to adaptive HTTP polling
 - Shows play state, volume, mute, track info, and playback position
+- Shows the current input's graphic EQ and PEQ state, including Custom and unknown
 - Displays device role in multiroom groups
 - Tracks statistics (poll count, state changes, UPnP events)
 

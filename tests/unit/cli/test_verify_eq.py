@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pywiim.api.peq import GraphicEQBand, GraphicEQSettings, PEQBand, PEQSettings, RoomCorrectionSettings
 from pywiim.cli.verify_cli import FeatureTester
 
 
@@ -74,3 +75,47 @@ async def test_eq_verification_skips_unsupported_devices():
 
     player.client.get_eq.assert_not_awaited()
     assert "eq: Not supported" in tester.results["skipped"]
+
+
+@pytest.mark.asyncio
+async def test_advanced_graphic_reads_do_not_require_peq_capability():
+    player = MagicMock()
+    client = player.client
+    client.capabilities = {"supports_eq": True, "supports_peq": False}
+    client.get_graphic_eq_bands = AsyncMock(
+        return_value=GraphicEQSettings(source_name="wifi", enabled=True, bands=[GraphicEQBand("band31hz", 2)])
+    )
+    client.get_graphic_eq_preset_list = AsyncMock(return_value={"preset": ["Flat"], "custom": []})
+    client.get_peq_bands = AsyncMock()
+    client.get_peq_preset_list = AsyncMock()
+    tester = FeatureTester(player)
+
+    await tester.test_advanced_eq_readonly()
+
+    client.get_graphic_eq_bands.assert_awaited_once()
+    client.get_graphic_eq_preset_list.assert_awaited_once()
+    client.get_peq_bands.assert_not_awaited()
+    client.get_peq_preset_list.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_advanced_peq_verification_shows_source_bands_and_profiles(capsys):
+    player = MagicMock()
+    client = player.client
+    client.capabilities = {"supports_eq": True, "supports_peq": True}
+    client.get_peq_bands = AsyncMock(
+        return_value=PEQSettings(source_name="line-in", enabled=True, name="Night", bands=[PEQBand("a", gain=2)])
+    )
+    client.get_peq_preset_list = AsyncMock(return_value={"preset": ["Flat"], "custom": ["Night"]})
+    client.get_graphic_eq_bands = AsyncMock(return_value=GraphicEQSettings())
+    client.get_graphic_eq_preset_list = AsyncMock(return_value={"preset": [], "custom": []})
+    client.get_room_correction = AsyncMock(return_value=RoomCorrectionSettings())
+    tester = FeatureTester(player)
+
+    await tester.test_advanced_eq_readonly()
+
+    output = capsys.readouterr().out
+    assert "line-in" in output
+    assert "Night" in output
+    assert "gain: 2" in output
+    assert "advanced_eq: get_peq_bands" in tester.results["passed"]

@@ -19,6 +19,8 @@ def _make_monitor(
 ) -> PlayerMonitor:
     player = MagicMock()
     player.client.capabilities = {
+        "supports_eq": False,
+        "supports_peq": False,
         "supports_trigger_out": supports_trigger_out,
         "supports_subwoofer": supports_subwoofer,
         "supports_led_switch": supports_led_indicator,
@@ -31,6 +33,58 @@ def _make_monitor(
     monitor = PlayerMonitor(player)
     monitor.hardware_poll_interval = hardware_poll_interval
     return monitor
+
+
+def test_eq_display_uses_reconciled_state_without_rewriting_preset_names():
+    monitor = _make_monitor()
+    player = monitor.player
+    player.client.capabilities.update(supports_eq=True, supports_peq=True)
+    player.eq_preset = None
+    player.peq_enabled = None
+    assert monitor._format_eq_display() == ["Graphic EQ: Unknown", "PEQ: Unknown"]
+
+    player.eq_preset = "Custom"
+    player.peq_enabled = False
+    assert monitor._format_eq_display() == ["Graphic EQ: Custom", "PEQ: Off"]
+
+    player.eq_preset = "Off"
+    player.peq_enabled = True
+    player.peq_preset = "My PEQ"
+    assert monitor._format_eq_display() == ["Graphic EQ: Off", "PEQ: My PEQ"]
+    player.peq_preset = None
+    assert monitor._format_eq_display() == ["Graphic EQ: Off", "PEQ: On (unnamed)"]
+
+
+def test_eq_display_omits_unsupported_features():
+    monitor = _make_monitor()
+    assert monitor._format_eq_display() == []
+
+
+def test_tui_and_line_show_the_current_input_eq_state(capsys):
+    from pywiim.client import WiiMClient
+    from pywiim.models import PlayerStatus
+    from pywiim.player import Player
+
+    client = WiiMClient("192.0.2.1", capabilities={"supports_eq": True, "supports_peq": True})
+    player = Player(client)
+    player._available = True
+    player._status_model = PlayerStatus(source="wifi")
+    player._state_mgr._remember_eq_band({"source_name": "wifi", "EQStat": "On", "Name": ""})
+    player._peq_enabled = False
+    monitor = PlayerMonitor(player)
+
+    monitor._display_tui("solo", 5)
+    output = capsys.readouterr().out
+    assert "Graphic EQ: Custom" in output
+    assert "PEQ: Off" in output
+
+    player._eq_enabled = False
+    player._peq_enabled = True
+    player._peq_preset = "My PEQ"
+    monitor._display_line_status("solo", 5)
+    output = capsys.readouterr().out
+    assert "Graphic EQ: Off" in output
+    assert "PEQ: My PEQ" in output
 
 
 class TestMonitorHardwarePolling:

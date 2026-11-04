@@ -330,6 +330,8 @@ await player.client.delete_peq("Desk")
 
 **Data models** (from `pywiim.api.peq`): `PEQBand`, `PEQSettings`, `PEQPresetInfo`. Constants: `PEQ_MODE_OFF`, `PEQ_MODE_LOW_SHELF`, `PEQ_MODE_PEAK`, `PEQ_MODE_HIGH_SHELF`, `PEQ_CHANNEL_MODE_STEREO`, `PEQ_CHANNEL_MODE_LR`.
 
+PEQ and RoomFit band lists contain only bands for which the device supplied all four unambiguous numeric parameters. Missing or malformed parameters do not become default-looking bands; the lists may be empty or shorter than ten. PEQ enabled state and name can still be available when bands are incomplete.
+
 Setting bands activates PEQ. Band writes are read back from the same input, and profile saves are reloaded to verify the stored curve. Saving an existing custom name requires `overwrite=True`; factory names cannot be overwritten. Saving and reloading are separate device commands, not an atomic transaction: if verification fails after a reload, pywiim attempts to restore the previous bands and reports if restoration also fails. Rename and delete verify the updated preset list. Player preset caches are not automatically refreshed by these client methods.
 
 ##### LV2 graphic 10-band EQ (`Eq10HP`)
