@@ -9,18 +9,15 @@ publishing path; local commands do not stage, commit, or push unrelated work.
 1. Update `pyproject.toml` and `pywiim/__init__.py` to the same version.
 2. Add a versioned entry to [CHANGELOG.md](../CHANGELOG.md). Describe
    user-visible fixes and compatibility changes.
-3. Push the committed candidate and open or update its PR. With Docker running,
-   run `python scripts/prepare_release.py` while GitHub checks run. It uses
-   cached Linux dependencies to run formatting, lint, type, and non-device
-   tests on Python 3.11 and 3.12. A successful local result is reused for the
+3. Push the committed candidate and open or update its PR. With Docker running
+   and BuildKit enabled, run `python scripts/prepare_release.py` while GitHub
+   checks run. It uses cached Linux dependencies to run formatting, lint, type,
+   and non-device tests on Python 3.11 and 3.12. A successful local result is reused for the
    same clean Git tree; use `--force` to rerun it. Uncommitted or untracked
    files must be committed or moved to another worktree first. The local run
    does not upload coverage or replace GitHub CI and Codecov.
-4. Review the changes, pass CI, and merge the PR to `main`.
-5. Verify the release workflow succeeds. It may reuse successful PR CI when
-   that run recorded the exact release tree; otherwise it waits for CI on the
-   merged commit. Device tests are useful when relevant and hardware is
-   available; record what was tested.
+4. Review the changes, pass CI, and merge the PR to `main`. Device tests are
+   useful when relevant and hardware is available; record what was tested.
 
 Use semantic versioning and avoid a release containing no product changes.
 Do not publish an unpublished dependency or commit the contents of another
@@ -41,6 +38,9 @@ files match, a changelog entry exists, and CI passed for the exact release
 tree. It builds and publishes to PyPI, then creates the GitHub tag and
 release with the same artifacts. A pushed version tag can also trigger the
 same workflow and checks.
+
+The workflow may reuse successful PR CI when that run recorded the exact
+release tree; otherwise it waits for CI on the merged commit.
 
 The command starts the workflow; it does not mean publication has succeeded.
 Check the workflow result and the version on
