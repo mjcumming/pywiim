@@ -477,6 +477,13 @@ class AudioConfiguration:
             await self.set_eq_enabled(False)
             return
 
+        # Unsaved custom bands stay stored while EQ is off; EQOn restores them.
+        if preset.lower() == "custom" and self.player.eq_custom_stored:
+            await self.set_eq_enabled(True)
+            if not self.player._eq_is_custom:
+                raise WiiMResponseError("Custom EQ was not confirmed by the device")
+            return
+
         # Resolve against cached device presets first so dynamic/custom labels work.
         available_presets = [item for item in self.player.eq_presets if item and item != "Off"]
         normalized_preset = self.player.client._normalize_eq_preset_name(

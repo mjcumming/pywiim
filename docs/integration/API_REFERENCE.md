@@ -290,9 +290,12 @@ if spotify and spotify["supports_shuffle"]:
 ```python
 player.eq_preset  # str | None: device name, "Custom", "Off", or None if unknown
 player.eq_is_custom  # bool | None: unsaved graphic bands, or unknown
+player.eq_custom_stored  # bool: graphic EQ is off and an unsaved custom setting is stored
 ```
 
 Current graphic EQ name for the active input. `Off` also covers graphic EQ inactive while PEQ is on. An empty device name with EQ on is unsaved `Custom`, not a loadable preset. After the first `EQGetBand` read, `getPlayerStatus` `eq` does not replace it.
+
+While graphic EQ is off, an empty `EQGetBand` name means an unsaved custom setting is still stored (`eq_custom_stored`); a non-empty name is a saved preset that was switched off. `eq_preset` stays `Off` either way. `await player.set_eq_preset("Custom")` turns EQ back on with the stored bands when `eq_custom_stored` is true.
 
 #### Parametric EQ (PEQ) – WiiM only
 

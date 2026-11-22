@@ -448,6 +448,7 @@ class Player(PlayerBase):
                 self._eq_enabled = False
                 self._eq_band_preset = None
                 self._eq_is_custom = False
+                self._eq_custom_stored = False
 
     async def refresh_eq_state(self) -> None:
         """Read the active input's graphic and supported parametric EQ."""
@@ -1277,6 +1278,16 @@ class Player(PlayerBase):
     def eq_is_custom(self) -> bool | None:
         """Whether the active graphic EQ consists of unsaved custom bands."""
         return self._eq_is_custom
+
+    @property
+    def eq_custom_stored(self) -> bool:
+        """Whether graphic EQ is off while an unsaved custom setting is stored.
+
+        ``eq_preset`` stays "Off" in that state. Selecting "Custom" with
+        ``set_eq_preset()`` turns EQ back on with those bands. A saved preset
+        that was switched off does not count.
+        """
+        return self._eq_enabled is False and self._eq_custom_stored
 
     @property
     def shuffle(self) -> bool | None:
