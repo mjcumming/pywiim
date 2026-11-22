@@ -33,7 +33,7 @@ async def test_read_solo_channel_mode(mock_client, response, expected):
     mock_client._request.assert_awaited_once_with("/httpapi.asp?command=getChannelMode")
 
 
-@pytest.mark.parametrize(("channel", "number"), [("stereo", 0), ("left", 1), ("right", 2)])
+@pytest.mark.parametrize(("channel", "number"), [("stereo", 0), ("left", 1), ("right", 2), ("Mono", 3)])
 @pytest.mark.asyncio
 async def test_write_solo_channel_mode(mock_client, channel, number):
     mock_client._request = AsyncMock(return_value=ApiResponse(parsed=None, raw="OK"))
@@ -163,6 +163,66 @@ async def test_setting_channel_routes_by_live_role(mock_client, role):
 
 
 @pytest.mark.asyncio
+async def test_solo_player_can_set_mono(mock_client):
+    mock_client._capabilities.update(supports_output_channel=True, supports_output_channel_mode=True)
+    mock_client.set_output_channel = AsyncMock()
+    mock_client.set_channel_mode = AsyncMock()
+    callback = MagicMock()
+    player = Player(mock_client, on_state_changed=callback)
+    player._output_channel_mode = "stereo"
+
+    await player.set_output_channel("Mono")
+
+    mock_client.set_channel_mode.assert_awaited_once_with("mono")
+    mock_client.set_output_channel.assert_not_awaited()
+    assert player.output_channel == "mono"
+    callback.assert_called_once()
+
+
+@pytest.mark.parametrize("role", ["master", "slave"])
+@pytest.mark.asyncio
+async def test_grouped_player_rejects_mono(mock_client, role):
+    mock_client._capabilities.update(supports_output_channel=True, supports_output_channel_mode=True)
+    mock_client.set_output_channel = AsyncMock()
+    mock_client.set_channel_mode = AsyncMock()
+    callback = MagicMock()
+    player = Player(mock_client, on_state_changed=callback)
+    player._detected_role = role
+
+    with pytest.raises(WiiMError, match="mono"):
+        await player.set_output_channel("mono")
+
+    mock_client.set_output_channel.assert_not_awaited()
+    mock_client.set_channel_mode.assert_not_awaited()
+    callback.assert_not_called()
+
+
+@pytest.mark.parametrize("mode_support", [False, None])
+@pytest.mark.asyncio
+async def test_solo_player_without_channel_mode_rejects_mono(mock_client, mode_support):
+    mock_client._capabilities.update(supports_output_channel=True, supports_output_channel_mode=mode_support)
+    mock_client.set_output_channel = AsyncMock()
+    mock_client.set_channel_mode = AsyncMock()
+    player = Player(mock_client)
+
+    with pytest.raises(WiiMError, match="mono"):
+        await player.set_output_channel("mono")
+
+    mock_client.set_output_channel.assert_not_awaited()
+    mock_client.set_channel_mode.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_channel_command_still_rejects_mono(mock_client):
+    mock_client._request = AsyncMock()
+
+    with pytest.raises(ValueError, match="stereo"):
+        await mock_client.set_output_channel("mono")
+
+    mock_client._request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_legacy_solo_player_keeps_existing_channel_command(mock_client):
     mock_client._capabilities.update(supports_output_channel=True, supports_output_channel_mode=False)
     mock_client.set_output_channel = AsyncMock()
@@ -267,3 +327,26 @@ async def test_cached_pre_upgrade_capabilities_are_probed(mock_client):
 
     assert player.output_channel == "left"
     assert mock_client.capabilities["supports_output_channel_mode"] is True
+
+
+@pytest.mark.parametrize(
+    ("supports_channel", "mode_support", "role", "expected"),
+    [
+        (True, True, "solo", ["stereo", "left", "right", "mono"]),
+        (True, True, "master", ["stereo", "left", "right"]),
+        (True, True, "slave", ["stereo", "left", "right"]),
+        (True, False, "solo", ["stereo", "left", "right"]),
+        (True, None, "solo", ["stereo", "left", "right"]),
+        (False, False, "solo", []),
+    ],
+)
+@pytest.mark.asyncio
+async def test_available_output_channels(mock_client, supports_channel, mode_support, role, expected):
+    """Mono is offered only to a solo player with standalone channel-mode support."""
+    mock_client._capabilities.update(
+        supports_output_channel=supports_channel, supports_output_channel_mode=mode_support
+    )
+    player = Player(mock_client)
+    player._detected_role = role
+
+    assert player.available_output_channels == expected

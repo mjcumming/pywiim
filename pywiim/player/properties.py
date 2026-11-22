@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from ..api.constants import OUTPUT_CHANNEL_MAP
 from ..device_capabilities import filter_plm_inputs, get_device_inputs, get_device_output_modes
 from ..metadata import is_valid_image_url, is_valid_metadata_value
 from ..normalize import HARDWARE_SOURCE_KEYS as _HARDWARE_SOURCE_KEYS
@@ -1717,6 +1718,20 @@ class PlayerProperties:
         if not self.player.client:
             return False
         return bool(self.player.client.capabilities.get("supports_output_channel", False))
+
+    @property
+    def available_output_channels(self) -> list[str]:
+        """Output channel names ``set_output_channel()`` accepts right now.
+
+        Empty when output channel is unsupported. ``"mono"`` is included only for a solo
+        player that supports the standalone channel mode.
+        """
+        if not self.supports_output_channel:
+            return []
+        channels = list(OUTPUT_CHANNEL_MAP.values())
+        if self.player.is_solo and self.player.client.capabilities.get("supports_output_channel_mode") is True:
+            channels.append("mono")
+        return channels
 
     @property
     def supports_presets(self) -> bool:

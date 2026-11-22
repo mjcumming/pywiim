@@ -568,14 +568,17 @@ class Player(PlayerBase):
         await self._audio_config.set_channel_balance(balance)
 
     async def set_output_channel(self, channel: str) -> None:
-        """Set the output channel: ``"stereo"``, ``"left"`` or ``"right"``.
+        """Set the output channel: ``"stereo"``, ``"left"``, ``"right"`` or ``"mono"``.
+
+        ``"mono"`` works only for a solo player that supports the standalone channel mode
+        (``setChannelMode:3``); otherwise it raises ``WiiMError``.
 
         Uses the standalone channel mode when supported and solo; otherwise uses
         the device's group-channel command. Updates ``output_channel`` right away.
 
         Raises:
             WiiMError: If ``supports_output_channel`` is false or the request fails.
-            ValueError: If ``channel`` is not one of the three names.
+            ValueError: If ``channel`` is not a known name.
         """
         await self._audio_config.set_output_channel(channel)
 
@@ -1629,6 +1632,11 @@ class Player(PlayerBase):
     def supports_output_channel(self) -> bool:
         """Whether output channel (stereo / left / right) is supported."""
         return self._properties.supports_output_channel
+
+    @property
+    def available_output_channels(self) -> list[str]:
+        """Channel names ``set_output_channel()`` accepts now (``"mono"`` only for a capable solo player)."""
+        return self._properties.available_output_channels
 
     @property
     def supports_presets(self) -> bool:
