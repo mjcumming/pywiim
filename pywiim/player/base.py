@@ -103,6 +103,8 @@ class PlayerBase:
         # firmware after EQLoad, so this name outranks that field (wiim #165).
         self._eq_band_preset: str | None = None
         self._eq_is_custom: bool | None = None
+        # Graphic EQ is off but an unsaved custom setting is stored (Off + empty Name).
+        self._eq_custom_stored: bool = False
         self._eq_band_reconcile: bool = False
         self._eq_state_source: str | None = None
         self._eq_state_revision: int = 0

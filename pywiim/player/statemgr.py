@@ -412,18 +412,23 @@ class StateManager:
             self.player._eq_enabled = False
             self.player._eq_band_preset = None
             self.player._eq_is_custom = False
+            self.player._eq_custom_stored = False
             self.player._peq_enabled = True
             name = eq_data.get("Name")
             self.player._peq_preset = name if isinstance(name, str) and name else None
             return True
         self.player._eq_enabled = status == "on"
-        if status == "off":
-            self.player._eq_band_preset = None
-            self.player._eq_is_custom = False
-            return True
         name = eq_data.get("Name")
         if name is None:
             name = eq_data.get("name")
+        if status == "off":
+            self.player._eq_band_preset = None
+            self.player._eq_is_custom = False
+            # While off, an empty Name means an unsaved custom setting is stored;
+            # a non-empty Name is that saved preset, switched off.
+            self.player._eq_custom_stored = isinstance(name, str) and not name.strip()
+            return True
+        self.player._eq_custom_stored = False
         if isinstance(name, str):
             self.player._eq_is_custom = not bool(name.strip())
             self.player._eq_band_preset = name.strip() or "Custom"
@@ -482,6 +487,7 @@ class StateManager:
         self.player._eq_enabled = None
         self.player._eq_band_preset = None
         self.player._eq_is_custom = None
+        self.player._eq_custom_stored = False
         self.player._peq_enabled = None
         self.player._peq_preset = None
         self.player._last_eq_status_check = 0

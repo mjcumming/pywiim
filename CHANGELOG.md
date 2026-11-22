@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep an unsaved custom graphic EQ available after EQ is turned off. `Player.eq_custom_stored` reports it (EQ off with an empty `EQGetBand` name), and `set_eq_preset("Custom")` turns EQ back on with those bands. `eq_preset` still reports `Off`, and saved presets and PEQ are unchanged.
+
 ## [3.0.2] - 2026-11-04
 
 ### Fixed
