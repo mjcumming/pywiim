@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Player.set_output_channel("mono")` and `set_channel_mode("mono")` set the standalone Mono channel mode (`setChannelMode:3`) on a solo player that supports it. A grouped player, or one without the standalone channel mode, raises `WiiMError` for `"mono"`. Stereo, left and right behave as before.
+- `Player.available_output_channels` lists the channel names `set_output_channel()` accepts for the player's current role, with `"mono"` only for a solo player that supports the standalone channel mode.
+
 ### Fixed
 
 - Keep an unsaved custom graphic EQ available after EQ is turned off. `Player.eq_custom_stored` reports it (EQ off with an empty `EQGetBand` name), and `set_eq_preset("Custom")` turns EQ back on with those bands. `eq_preset` still reports `Off`, and saved presets and PEQ are unchanged.

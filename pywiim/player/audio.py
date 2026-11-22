@@ -8,8 +8,8 @@ import time
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from ..api.audio_settings import output_channel_value
-from ..api.constants import API_ENDPOINT_GET_CHANNEL_BALANCE, OUTPUT_CHANNEL_MAP
+from ..api.audio_settings import channel_mode_value
+from ..api.constants import API_ENDPOINT_GET_CHANNEL_BALANCE, CHANNEL_MODE_MAP
 from ..capabilities import _channel_balance_probe_success
 from ..exceptions import WiiMError, WiiMResponseError
 from ..normalize import canonical_source_key, source_rename_reverse
@@ -437,16 +437,20 @@ class AudioConfiguration:
         """Set the solo mode or group channel and update the matching cache.
 
         Args:
-            channel: ``"stereo"``, ``"left"`` or ``"right"``, any case.
+            channel: ``"stereo"``, ``"left"`` or ``"right"``, any case. ``"mono"`` is also
+                accepted for a solo player that supports the standalone channel mode.
 
         Raises:
-            WiiMError: If the device does not support output channel.
-            ValueError: If ``channel`` is not one of the three names.
+            WiiMError: If the device does not support output channel, or ``"mono"`` is
+                requested for a grouped player or one without the standalone channel mode.
+            ValueError: If ``channel`` is not a known name.
         """
         if not self.player.supports_output_channel:
             raise WiiMError("Output channel is not supported")
-        name = OUTPUT_CHANNEL_MAP[output_channel_value(channel)]
+        name = CHANNEL_MODE_MAP[channel_mode_value(channel)]
         mode_support = self.player.client.capabilities.get("supports_output_channel_mode")
+        if name == "mono" and "mono" not in self.player.available_output_channels:
+            raise WiiMError("Output channel 'mono' requires a standalone player with channel mode support")
         if self.player.is_solo and mode_support is None:
             raise WiiMError("Standalone output channel support is not yet known")
         if self.player.is_solo and mode_support:

@@ -25,6 +25,7 @@ from .constants import (
     API_ENDPOINT_SET_CHANNEL_MODE,
     API_ENDPOINT_SET_OUTPUT_CHANNEL,
     API_ENDPOINT_SET_SPDIF_SWITCH_DELAY,
+    CHANNEL_MODE_MAP,
     OUTPUT_CHANNEL_MAP,
 )
 
@@ -42,6 +43,21 @@ def output_channel_value(channel: str) -> int:
         if name == wanted:
             return value
     raise ValueError(f"Output channel must be one of {list(OUTPUT_CHANNEL_MAP.values())}, got {channel!r}")
+
+
+def channel_mode_value(channel: str) -> int:
+    """Return the standalone channel-mode wire value (0-3) for a name.
+
+    Accepts ``stereo`` / ``left`` / ``right`` / ``mono``, ignoring case and surrounding spaces.
+
+    Raises:
+        ValueError: If ``channel`` is not one of the four names.
+    """
+    wanted = channel.strip().lower() if isinstance(channel, str) else ""
+    for value, name in CHANNEL_MODE_MAP.items():
+        if name == wanted:
+            return value
+    raise ValueError(f"Channel mode must be one of {list(CHANNEL_MODE_MAP.values())}, got {channel!r}")
 
 
 class AudioSettingsAPI:
@@ -210,8 +226,8 @@ class AudioSettingsAPI:
         return mode
 
     async def set_channel_mode(self, channel: str) -> None:
-        """Set standalone playback to stereo, left or right."""
-        value = output_channel_value(channel)
+        """Set standalone playback to stereo, left, right or mono."""
+        value = channel_mode_value(channel)
         endpoint = f"{API_ENDPOINT_SET_CHANNEL_MODE}{value}"
         response = await self._request(endpoint)  # type: ignore[attr-defined]
         if (response.raw or "").strip().upper() != "OK" and response.parsed != "OK":

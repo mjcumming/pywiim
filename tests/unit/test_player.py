@@ -5682,7 +5682,7 @@ class TestPlayerLEDIndicatorAndDisplay:
 
         type(mock_client).capabilities = PropertyMock(return_value={"supports_output_channel": True})
         with pytest.raises(ValueError):
-            await player.set_output_channel("mono")
+            await player.set_output_channel("surround")
         mock_client.set_output_channel.assert_not_called()
 
     @pytest.mark.asyncio
