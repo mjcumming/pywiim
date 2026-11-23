@@ -15,11 +15,13 @@ import argparse
 import asyncio
 import json
 import logging
+import re
 import sys
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from typing import Any
 
+from ..api.ble_remote import REMOTE_VOLUME_STEPS, build_ble_remote_state, extract_ble_remote_status_ex
 from ..api.constants import API_ENDPOINT_GET_DIGITAL_FILTER_TYPES
 from ..api.misc import parse_digital_filter_types
 from ..client import WiiMClient
@@ -27,6 +29,8 @@ from ..exceptions import WiiMError
 from ..player import Player
 
 _LOGGER = logging.getLogger(__name__)
+
+_MAC_RE = re.compile(r"(?i)\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b")
 
 
 class DeviceDiagnostics:
@@ -65,6 +69,7 @@ class DeviceDiagnostics:
         await self._gather_status()
         await self._gather_debug_info()
         await self._gather_discovered_api_info()
+        await self._gather_ble_remote_info()
         await self._test_endpoints()
         await self._test_features()
 
@@ -234,6 +239,39 @@ class DeviceDiagnostics:
         await probe("RoomFit", self.client.get_room_correction)
 
         self.report["discovered_apis"] = discovered
+
+    async def _gather_ble_remote_info(self) -> None:
+        """Add the WiiM Voice Remote section when the speaker supports a remote (read-only, ADR 023).
+
+        Built from the parsed state only (BLE MAC masked) plus the volume step. The raw
+        ``getblehidstatus`` body is never stored, and nothing is written to the device.
+        """
+        if not self.client._capabilities_detected:
+            await self.client._detect_capabilities()
+        if self.client.capabilities.get("supports_ble_remote") is not True:
+            return
+
+        print("\n🎛  Reading WiiM Voice Remote state...")
+        try:
+            state = build_ble_remote_state(
+                extract_ble_remote_status_ex(await self.client.get_device_info()),
+                await self.client.get_ble_remote_identity(),
+            )
+            step = await self.client.get_remote_volume_step()
+            self.report["ble_remote"] = {
+                "supported": True,
+                **state.diagnostics_dict(),
+                "volume_step": step,
+                "volume_step_label": REMOTE_VOLUME_STEPS.get(step) if step is not None else None,
+            }
+            print(f"   ✓ Remote: paired={state.paired} connected={state.connected} battery={state.battery}")
+        except Exception as err:
+            self.report["ble_remote"] = {
+                "supported": True,
+                "error": _MAC_RE.sub("XX:XX:XX:XX:XX:XX", str(err)),
+                "error_type": type(err).__name__,
+            }
+            print(f"   ⚠ Remote state: {type(err).__name__}")
 
     async def _test_endpoints(self) -> None:
         """Test various API endpoints."""
@@ -1238,6 +1276,7 @@ Examples:
             print(f"   Device: {client.host}:{client.port}\n")
             await diagnostics._gather_device_info()
             await diagnostics._gather_discovered_api_info()
+            await diagnostics._gather_ble_remote_info()
         else:
             await diagnostics.run_full_diagnostic()
             diagnostics.print_report()

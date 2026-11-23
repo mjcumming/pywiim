@@ -449,3 +449,156 @@ async def test_room_correction_feature_supported():
     assert result["enabled"] is False
     assert result["source_name"] == "default"
     assert result["profiles"] == ["test"]
+
+
+# ---------------------------------------------------------------------------
+# WiiM Voice Remote (ADR 023): parsed state only, MAC masked, read-only
+# ---------------------------------------------------------------------------
+
+
+def _ble_client(*, supported=True, status_ex=None, hid=None, step=2):
+    from pywiim.api.ble_remote import parse_ble_remote_identity
+    from tests.unit.ble_remote_fixtures import (
+        HID_CONNECTED,
+        STATUS_EX_BASE,
+        STATUS_EX_REMOTE_CONNECTED,
+    )
+
+    client = DummyClient()
+    client.capabilities = {**client.capabilities, "supports_ble_remote": supported}
+    client.get_device_info = AsyncMock(
+        return_value={**STATUS_EX_BASE, **(STATUS_EX_REMOTE_CONNECTED if status_ex is None else status_ex)}
+    )
+    client.get_ble_remote_identity = AsyncMock(
+        return_value=parse_ble_remote_identity(HID_CONNECTED if hid is None else hid)
+    )
+    client.get_remote_volume_step = AsyncMock(return_value=step)
+    client.set_remote_volume_step = AsyncMock()
+    return client
+
+
+@pytest.mark.asyncio
+async def test_ble_remote_section_has_parsed_state_and_masked_mac(capsys):
+    import json
+
+    from tests.unit.ble_remote_fixtures import FAKE_REMOTE_MAC
+
+    client = _ble_client()
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    await diagnostics._gather_ble_remote_info()
+
+    remote = diagnostics.report["ble_remote"]
+    assert remote == {
+        "supported": True,
+        "paired": True,
+        "connected": True,
+        "name": "WiiM Voice Remote",
+        "mac": "XX:XX:XX:XX:XX:XX",
+        "firmware": "0054",
+        "battery": 100,
+        "rssi": -61,
+        "volume_step": 2,
+        "volume_step_label": "Small Step",
+    }
+    dumped = json.dumps(diagnostics.report) + capsys.readouterr().out
+    assert FAKE_REMOTE_MAC not in dumped
+    # parsed state only, never the raw getblehidstatus body
+    assert "doubleclickdisable" not in dumped
+    assert "powerstatus" not in dumped
+
+
+@pytest.mark.asyncio
+async def test_ble_remote_section_not_connected_and_not_paired():
+    from tests.unit.ble_remote_fixtures import HID_SCANNING, STATUS_EX_REMOTE_NOT_CONNECTED
+
+    client = _ble_client(status_ex=STATUS_EX_REMOTE_NOT_CONNECTED, hid=HID_SCANNING, step=None)
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    await diagnostics._gather_ble_remote_info()
+
+    remote = diagnostics.report["ble_remote"]
+    assert (remote["paired"], remote["connected"]) == (False, False)
+    assert remote["battery"] is None and remote["rssi"] is None and remote["mac"] is None
+    assert remote["volume_step"] is None and remote["volume_step_label"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("supported", [False, None])
+async def test_ble_remote_section_skipped_when_not_supported(supported):
+    client = _ble_client(supported=supported)
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    await diagnostics._gather_ble_remote_info()
+
+    assert "ble_remote" not in diagnostics.report
+    client.get_ble_remote_identity.assert_not_awaited()
+    client.get_remote_volume_step.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ble_remote_section_is_read_only():
+    client = _ble_client()
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    await diagnostics._gather_ble_remote_info()
+
+    client.set_remote_volume_step.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ble_remote_section_error_keeps_report_and_hides_mac():
+    import json
+
+    from tests.unit.ble_remote_fixtures import FAKE_REMOTE_MAC
+
+    client = _ble_client()
+    client.get_device_info = AsyncMock(side_effect=RuntimeError(f"boom {FAKE_REMOTE_MAC}"))
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    await diagnostics._gather_ble_remote_info()
+
+    remote = diagnostics.report["ble_remote"]
+    assert remote["supported"] is True
+    assert remote["error_type"] == "RuntimeError"
+    assert FAKE_REMOTE_MAC not in json.dumps(diagnostics.report)
+
+
+@pytest.mark.asyncio
+async def test_ble_remote_section_detects_capabilities_first_in_discovered_only_mode():
+    client = _ble_client()
+    client._capabilities_detected = False
+    diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
+
+    await diagnostics._gather_ble_remote_info()
+
+    client._detect_capabilities.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_full_diagnostic_and_discovered_only_both_gather_ble_remote():
+    from unittest.mock import patch
+
+    diagnostics = DeviceDiagnostics(_ble_client())  # type: ignore[arg-type]
+    names = [
+        "_gather_device_info",
+        "_gather_capabilities",
+        "_gather_status",
+        "_gather_debug_info",
+        "_gather_discovered_api_info",
+        "_gather_ble_remote_info",
+        "_test_endpoints",
+        "_test_features",
+    ]
+    with (
+        patch.multiple(diagnostics, **{n: AsyncMock() for n in names}),
+        patch.object(diagnostics, "_generate_summary", return_value={}),
+    ):
+        await diagnostics.run_full_diagnostic()
+        diagnostics._gather_ble_remote_info.assert_awaited_once()
+
+    import inspect
+
+    from pywiim.cli import diagnostics as module
+
+    assert "_gather_ble_remote_info" in inspect.getsource(module.main)

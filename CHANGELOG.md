@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Player.ble_remote` returns a `BleRemoteState` (`paired`, `connected`, `name`, `mac`, `firmware`, `battery`, `rssi`). Battery, connected and RSSI come from `getStatusEx` about every 60 seconds; name, MAC and paired come from `getblehidstatus` about every 5 minutes, or at once when the connected flag changes. Battery and RSSI are `None` while the remote is not connected. The BLE MAC is not in `repr()` and is masked in diagnostics.
   - `Player.get_remote_volume_step()`, `Player.set_remote_volume_step(1-5)` and `Player.remote_volume_step`, with the same methods on the client. The setter rejects other values and verifies the result by reading it back. `REMOTE_VOLUME_STEPS` holds the app's five labels.
   - The remote's pairing, removal and firmware-update commands are not implemented.
+  - `wiim-diagnostics` adds a `ble_remote` section (parsed state with the BLE MAC masked, plus the volume step; never the raw `getblehidstatus` body) when the speaker supports a remote, in both the full report and `--discovered-apis-only`. It only reads.
 
 ## [3.0.3] - 2026-11-23
 
