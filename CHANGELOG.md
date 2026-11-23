@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.3] - 2026-11-23
+
 ### Added
 
 - `Player.set_output_channel("mono")` and `set_channel_mode("mono")` set the standalone Mono channel mode (`setChannelMode:3`) on a solo player that supports it. A grouped player, or one without the standalone channel mode, raises `WiiMError` for `"mono"`. Stereo, left and right behave as before.
