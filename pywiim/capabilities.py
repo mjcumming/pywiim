@@ -31,7 +31,9 @@ from typing import Any
 from urllib.parse import quote
 
 from .api.base import ApiResponse
+from .api.ble_remote import parse_ble_remote_identity
 from .api.constants import (
+    API_ENDPOINT_BLE_REMOTE_STATUS,
     API_ENDPOINT_EQ_GET,
     API_ENDPOINT_EQ_LIST,
     API_ENDPOINT_EQ_STATUS,
@@ -167,6 +169,37 @@ async def _probe_supports_subwoofer(client: Any, device_info: DeviceInfo, capabi
         last_err,
     )
     return None
+
+
+async def _probe_supports_ble_remote(client: Any, device_info: DeviceInfo) -> bool | None:
+    """Read-only probe for WiiM Voice Remote support (ADR 023).
+
+    ``BleRemoteControl`` in ``getStatusEx`` is ``"1"`` whenever the speaker supports a remote,
+    whether or not one is paired. Only then is ``getblehidstatus`` read (a plain status read, no
+    pairing or scanning). Devices without the flag get False and no remote request at all.
+
+    Returns:
+        True if ``getblehidstatus`` returns a valid status object, False if the speaker does not
+        advertise a remote or the command is unsupported, None when the read was inconclusive
+        (transient error); the next refresh sets True once a read succeeds.
+    """
+    extra = device_info.model_extra or {}
+    if str(extra.get("BleRemoteControl", "")).strip() != "1":
+        return False
+
+    host = getattr(client, "host", "?")
+    try:
+        response = await client._request(API_ENDPOINT_BLE_REMOTE_STATUS)
+    except Exception as err:
+        if _subwoofer_probe_error_definitively_unsupported(err):
+            _LOGGER.debug("BLE remote probe host=%s: unsupported (error=%s)", host, err)
+            return False
+        _LOGGER.debug("BLE remote probe inconclusive for host=%s: %s", host, err)
+        return None
+    if parse_ble_remote_identity(response.parsed) is not None:
+        return True
+    _LOGGER.debug("BLE remote probe host=%s: unexpected response shape (%s)", host, type(response.parsed).__name__)
+    return False
 
 
 async def _probe_wiim_input_metadata(client: Any, capabilities: dict[str, Any]) -> None:
@@ -334,6 +367,7 @@ class WiiMCapabilities:
         capabilities.setdefault("supports_eq", True)
         capabilities.setdefault("supports_peq", False)
         capabilities.setdefault("supports_trigger_out", False)
+        capabilities.setdefault("supports_ble_remote", False)
         capabilities.setdefault("supports_led_switch", False)
         capabilities.setdefault("supports_display_config", False)
         capabilities.setdefault("supports_digital_filter", False)
@@ -600,6 +634,9 @@ class WiiMCapabilities:
 
         # Subwoofer (getSubLPF) — WiiM-only read probe; same endpoint as get_subwoofer_status_raw()
         capabilities["supports_subwoofer"] = await _probe_supports_subwoofer(client, device_info, capabilities)
+
+        # WiiM Voice Remote (ADR 023): getStatusEx BleRemoteControl gate, then read-only getblehidstatus
+        capabilities["supports_ble_remote"] = await _probe_supports_ble_remote(client, device_info)
 
         # WiiM-only input metadata (capability list / enable flags / custom labels).
         # Read-only overlay on stable source ids; absent endpoints leave enumeration unchanged.

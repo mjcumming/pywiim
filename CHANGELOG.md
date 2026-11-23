@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- WiiM Voice Remote support (read-only state plus the remote's volume step), verified on a WiiM Pro Plus (firmware `Linkplay.4.8.833841`); other models are not tested ([ADR 023](docs/design/adr/023-wiim-voice-remote-state-and-volume-step.md)).
+  - `supports_ble_remote` capability and `Player.supports_ble_remote`: set when `getStatusEx` has `BleRemoteControl` `1` and a read-only `getblehidstatus` returns a valid status. It means the speaker supports a remote, not that one is paired.
+  - `Player.ble_remote` returns a `BleRemoteState` (`paired`, `connected`, `name`, `mac`, `firmware`, `battery`, `rssi`). Battery, connected and RSSI come from `getStatusEx` about every 60 seconds; name, MAC and paired come from `getblehidstatus` about every 5 minutes, or at once when the connected flag changes. Battery and RSSI are `None` while the remote is not connected. The BLE MAC is not in `repr()` and is masked in diagnostics.
+  - `Player.get_remote_volume_step()`, `Player.set_remote_volume_step(1-5)` and `Player.remote_volume_step`, with the same methods on the client. The setter rejects other values and verifies the result by reading it back. `REMOTE_VOLUME_STEPS` holds the app's five labels.
+  - The remote's pairing, removal and firmware-update commands are not implemented.
+
 ## [3.0.3] - 2026-11-23
 
 ### Added

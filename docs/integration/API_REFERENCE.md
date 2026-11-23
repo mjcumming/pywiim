@@ -384,6 +384,41 @@ await player.set_room_correction("testnext")
 await player.set_room_correction("Off")
 ```
 
+#### WiiM Voice Remote
+
+Read-only remote state plus the remote's volume step. See
+[ADR 023](../design/adr/023-wiim-voice-remote-state-and-volume-step.md). Verified on a
+WiiM Pro Plus (firmware `Linkplay.4.8.833841`); other models are not tested.
+Pairing, removal and remote firmware update are not implemented.
+
+```python
+from pywiim import REMOTE_VOLUME_STEPS  # {1: "Fine Adjustment", ..., 5: "Quick Adjustment"}
+
+player.supports_ble_remote  # True: the speaker supports a remote (NOT "a remote is paired")
+
+remote = player.ble_remote  # BleRemoteState | None (None: unsupported or not read yet)
+remote.paired      # bool | None - None until getblehidstatus has been read
+remote.connected   # bool
+remote.name        # "WiiM Voice Remote", None when not paired
+remote.mac         # BLE MAC, None when not paired; hidden from repr(), masked in diagnostics
+remote.firmware    # "0054" (the app shows "Version 54")
+remote.battery     # 0-100 from getStatusEx, None while not connected
+remote.rssi        # dBm from getStatusEx, None while not connected
+
+# Volume step: 1 Fine Adjustment (default) ... 5 Quick Adjustment
+player.remote_volume_step                  # cached 1-5, None if unknown
+await player.get_remote_volume_step()      # int | None
+await player.set_remote_volume_step(2)     # ValueError outside 1-5; WiiMError unless read back == 2
+
+await player.get_ble_remote_state()        # force a read of both sources
+```
+
+Gate remote entities on `player.supports_ble_remote` and `player.ble_remote.paired`.
+`refresh()` keeps the state current: battery, connected and RSSI about every
+60 seconds, name, MAC and paired about every 5 minutes (or immediately when the
+connected flag changes). `battery` comes from `getStatusEx` because the battery
+in `getblehidstatus` lags after a battery change.
+
 #### Playback Presets (Radio Stations / Saved Favorites)
 
 ```python

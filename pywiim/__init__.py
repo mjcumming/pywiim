@@ -20,6 +20,14 @@ Example:
 
 from __future__ import annotations
 
+from .api.ble_remote import (
+    REMOTE_VOLUME_STEP_DEFAULT,
+    REMOTE_VOLUME_STEP_MAX,
+    REMOTE_VOLUME_STEP_MIN,
+    REMOTE_VOLUME_STEPS,
+    BleRemoteIdentity,
+    BleRemoteState,
+)
 from .api.constants import (
     ALARM_OP_PLAYBACK,
     ALARM_OP_SHELL,
@@ -171,6 +179,13 @@ __all__ = [
     "ALARM_OP_SHELL",
     "ALARM_OP_PLAYBACK",
     "ALARM_OP_STOP",
+    # WiiM Voice Remote
+    "BleRemoteState",
+    "BleRemoteIdentity",
+    "REMOTE_VOLUME_STEPS",
+    "REMOTE_VOLUME_STEP_MIN",
+    "REMOTE_VOLUME_STEP_MAX",
+    "REMOTE_VOLUME_STEP_DEFAULT",
     # Subwoofer (WiiM Ultra)
     "SubwooferStatus",
     "SUBWOOFER_CROSSOVER_MIN",

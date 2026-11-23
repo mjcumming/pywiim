@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
+from pywiim.exceptions import WiiMError
 from pywiim.models import DeviceInfo, PlayerStatus
 
 
@@ -652,6 +653,114 @@ class TestStateManager:
 
         mock_player.get_trigger_out_status.assert_called_once()
         assert mock_player._last_trigger_out_check != 0
+
+    @staticmethod
+    def _ble_remote_player(mock_player, state_manager, *, supported=True, identity=None):
+        """Mock the BLE remote Player hooks so refresh tests only see the scheduling."""
+        mock_player.client.get_player_status_model = AsyncMock(return_value=PlayerStatus(play_state="pause"))
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_ble_remote": supported})
+        mock_player._refresh_ble_remote_status = AsyncMock(return_value=False)
+        mock_player._refresh_ble_remote_identity = AsyncMock()
+        mock_player.get_remote_volume_step = AsyncMock(return_value=1)
+        mock_player._last_ble_remote_status_check = 0
+        mock_player._last_ble_remote_identity_check = 0
+        mock_player._ble_remote_identity = identity
+        mock_player._device_info = DeviceInfo(uuid="u")
+
+    @pytest.mark.asyncio
+    async def test_refresh_fetches_ble_remote_on_full_from_device_info(self, state_manager, mock_player):
+        """Full refresh reuses the device info it just read (no second getStatusEx) and reads identity."""
+        self._ble_remote_player(mock_player, state_manager)
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+            await state_manager.refresh(full=True)
+
+        mock_player._refresh_ble_remote_status.assert_awaited_once_with(from_device_info=True)
+        mock_player._refresh_ble_remote_identity.assert_awaited_once()
+        assert mock_player._last_ble_remote_status_check != 0
+        assert mock_player._last_ble_remote_identity_check != 0
+
+    @pytest.mark.asyncio
+    async def test_refresh_ble_remote_status_due_but_identity_not(self, state_manager, mock_player):
+        """Slow tier: the 60s status read happens, the 5-minute identity read does not."""
+        self._ble_remote_player(mock_player, state_manager)
+        now = time.time()
+        mock_player._last_ble_remote_status_check = now - 61
+        mock_player._last_ble_remote_identity_check = now - 61
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+            await state_manager.refresh(full=False)
+
+        mock_player._refresh_ble_remote_status.assert_awaited_once_with(from_device_info=False)
+        mock_player._refresh_ble_remote_identity.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_refresh_ble_remote_nothing_due(self, state_manager, mock_player):
+        self._ble_remote_player(mock_player, state_manager)
+        now = time.time()
+        mock_player._last_ble_remote_status_check = now - 5
+        mock_player._last_ble_remote_identity_check = now - 5
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+            await state_manager.refresh(full=False)
+
+        mock_player._refresh_ble_remote_status.assert_not_awaited()
+        mock_player._refresh_ble_remote_identity.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_refresh_ble_remote_connection_change_forces_identity_read(self, state_manager, mock_player):
+        """Remote forgotten or reconnected: learn paired/not paired now, not in 5 minutes."""
+        self._ble_remote_player(mock_player, state_manager)
+        now = time.time()
+        mock_player._last_ble_remote_status_check = now - 61
+        mock_player._last_ble_remote_identity_check = now - 61
+        mock_player._refresh_ble_remote_status = AsyncMock(return_value=True)
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+            await state_manager.refresh(full=False)
+
+        mock_player._refresh_ble_remote_identity.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_refresh_skips_ble_remote_when_unsupported(self, state_manager, mock_player):
+        self._ble_remote_player(mock_player, state_manager, supported=False)
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+            await state_manager.refresh(full=True)
+
+        mock_player._refresh_ble_remote_status.assert_not_awaited()
+        mock_player._refresh_ble_remote_identity.assert_not_awaited()
+        mock_player.get_remote_volume_step.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_refresh_ble_remote_failure_does_not_break_refresh(self, state_manager, mock_player):
+        self._ble_remote_player(mock_player, state_manager)
+        mock_player._refresh_ble_remote_status = AsyncMock(side_effect=WiiMError("timeout"))
+        mock_player._refresh_ble_remote_identity = AsyncMock(side_effect=WiiMError("timeout"))
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+            await state_manager.refresh(full=True)
+
+        assert mock_player._available is True  # refresh finished normally
+
+    @pytest.mark.asyncio
+    async def test_refresh_reads_volume_step_only_when_remote_paired(self, state_manager, mock_player):
+        from pywiim.api.ble_remote import BleRemoteIdentity
+
+        paired = BleRemoteIdentity(status="connected", paired=True, name="R", mac=None, firmware=None)
+        self._ble_remote_player(mock_player, state_manager, identity=paired)
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+            await state_manager.refresh(full=True)
+        mock_player.get_remote_volume_step.assert_awaited_once()
+
+        unpaired = BleRemoteIdentity(status="scanning", paired=False, name=None, mac=None, firmware=None)
+        self._ble_remote_player(mock_player, state_manager, identity=unpaired)
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+            await state_manager.refresh(full=True)
+        mock_player.get_remote_volume_step.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_refresh_skips_trigger_out_when_unsupported(self, state_manager, mock_player):

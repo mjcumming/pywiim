@@ -737,6 +737,10 @@ Parser now uses vendor field and ignores mode=0, keeping source="dlna" correct.
 - ❌ Show audio output controls on unsupported devices
 - ❌ Fail hard when device returns "unknown command"
 
+## WiiM Voice Remote
+
+State and the volume step setting only; see [ADR 023](adr/023-wiim-voice-remote-state-and-volume-step.md) and [WIIM_DISCOVERED_APIS](WIIM_DISCOVERED_APIS.md#wiim-voice-remote). `supports_ble_remote` is probed read-only at connect (`getStatusEx` `BleRemoteControl` gate, then `getblehidstatus`); `player.ble_remote` combines `getStatusEx` (60s tier) and `getblehidstatus` (5 min tier). The volume step setter validates 1-5 and verifies by reading back (a documented exception to [ADR 002](adr/002-trust-api-after-success.md)). Pairing, removal and update commands are never sent.
+
 ## 12V Trigger API (WiiM Ultra / Pro / Pro Plus)
 
 ### Device Support

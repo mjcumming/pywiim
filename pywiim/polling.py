@@ -66,6 +66,8 @@ class PollingStrategy:
     CONFIGURATION_INTERVAL = 60.0  # Bluetooth, active EQ state, device info
     # Faster tier for user-toggled hardware (12V trigger, subwoofer) — light GETs, visible in HA/monitor
     HARDWARE_STATUS_INTERVAL = 15.0
+    # WiiM Voice Remote name/MAC/paired state change only when the user re-pairs it
+    BLE_REMOTE_IDENTITY_INTERVAL = 300.0
     METADATA_CHECK_INTERVAL = 1.0  # Check for track changes
 
     # Legacy device intervals (longer for older devices)
@@ -367,6 +369,44 @@ class PollingStrategy:
             return True
 
         return (now - last_fetch_time) >= self.CONFIGURATION_INTERVAL
+
+    def should_fetch_ble_remote_status(
+        self,
+        last_fetch_time: float,
+        ble_remote_supported: bool,
+        now: float | None = None,
+    ) -> bool:
+        """Check if the WiiM Voice Remote status (getStatusEx keys) should be read.
+
+        Fetch on startup, then every ``CONFIGURATION_INTERVAL`` (60s). Battery and connection
+        change slowly; only when the speaker supports a remote.
+        """
+        if not ble_remote_supported:
+            return False
+        if now is None:
+            now = time.time()
+        if last_fetch_time is None or last_fetch_time == 0:
+            return True
+        return (now - last_fetch_time) >= self.CONFIGURATION_INTERVAL
+
+    def should_fetch_ble_remote_identity(
+        self,
+        last_fetch_time: float,
+        ble_remote_supported: bool,
+        now: float | None = None,
+    ) -> bool:
+        """Check if getblehidstatus (name, MAC, paired) should be read.
+
+        Fetch on startup, then every ``BLE_REMOTE_IDENTITY_INTERVAL`` (5 minutes). The caller
+        also reads it right away when the connected flag changes.
+        """
+        if not ble_remote_supported:
+            return False
+        if now is None:
+            now = time.time()
+        if last_fetch_time is None or last_fetch_time == 0:
+            return True
+        return (now - last_fetch_time) >= self.BLE_REMOTE_IDENTITY_INTERVAL
 
     def should_fetch_led_indicator(
         self,
