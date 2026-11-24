@@ -1,4 +1,4 @@
-# ADR 023: WiiM Voice Remote — Capability, State Sources, Volume Step, and Safety
+# ADR 025: WiiM Voice Remote — Capability, State Sources, Volume Step, and Safety
 
 ## Status
 Accepted - 2026-11-23
@@ -23,14 +23,12 @@ The same command family also contains commands that pair, remove, or update the 
 - With the gate open, one read of `getblehidstatus` must return a valid status object: `True`. `unknown command` or an unexpected body: `False`. A transient error: `None` (inconclusive); the next successful refresh sets `True`.
 - `player.supports_ble_remote` means "supports a remote", not "a remote is paired". Pairing is `player.ble_remote.paired`.
 
-### 2. State sources and cadence
-- `BleRemoteState(paired, connected, name, mac, firmware, battery, rssi)` is built from two sources:
-  - `getStatusEx`: connected, battery, RSSI, version. Re-read on the configuration tier (~60 s) via `PollingStrategy.should_fetch_ble_remote_status()`. A full refresh reuses the device info it just read.
-  - `getblehidstatus`: name, MAC, paired. Re-read about every 5 minutes (`BLE_REMOTE_IDENTITY_INTERVAL`) via `should_fetch_ble_remote_identity()`, and at once when the connected flag changes.
-- **Battery always comes from `getStatusEx`**, never from `getblehidstatus`.
-- Keys that are missing while the remote is not connected give `None` (battery, RSSI), never an error. `getblehidstatus` RSSI while not connected is only the last value and is not reported as live.
+### 2. State source and cadence
+- `BleRemoteState(paired, connected, name, mac, firmware, battery, rssi)` is built from `getblehidstatus` only. `getStatusEx` is not polled for the remote ([ADR 024](024-getstatusex-off-regular-poll.md)).
+- `getblehidstatus` is read about every 60 seconds while a remote is paired, and about every 5 minutes when the last read said none is paired. A full refresh reads it immediately.
+- Connected means `status` is `connected`. Battery and RSSI are `None` otherwise. Battery can lag after a battery change; that lag is accepted.
 - A failed or unreadable read keeps the previous state.
-- The remote volume step is cached and re-read with the identity read, only while a remote is paired.
+- The remote volume step is cached and re-read with that same read, only while a remote is paired. An unpaired read clears the cached step.
 
 ### 3. Volume step setter verifies by reading back
 `set_remote_volume_step(step)` accepts only integers 1–5 (`ValueError` otherwise, nothing sent), writes, then reads the value back and raises `WiiMError` when the read-back is missing or differs. This is a deliberate exception to [ADR 002](002-trust-api-after-success.md): the device answers `{"status":"OK"}` to a write that it may not apply, behaviour outside 1–5 is untested, and the extra GET only happens on a user-initiated write, not during polling. The Player cache changes only after the read-back confirms.
@@ -47,6 +45,6 @@ The same command family also contains commands that pair, remove, or update the 
 
 ## Consequences
 - Integrations gate remote entities on `player.supports_ble_remote` and `player.ble_remote.paired`, and use `connected`/`battery`/`rssi` for availability.
-- Devices that support a remote cost one extra `getStatusEx` per minute and one `getblehidstatus` per 5 minutes.
+- A speaker with a paired remote costs one `getblehidstatus` per minute. A speaker that can have a remote, and does not, costs that call every 5 minutes. `getStatusEx` is not added to the timer.
 - Behaviour on other models, after the remote is forgotten and re-paired, and for volume step values outside 1–5 is **not tested**.
 - Pairing and firmware update of the remote stay in the WiiM Home app.

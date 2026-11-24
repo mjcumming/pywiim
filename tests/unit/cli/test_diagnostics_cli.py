@@ -452,7 +452,7 @@ async def test_room_correction_feature_supported():
 
 
 # ---------------------------------------------------------------------------
-# WiiM Voice Remote (ADR 023): parsed state only, MAC masked, read-only
+# WiiM Voice Remote (ADR 025): parsed state only, MAC masked, read-only
 # ---------------------------------------------------------------------------
 
 
@@ -553,7 +553,7 @@ async def test_ble_remote_section_error_keeps_report_and_hides_mac():
     from tests.unit.ble_remote_fixtures import FAKE_REMOTE_MAC
 
     client = _ble_client()
-    client.get_device_info = AsyncMock(side_effect=RuntimeError(f"boom {FAKE_REMOTE_MAC}"))
+    client.get_ble_remote_identity = AsyncMock(side_effect=RuntimeError(f"boom {FAKE_REMOTE_MAC}"))
     diagnostics = DeviceDiagnostics(client)  # type: ignore[arg-type]
 
     await diagnostics._gather_ble_remote_info()

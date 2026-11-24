@@ -21,7 +21,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from typing import Any
 
-from ..api.ble_remote import REMOTE_VOLUME_STEPS, build_ble_remote_state, extract_ble_remote_status_ex
+from ..api.ble_remote import REMOTE_VOLUME_STEPS, build_ble_remote_state
 from ..api.constants import API_ENDPOINT_GET_DIGITAL_FILTER_TYPES
 from ..api.misc import parse_digital_filter_types
 from ..client import WiiMClient
@@ -241,10 +241,10 @@ class DeviceDiagnostics:
         self.report["discovered_apis"] = discovered
 
     async def _gather_ble_remote_info(self) -> None:
-        """Add the WiiM Voice Remote section when the speaker supports a remote (read-only, ADR 023).
+        """Add the WiiM Voice Remote section when the speaker supports a remote (read-only, ADR 025).
 
-        Built from the parsed state only (BLE MAC masked) plus the volume step. The raw
-        ``getblehidstatus`` body is never stored, and nothing is written to the device.
+        Built from ``getblehidstatus`` only (BLE MAC masked) plus the volume step. The raw body
+        is never stored, and nothing is written to the device.
         """
         if not self.client._capabilities_detected:
             await self.client._detect_capabilities()
@@ -253,10 +253,11 @@ class DeviceDiagnostics:
 
         print("\n🎛  Reading WiiM Voice Remote state...")
         try:
-            state = build_ble_remote_state(
-                extract_ble_remote_status_ex(await self.client.get_device_info()),
-                await self.client.get_ble_remote_identity(),
-            )
+            state = build_ble_remote_state(await self.client.get_ble_remote_identity())
+            if state is None:
+                self.report["ble_remote"] = {"supported": True, "error": "unreadable"}
+                print("   ⚠ Remote state: unreadable")
+                return
             step = await self.client.get_remote_volume_step()
             self.report["ble_remote"] = {
                 "supported": True,

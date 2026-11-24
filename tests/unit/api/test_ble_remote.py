@@ -17,7 +17,6 @@ from pywiim.api.ble_remote import (
     BleRemoteIdentity,
     BleRemoteState,
     build_ble_remote_state,
-    extract_ble_remote_status_ex,
     mask_mac,
     parse_ble_remote_identity,
 )
@@ -57,31 +56,17 @@ class TestFixtures:
         assert HID_SCANNING["mac"] == "00:00:00:00:00:00"
 
 
-class TestExtractStatusEx:
-    def test_connected_keys(self):
-        fields = extract_ble_remote_status_ex({**STATUS_EX_BASE, **STATUS_EX_REMOTE_CONNECTED})
-        assert fields["BleRemoteBatterylevel"] == "100"
-        assert fields["BleRemoteRSSI"] == "-61"
-        # Only BleRemote* keys are kept.
-        assert "uuid" not in fields and "DeviceName" not in fields
-
-    def test_not_connected_keys_are_missing_not_an_error(self):
-        fields = extract_ble_remote_status_ex({**STATUS_EX_BASE, **STATUS_EX_REMOTE_NOT_CONNECTED})
-        assert fields == {"BleRemoteControl": "1", "BleRemoteConnected": "0"}
-
-    def test_no_remote_keys(self):
-        assert extract_ble_remote_status_ex(STATUS_EX_BASE) == {}
-
-    @pytest.mark.parametrize("bad", [None, [], "x", 3])
-    def test_garbage_input(self, bad):
-        assert extract_ble_remote_status_ex(bad) == {}
-
-
 class TestParseIdentity:
     def test_connected(self):
         identity = parse_ble_remote_identity(HID_CONNECTED)
         assert identity == BleRemoteIdentity(
-            status="connected", paired=True, name="WiiM Voice Remote", mac=FAKE_REMOTE_MAC, firmware="0054"
+            status="connected",
+            paired=True,
+            name="WiiM Voice Remote",
+            mac=FAKE_REMOTE_MAC,
+            firmware="0054",
+            battery=100,
+            rssi=-61,
         )
 
     def test_not_connected_keeps_identity(self):
@@ -126,9 +111,7 @@ class TestParseIdentity:
 
 class TestBuildState:
     def test_connected(self):
-        state = build_ble_remote_state(
-            extract_ble_remote_status_ex(STATUS_EX_REMOTE_CONNECTED), parse_ble_remote_identity(HID_CONNECTED)
-        )
+        state = build_ble_remote_state(parse_ble_remote_identity(HID_CONNECTED))
         assert state == BleRemoteState(
             paired=True,
             connected=True,
@@ -139,59 +122,47 @@ class TestBuildState:
             rssi=-61,
         )
 
-    def test_battery_comes_from_status_ex_not_from_lagging_hid(self):
-        state = build_ble_remote_state(
-            extract_ble_remote_status_ex(STATUS_EX_REMOTE_CONNECTED),
-            parse_ble_remote_identity(HID_CONNECTED_LAGGING_BATTERY),
-        )
-        assert state.battery == 100
+    def test_battery_can_lag_after_a_battery_change(self):
+        state = build_ble_remote_state(parse_ble_remote_identity(HID_CONNECTED_LAGGING_BATTERY))
+        assert state is not None
+        assert state.connected is True
+        assert state.battery == 0
 
-    def test_not_connected_missing_keys(self):
-        state = build_ble_remote_state(
-            extract_ble_remote_status_ex(STATUS_EX_REMOTE_NOT_CONNECTED), parse_ble_remote_identity(HID_NOT_CONNECTED)
-        )
+    def test_not_connected_hides_stale_battery_and_rssi(self):
+        state = build_ble_remote_state(parse_ble_remote_identity(HID_NOT_CONNECTED))
+        assert state is not None
         assert state.paired is True
         assert state.connected is False
         assert state.battery is None
-        assert state.rssi is None  # hid rssi is only the last value; not reported as live
+        assert state.rssi is None
         assert state.name == "WiiM Voice Remote"
         assert state.mac == FAKE_REMOTE_MAC
-        assert state.firmware == "0054"  # kept by getblehidstatus
+        assert state.firmware == "0054"
 
     def test_not_paired(self):
-        state = build_ble_remote_state(
-            extract_ble_remote_status_ex(STATUS_EX_REMOTE_NOT_CONNECTED), parse_ble_remote_identity(HID_SCANNING)
-        )
+        state = build_ble_remote_state(parse_ble_remote_identity(HID_SCANNING))
+        assert state is not None
         assert (state.paired, state.connected) == (False, False)
         assert state.name is None and state.mac is None and state.firmware is None
         assert state.battery is None and state.rssi is None
 
     def test_identity_not_read_yet(self):
-        state = build_ble_remote_state(extract_ble_remote_status_ex(STATUS_EX_REMOTE_CONNECTED), None)
-        assert state.paired is None
-        assert state.connected is True
-        assert state.battery == 100
-        assert state.firmware == "0054"  # from BleRemoteVersion
-        assert state.name is None and state.mac is None
-
-    def test_status_ex_not_read_yet_falls_back_to_hid_status(self):
-        state = build_ble_remote_state({}, parse_ble_remote_identity(HID_CONNECTED))
-        assert state.connected is True
-        assert state.battery is None and state.rssi is None
+        assert build_ble_remote_state(None) is None
 
     @pytest.mark.parametrize("battery", ["", "abc", "-1", "101", None])
     def test_bad_battery_is_none(self, battery):
-        fields = {**STATUS_EX_REMOTE_CONNECTED, "BleRemoteBatterylevel": battery}
-        assert build_ble_remote_state(fields, None).battery is None
+        state = build_ble_remote_state(parse_ble_remote_identity({**HID_CONNECTED, "battery": battery}))
+        assert state is not None
+        assert state.battery is None
 
     def test_bad_rssi_is_none(self):
-        fields = {**STATUS_EX_REMOTE_CONNECTED, "BleRemoteRSSI": "n/a"}
-        assert build_ble_remote_state(fields, None).rssi is None
+        state = build_ble_remote_state(parse_ble_remote_identity({**HID_CONNECTED, "rssi": "n/a"}))
+        assert state is not None
+        assert state.rssi is None
 
     def test_repr_and_diagnostics_mask_the_mac(self):
-        state = build_ble_remote_state(
-            extract_ble_remote_status_ex(STATUS_EX_REMOTE_CONNECTED), parse_ble_remote_identity(HID_CONNECTED)
-        )
+        state = build_ble_remote_state(parse_ble_remote_identity(HID_CONNECTED))
+        assert state is not None
         assert FAKE_REMOTE_MAC not in repr(state)
         diag = state.diagnostics_dict()
         assert FAKE_REMOTE_MAC not in str(diag)
@@ -199,7 +170,8 @@ class TestBuildState:
         assert diag["battery"] == 100
 
     def test_diagnostics_without_mac(self):
-        state = build_ble_remote_state({}, parse_ble_remote_identity(HID_SCANNING))
+        state = build_ble_remote_state(parse_ble_remote_identity(HID_SCANNING))
+        assert state is not None
         assert state.diagnostics_dict()["mac"] is None
 
 

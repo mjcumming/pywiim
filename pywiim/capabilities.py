@@ -108,7 +108,7 @@ def _channel_balance_probe_success(response: ApiResponse) -> bool:
     return True
 
 
-def _subwoofer_probe_error_definitively_unsupported(err: Exception) -> bool:
+def _probe_error_definitively_unsupported(err: Exception) -> bool:
     """True when the error indicates the endpoint/command is not available."""
     s = str(err).lower()
     return "unknown command" in s or "404" in s or "not found" in s
@@ -148,7 +148,7 @@ async def _probe_supports_subwoofer(client: Any, device_info: DeviceInfo, capabi
             return False
         except Exception as err:
             last_err = err
-            if _subwoofer_probe_error_definitively_unsupported(err):
+            if _probe_error_definitively_unsupported(err):
                 _LOGGER.debug(
                     "Subwoofer probe host=%s model=%s: unsupported (error=%s)",
                     host,
@@ -172,7 +172,7 @@ async def _probe_supports_subwoofer(client: Any, device_info: DeviceInfo, capabi
 
 
 async def _probe_supports_ble_remote(client: Any, device_info: DeviceInfo) -> bool | None:
-    """Read-only probe for WiiM Voice Remote support (ADR 023).
+    """Read-only probe for WiiM Voice Remote support (ADR 025).
 
     ``BleRemoteControl`` in ``getStatusEx`` is ``"1"`` whenever the speaker supports a remote,
     whether or not one is paired. Only then is ``getblehidstatus`` read (a plain status read, no
@@ -191,7 +191,7 @@ async def _probe_supports_ble_remote(client: Any, device_info: DeviceInfo) -> bo
     try:
         response = await client._request(API_ENDPOINT_BLE_REMOTE_STATUS)
     except Exception as err:
-        if _subwoofer_probe_error_definitively_unsupported(err):
+        if _probe_error_definitively_unsupported(err):
             _LOGGER.debug("BLE remote probe host=%s: unsupported (error=%s)", host, err)
             return False
         _LOGGER.debug("BLE remote probe inconclusive for host=%s: %s", host, err)
@@ -635,7 +635,7 @@ class WiiMCapabilities:
         # Subwoofer (getSubLPF) — WiiM-only read probe; same endpoint as get_subwoofer_status_raw()
         capabilities["supports_subwoofer"] = await _probe_supports_subwoofer(client, device_info, capabilities)
 
-        # WiiM Voice Remote (ADR 023): getStatusEx BleRemoteControl gate, then read-only getblehidstatus
+        # WiiM Voice Remote (ADR 025): BleRemoteControl from the device info already read, then getblehidstatus
         capabilities["supports_ble_remote"] = await _probe_supports_ble_remote(client, device_info)
 
         # WiiM-only input metadata (capability list / enable flags / custom labels).

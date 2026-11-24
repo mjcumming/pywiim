@@ -210,12 +210,12 @@ and firmware versions. RoomFit profile create and edit stay in the WiiM app.
 ## WiiM Voice Remote
 
 Verified on a WiiM Pro Plus (firmware `Linkplay.4.8.833841`, pywiim 3.0.3 had none of
-this). Other models and firmware are not tested. Design: [ADR 023](adr/023-wiim-voice-remote-state-and-volume-step.md).
+this). Other models and firmware are not tested. Design: [ADR 025](adr/025-wiim-voice-remote-state-and-volume-step.md).
 
 | Command | pywiim helper | Model | Current use |
 | --- | --- | --- | --- |
-| `getStatusEx` `BleRemote*` keys | `Player.ble_remote` | `BleRemoteState` | Connected, battery, RSSI, version (live values) |
-| `getblehidstatus` | `client.get_ble_remote_identity()` | `BleRemoteIdentity` | Name, MAC, paired vs not paired; also the capability probe |
+| `getStatusEx` `BleRemoteControl` | capability probe | bool | Already read at connect. `"1"` means the speaker can have a remote. Not polled again |
+| `getblehidstatus` | `client.get_ble_remote_identity()` | `BleRemoteState` | Connected, battery, RSSI, name, MAC, firmware; also the capability probe |
 | `get_remote_volume_step` | `client.get_remote_volume_step()` | `int` (1-5) | Read the remote's volume step |
 | `set_remote_volume_step:N` | `client.set_remote_volume_step(N)` | none | Write the volume step (N = 1-5), verified by read-back |
 
@@ -247,8 +247,7 @@ scanning:    not paired: name "", mac "00:00:00:00:00:00", ver "", rssi 0
 | Not paired | `scanning`, empty name, zero MAC | `BleRemoteConnected` `0`, other keys missing |
 
 `getblehidstatus` `battery` lags after a battery change (0 right after, 100 on a later read; the
-delay is unknown) while `rssi` updates. `getStatusEx` `BleRemoteBatterylevel` updates
-immediately, so battery comes from `getStatusEx`.
+delay is unknown). pywiim uses that value anyway. `getStatusEx` is not polled to freshen it.
 
 Volume step: `get_remote_volume_step` → `{"status":"OK","remote_volume_step":1}`;
 `set_remote_volume_step:N` → `{"status":"OK"}` for N = 1-5 (app labels: 1 Fine Adjustment
@@ -266,7 +265,9 @@ One-off setup, account, network, update-server, token, static-IP, Wi-Fi, Alexa,
 and factory-reset style commands from the app bundle are not good Home
 Assistant surfaces. pywiim may keep selected read-only diagnostics over time,
 but user-facing HA entities/services should focus on daily listening and
-automation workflows.
+automation workflows. [ADR 023](adr/023-daily-use-surface.md) records that as
+guidance for new features: daily use is the focus, and set-and-forget settings
+are not.
 
 ## Real-Device Testing
 

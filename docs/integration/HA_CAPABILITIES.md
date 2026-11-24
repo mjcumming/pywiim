@@ -39,7 +39,7 @@ These capabilities are detected via endpoint probing during device initializatio
 | `player.supports_output_channel` | Output channel stereo / left / right (`output_channel` / `set_output_channel`) | Devices whose status has a valid `ch` field or which support the separate standalone channel-mode API. Solo mode uses that API when available; grouped players use their own `ch`. |
 | `player.supports_subwoofer` | Subwoofer configuration | WiiM only (not Arylic) |
 | `player.supports_trigger_out` | 12V trigger output (amplifier control) | Ultra / Pro / Pro Plus model class (no connect probe) |
-| `player.supports_ble_remote` | WiiM Voice Remote state and volume step (`player.ble_remote`, `remote_volume_step`). `True` means the speaker supports a remote, not that one is paired; check `ble_remote.paired` | Read-only probe: `getStatusEx` `BleRemoteControl` is `1`, then `getblehidstatus` returns a valid status ([ADR 023](../design/adr/023-wiim-voice-remote-state-and-volume-step.md)). Tested on WiiM Pro Plus only |
+| `player.supports_ble_remote` | WiiM Voice Remote state and volume step (`player.ble_remote`, `remote_volume_step`). `True` means the speaker supports a remote, not that one is paired; check `ble_remote.paired` | Read-only probe: device info `BleRemoteControl` is `1`, then `getblehidstatus` returns a valid status ([ADR 025](../design/adr/025-wiim-voice-remote-state-and-volume-step.md)). Tested on WiiM Pro Plus only |
 
 ### UPnP Capabilities
 

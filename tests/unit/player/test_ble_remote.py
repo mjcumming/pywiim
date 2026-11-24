@@ -17,8 +17,6 @@ from tests.unit.ble_remote_fixtures import (
     HID_CONNECTED,
     HID_SCANNING,
     STATUS_EX_BASE,
-    STATUS_EX_REMOTE_CONNECTED,
-    STATUS_EX_REMOTE_NOT_CONNECTED,
 )
 
 
@@ -40,72 +38,75 @@ class TestPlayerState:
 
     def test_no_state_when_unsupported(self, mock_client):
         player = _make_player(mock_client, supported=False)
-        player._ble_remote_status_ex = dict(STATUS_EX_REMOTE_CONNECTED)
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=HID_CONNECTED, raw=None))
+        player._ble_remote_identity = None
         assert player.ble_remote is None
 
     def test_no_state_before_first_read(self, mock_client):
         assert _make_player(mock_client).ble_remote is None
 
     @pytest.mark.asyncio
-    async def test_status_refresh_from_client(self, mock_client):
+    async def test_identity_refresh_sets_connected_battery(self, mock_client):
         player = _make_player(mock_client)
-        mock_client.get_device_info = AsyncMock(return_value={**STATUS_EX_BASE, **STATUS_EX_REMOTE_CONNECTED})
-        changed = await player._refresh_ble_remote_status()
-        assert changed is True  # connection state became known
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=HID_CONNECTED, raw=None))
+        await player._refresh_ble_remote_identity()
         state = player.ble_remote
         assert isinstance(state, BleRemoteState)
-        assert (state.connected, state.battery, state.rssi, state.firmware) == (True, 100, -61, "0054")
-        assert state.paired is None  # identity not read yet
+        assert (state.connected, state.battery, state.rssi, state.firmware, state.paired) == (
+            True,
+            100,
+            -61,
+            "0054",
+            True,
+        )
         player._on_state_changed.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_status_refresh_from_cached_device_info_makes_no_request(self, mock_client):
-        player = _make_player(mock_client)
         mock_client.get_device_info = AsyncMock()
-        player._device_info = DeviceInfo.model_validate({**STATUS_EX_BASE, **STATUS_EX_REMOTE_CONNECTED})
-        await player._refresh_ble_remote_status(from_device_info=True)
         mock_client.get_device_info.assert_not_awaited()
-        assert player.ble_remote.battery == 100
 
     @pytest.mark.asyncio
-    async def test_unchanged_status_does_not_notify_or_report_change(self, mock_client):
+    async def test_unchanged_read_does_not_notify(self, mock_client):
         player = _make_player(mock_client)
-        mock_client.get_device_info = AsyncMock(return_value={**STATUS_EX_BASE, **STATUS_EX_REMOTE_CONNECTED})
-        await player._refresh_ble_remote_status()
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=HID_CONNECTED, raw=None))
+        await player._refresh_ble_remote_identity()
         player._on_state_changed.reset_mock()
-        assert await player._refresh_ble_remote_status() is False
+        await player._refresh_ble_remote_identity()
         player._on_state_changed.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_battery_change_notifies_but_is_not_a_connection_change(self, mock_client):
+    async def test_battery_change_notifies(self, mock_client):
         player = _make_player(mock_client)
-        mock_client.get_device_info = AsyncMock(return_value={**STATUS_EX_BASE, **STATUS_EX_REMOTE_CONNECTED})
-        await player._refresh_ble_remote_status()
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=HID_CONNECTED, raw=None))
+        await player._refresh_ble_remote_identity()
         player._on_state_changed.reset_mock()
-        low = {**STATUS_EX_REMOTE_CONNECTED, "BleRemoteBatterylevel": "40"}
-        mock_client.get_device_info = AsyncMock(return_value={**STATUS_EX_BASE, **low})
-        assert await player._refresh_ble_remote_status() is False
+        low = {**HID_CONNECTED, "battery": 40}
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=low, raw=None))
+        await player._refresh_ble_remote_identity()
         player._on_state_changed.assert_called_once()
+        assert player.ble_remote is not None
         assert player.ble_remote.battery == 40
 
     @pytest.mark.asyncio
-    async def test_disconnect_is_a_connection_change_and_missing_keys_parse(self, mock_client):
+    async def test_disconnect_hides_battery_and_rssi(self, mock_client):
+        from tests.unit.ble_remote_fixtures import HID_NOT_CONNECTED
+
         player = _make_player(mock_client)
-        mock_client.get_device_info = AsyncMock(return_value={**STATUS_EX_BASE, **STATUS_EX_REMOTE_CONNECTED})
-        await player._refresh_ble_remote_status()
-        mock_client.get_device_info = AsyncMock(return_value={**STATUS_EX_BASE, **STATUS_EX_REMOTE_NOT_CONNECTED})
-        assert await player._refresh_ble_remote_status() is True
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=HID_CONNECTED, raw=None))
+        await player._refresh_ble_remote_identity()
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=HID_NOT_CONNECTED, raw=None))
+        await player._refresh_ble_remote_identity()
         state = player.ble_remote
+        assert state is not None
         assert state.connected is False and state.battery is None and state.rssi is None
+        assert state.paired is True
 
     @pytest.mark.asyncio
-    async def test_failed_status_read_keeps_previous_state(self, mock_client):
+    async def test_failed_read_keeps_previous_state(self, mock_client):
         player = _make_player(mock_client)
-        mock_client.get_device_info = AsyncMock(return_value={**STATUS_EX_BASE, **STATUS_EX_REMOTE_CONNECTED})
-        await player._refresh_ble_remote_status()
-        mock_client.get_device_info = AsyncMock(side_effect=WiiMError("timeout"))
-        with pytest.raises(WiiMError):
-            await player._refresh_ble_remote_status()
+        mock_client._request = AsyncMock(return_value=ApiResponse(parsed=HID_CONNECTED, raw=None))
+        await player._refresh_ble_remote_identity()
+        mock_client._request = AsyncMock(side_effect=WiiMError("timeout"))
+        await player._refresh_ble_remote_identity()
+        assert player.ble_remote is not None
         assert player.ble_remote.battery == 100
 
     @pytest.mark.asyncio
@@ -136,20 +137,20 @@ class TestPlayerState:
         assert player.ble_remote.paired is True
 
     @pytest.mark.asyncio
-    async def test_get_ble_remote_state_reads_both_sources(self, mock_client):
+    async def test_get_ble_remote_state_reads_hid(self, mock_client):
         player = _make_player(mock_client)
-        mock_client.get_device_info = AsyncMock(return_value={**STATUS_EX_BASE, **STATUS_EX_REMOTE_CONNECTED})
         mock_client._request = AsyncMock(return_value=ApiResponse(parsed=HID_CONNECTED, raw=None))
         state = await player.get_ble_remote_state()
         assert state == player.ble_remote
+        assert state is not None
         assert (state.paired, state.connected, state.battery) == (True, True, 100)
 
     @pytest.mark.asyncio
     async def test_get_ble_remote_state_unsupported(self, mock_client):
         player = _make_player(mock_client, supported=False)
-        mock_client.get_device_info = AsyncMock()
+        mock_client._request = AsyncMock()
         assert await player.get_ble_remote_state() is None
-        mock_client.get_device_info.assert_not_awaited()
+        mock_client._request.assert_not_awaited()
 
 
 class TestPlayerVolumeStep:
@@ -209,27 +210,27 @@ class TestPlayerVolumeStep:
 
 
 class TestPollingStrategy:
-    def test_status_tier_is_configuration_interval(self):
+    def test_paired_remote_uses_the_60_second_tier(self):
         strategy = PollingStrategy({})
-        assert strategy.should_fetch_ble_remote_status(0, True, now=1000.0) is True
-        assert strategy.should_fetch_ble_remote_status(1000.0 - 59, True, now=1000.0) is False
-        assert strategy.should_fetch_ble_remote_status(1000.0 - 60, True, now=1000.0) is True
+        assert strategy.should_fetch_ble_remote(0, True, paired=True, now=1000.0) is True
+        assert strategy.should_fetch_ble_remote(1000.0 - 59, True, paired=True, now=1000.0) is False
+        assert strategy.should_fetch_ble_remote(1000.0 - 60, True, paired=True, now=1000.0) is True
 
-    def test_identity_tier_is_slower_than_status_tier(self):
+    def test_unpaired_remote_uses_the_5_minute_tier(self):
         strategy = PollingStrategy({})
         assert strategy.BLE_REMOTE_IDENTITY_INTERVAL > strategy.CONFIGURATION_INTERVAL
-        assert strategy.should_fetch_ble_remote_identity(0, True, now=1000.0) is True
-        assert strategy.should_fetch_ble_remote_identity(1000.0 - 60, True, now=1000.0) is False
+        assert strategy.should_fetch_ble_remote(1000.0 - 60, True, paired=False, now=1000.0) is False
         assert (
-            strategy.should_fetch_ble_remote_identity(1000.0 - strategy.BLE_REMOTE_IDENTITY_INTERVAL, True, now=1000.0)
+            strategy.should_fetch_ble_remote(
+                1000.0 - strategy.BLE_REMOTE_IDENTITY_INTERVAL, True, paired=False, now=1000.0
+            )
             is True
         )
 
     def test_unsupported_never_fetches(self):
         strategy = PollingStrategy({})
-        assert strategy.should_fetch_ble_remote_status(0, False) is False
-        assert strategy.should_fetch_ble_remote_identity(0, False) is False
-        assert strategy.should_fetch_ble_remote_status(None, True) is True
+        assert strategy.should_fetch_ble_remote(0, False, paired=True) is False
+        assert strategy.should_fetch_ble_remote(None, True, paired=False) is True
 
 
 class TestDiagnostics:
@@ -238,7 +239,6 @@ class TestDiagnostics:
         from pywiim.player.diagnostics import DiagnosticsCollector
 
         player = _make_player(mock_client)
-        player._ble_remote_status_ex = dict(STATUS_EX_REMOTE_CONNECTED)
         mock_client._request = AsyncMock(return_value=ApiResponse(parsed=HID_CONNECTED, raw=None))
         await player._refresh_ble_remote_identity()
         player._remote_volume_step = 2

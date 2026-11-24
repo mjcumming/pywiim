@@ -1240,32 +1240,21 @@ class StateManager:
             except Exception as err:
                 _LOGGER.debug("Failed to fetch 12V trigger status for %s: %s", self.player.host, err)
 
-        # WiiM Voice Remote (ADR 023) — supports_ble_remote is probed at connect (read-only). True or
-        # None (inconclusive) polls; missing or False never does. Battery/connected/RSSI come from
-        # getStatusEx every 60s; name/MAC/paired from getblehidstatus every 5 minutes, or at once when
-        # the connected flag changes. A full refresh reuses the device info it just read.
+        # WiiM Voice Remote (ADR 025). supports_ble_remote is probed at connect. True or None
+        # (inconclusive) polls getblehidstatus; False never does. Every 60s while a remote is
+        # paired, every 5 minutes otherwise. getStatusEx is not polled for this (ADR 024).
         ble_remote_supported = self.player.client.capabilities.get("supports_ble_remote", False)
         if ble_remote_supported is not False:
             strategy = self._polling_strategy
-            connection_changed = False
+            identity = self.player._ble_remote_identity
+            paired = bool(identity and identity.paired)
             if full or (
                 strategy
-                and strategy.should_fetch_ble_remote_status(self.player._last_ble_remote_status_check, True, now=now)
-            ):
-                try:
-                    connection_changed = await self.player._refresh_ble_remote_status(from_device_info=full)
-                except Exception as err:
-                    _LOGGER.debug("Failed to fetch BLE remote status for %s: %s", self.player.host, err)
-                finally:
-                    self.player._last_ble_remote_status_check = now
-            if (
-                full
-                or connection_changed
-                or (
-                    strategy
-                    and strategy.should_fetch_ble_remote_identity(
-                        self.player._last_ble_remote_identity_check, True, now=now
-                    )
+                and strategy.should_fetch_ble_remote(
+                    self.player._last_ble_remote_identity_check,
+                    True,
+                    paired=paired,
+                    now=now,
                 )
             ):
                 try:
@@ -1274,7 +1263,7 @@ class StateManager:
                     if identity is not None and identity.paired:
                         await self.player.get_remote_volume_step()
                 except Exception as err:
-                    _LOGGER.debug("Failed to fetch BLE remote identity for %s: %s", self.player.host, err)
+                    _LOGGER.debug("Failed to fetch BLE remote status for %s: %s", self.player.host, err)
                 finally:
                     self.player._last_ble_remote_identity_check = now
 

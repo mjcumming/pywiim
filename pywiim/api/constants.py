@@ -469,7 +469,7 @@ API_ENDPOINT_TRIGGER_OUT_SET = "/httpapi.asp?command=setTriggeroutStatus:"
 # WiiM Voice Remote (Bluetooth LE). Read endpoints plus the volume step setting only.
 # getblehidstatus → {"status":"connected|notconnect|scanning","name":..,"mac":..,..}
 # get_remote_volume_step → {"status":"OK","remote_volume_step":1-5}; set_remote_volume_step:N → {"status":"OK"}
-# Pairing, removal and firmware-update commands are deliberately not modelled (ADR 023).
+# Pairing, removal and firmware-update commands are deliberately not modelled (ADR 025).
 API_ENDPOINT_BLE_REMOTE_STATUS = "/httpapi.asp?command=getblehidstatus"
 API_ENDPOINT_REMOTE_VOLUME_STEP_GET = "/httpapi.asp?command=get_remote_volume_step"
 API_ENDPOINT_REMOTE_VOLUME_STEP_SET = "/httpapi.asp?command=set_remote_volume_step:"

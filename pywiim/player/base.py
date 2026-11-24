@@ -136,12 +136,10 @@ class PlayerBase:
         self._trigger_out_on: bool | None = None  # 12V trigger state (None = unknown)
         self._last_trigger_out_check: float = 0
 
-        # WiiM Voice Remote (ADR 023). Status keys come from getStatusEx (60s tier), identity from
-        # getblehidstatus (5 min tier). The BLE MAC lives only in _ble_remote_identity (never logged).
-        self._ble_remote_status_ex: dict[str, str] | None = None
+        # WiiM Voice Remote (ADR 025). State comes from getblehidstatus. The BLE MAC lives only
+        # in _ble_remote_identity (never logged).
         self._ble_remote_identity: BleRemoteIdentity | None = None
         self._remote_volume_step: int | None = None
-        self._last_ble_remote_status_check: float = 0
         self._last_ble_remote_identity_check: float = 0
         self._led_indicator_on: bool | None = None  # Status LED (None = unknown)
         self._last_led_indicator_check: float = 0

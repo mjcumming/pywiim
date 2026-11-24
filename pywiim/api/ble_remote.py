@@ -3,13 +3,13 @@
 Read-only status plus the remote's volume step setting. Verified on a WiiM Pro Plus
 (firmware Linkplay.4.8.833841); other models and firmware are not tested.
 
-Sources (see ADR 023):
-- ``getStatusEx`` carries the live values: ``BleRemoteConnected``, ``BleRemoteBatterylevel``,
-  ``BleRemoteRSSI``, ``BleRemoteVersion``. While the remote is not connected only
-  ``BleRemoteControl`` and ``BleRemoteConnected`` are present. ``BleRemoteControl`` is ``"1"`` in
-  every state, so it means "this speaker supports a remote", not "a remote is paired".
-- ``getblehidstatus`` supplies the name and BLE MAC and tells "not paired" from "not connected".
-  Its ``battery`` lags after a battery change, so it is never used.
+Sources (see ADR 025):
+- ``getStatusEx`` ``BleRemoteControl`` is ``"1"`` whenever the speaker supports a remote, paired or
+  not. That flag is read from the device info already fetched at connect. The regular poll does
+  not call ``getStatusEx`` again for the remote (ADR 024).
+- ``getblehidstatus`` is the remote read: connected, battery, RSSI, name, MAC, and firmware.
+  Battery can lag after a battery change. While the remote is not connected, battery and RSSI
+  are reported as None.
 - ``get_remote_volume_step`` / ``set_remote_volume_step:N`` (N = 1-5) read and write the setting.
 
 This module never builds the commands that pair, remove or update the remote. The BLE MAC is
@@ -49,7 +49,6 @@ REMOTE_VOLUME_STEPS: Mapping[int, str] = MappingProxyType(
 )
 
 _UNPAIRED_MAC = "00:00:00:00:00:00"
-_STATUS_EX_PREFIX = "BleRemote"
 
 
 def mask_mac(mac: str | None) -> str | None:
@@ -69,6 +68,8 @@ class BleRemoteIdentity:
         name: Remote name, or None when not paired.
         mac: Remote BLE MAC, or None when not paired. Hidden from ``repr``.
         firmware: Remote firmware string such as ``"0054"``, or None.
+        battery: Battery percent from this response. It can lag after a battery change.
+        rssi: Signal strength in dBm from this response, including a stale value while disconnected.
     """
 
     status: str
@@ -76,6 +77,8 @@ class BleRemoteIdentity:
     name: str | None
     mac: str | None = field(repr=False)
     firmware: str | None
+    battery: int | None
+    rssi: int | None
 
 
 @dataclass(frozen=True)
@@ -89,8 +92,9 @@ class BleRemoteState:
         mac: Remote BLE MAC, None when not paired or not read yet. Hidden from ``repr``;
             masked by :meth:`diagnostics_dict`.
         firmware: Remote firmware string (for example ``"0054"``), None when unknown.
-        battery: Battery level in percent from ``getStatusEx``; None while not connected.
-        rssi: Signal strength in dBm from ``getStatusEx``; None while not connected.
+        battery: Battery level in percent from ``getblehidstatus``; None while not connected.
+            The value can lag after a battery change.
+        rssi: Signal strength in dBm from ``getblehidstatus``; None while not connected.
     """
 
     paired: bool | None
@@ -112,17 +116,6 @@ class BleRemoteState:
             "battery": self.battery,
             "rssi": self.rssi,
         }
-
-
-def extract_ble_remote_status_ex(status_ex: Any) -> dict[str, str]:
-    """Return the ``BleRemote*`` keys of a ``getStatusEx`` payload (empty when there are none)."""
-    if not isinstance(status_ex, Mapping):
-        return {}
-    return {
-        key: value if isinstance(value, str) else str(value)
-        for key, value in status_ex.items()
-        if isinstance(key, str) and key.startswith(_STATUS_EX_PREFIX) and value is not None
-    }
 
 
 def parse_ble_remote_identity(parsed: Any) -> BleRemoteIdentity | None:
@@ -151,6 +144,8 @@ def parse_ble_remote_identity(parsed: Any) -> BleRemoteIdentity | None:
         name=name or None if paired else None,
         mac=mac if paired else None,
         firmware=firmware or None if paired else None,
+        battery=_int_or_none(parsed.get("battery"), 0, 100),
+        rssi=_int_or_none(parsed.get("rssi")),
     )
 
 
@@ -166,30 +161,23 @@ def _int_or_none(value: Any, low: int | None = None, high: int | None = None) ->
     return number
 
 
-def build_ble_remote_state(status_ex_fields: Mapping[str, str], identity: BleRemoteIdentity | None) -> BleRemoteState:
-    """Combine the ``getStatusEx`` remote keys and the ``getblehidstatus`` identity.
+def build_ble_remote_state(identity: BleRemoteIdentity | None) -> BleRemoteState | None:
+    """Build remote state from one ``getblehidstatus`` read.
 
-    Battery, RSSI and the connected flag come from ``getStatusEx`` only. Missing keys (the remote
-    is not connected) give None, never an error. Before ``getStatusEx`` has been read the connected
-    flag falls back to the identity status.
+    Battery and RSSI are None unless ``status`` is ``connected``. The battery value can lag after
+    a battery change. Returns None when the identity has not been read.
     """
-    if "BleRemoteConnected" in status_ex_fields:
-        connected = status_ex_fields["BleRemoteConnected"].strip() == "1"
-    else:
-        connected = identity is not None and identity.status == "connected"
-
-    firmware = (status_ex_fields.get("BleRemoteVersion") or "").strip() or None
-    if firmware is None and identity is not None:
-        firmware = identity.firmware
-
+    if identity is None:
+        return None
+    connected = identity.status == "connected"
     return BleRemoteState(
-        paired=identity.paired if identity is not None else None,
+        paired=identity.paired,
         connected=connected,
-        name=identity.name if identity is not None else None,
-        mac=identity.mac if identity is not None else None,
-        firmware=firmware,
-        battery=_int_or_none(status_ex_fields.get("BleRemoteBatterylevel"), 0, 100) if connected else None,
-        rssi=_int_or_none(status_ex_fields.get("BleRemoteRSSI")) if connected else None,
+        name=identity.name,
+        mac=identity.mac,
+        firmware=identity.firmware,
+        battery=identity.battery if connected else None,
+        rssi=identity.rssi if connected else None,
     )
 
 

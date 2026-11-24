@@ -370,16 +370,18 @@ class PollingStrategy:
 
         return (now - last_fetch_time) >= self.CONFIGURATION_INTERVAL
 
-    def should_fetch_ble_remote_status(
+    def should_fetch_ble_remote(
         self,
         last_fetch_time: float,
         ble_remote_supported: bool,
+        *,
+        paired: bool,
         now: float | None = None,
     ) -> bool:
-        """Check if the WiiM Voice Remote status (getStatusEx keys) should be read.
+        """Check if ``getblehidstatus`` should be read.
 
-        Fetch on startup, then every ``CONFIGURATION_INTERVAL`` (60s). Battery and connection
-        change slowly; only when the speaker supports a remote.
+        Fetch on startup. Then every ``CONFIGURATION_INTERVAL`` (60s) while a remote is paired,
+        and every ``BLE_REMOTE_IDENTITY_INTERVAL`` (5 minutes) when none is paired.
         """
         if not ble_remote_supported:
             return False
@@ -387,26 +389,8 @@ class PollingStrategy:
             now = time.time()
         if last_fetch_time is None or last_fetch_time == 0:
             return True
-        return (now - last_fetch_time) >= self.CONFIGURATION_INTERVAL
-
-    def should_fetch_ble_remote_identity(
-        self,
-        last_fetch_time: float,
-        ble_remote_supported: bool,
-        now: float | None = None,
-    ) -> bool:
-        """Check if getblehidstatus (name, MAC, paired) should be read.
-
-        Fetch on startup, then every ``BLE_REMOTE_IDENTITY_INTERVAL`` (5 minutes). The caller
-        also reads it right away when the connected flag changes.
-        """
-        if not ble_remote_supported:
-            return False
-        if now is None:
-            now = time.time()
-        if last_fetch_time is None or last_fetch_time == 0:
-            return True
-        return (now - last_fetch_time) >= self.BLE_REMOTE_IDENTITY_INTERVAL
+        interval = self.CONFIGURATION_INTERVAL if paired else self.BLE_REMOTE_IDENTITY_INTERVAL
+        return (now - last_fetch_time) >= interval
 
     def should_fetch_led_indicator(
         self,

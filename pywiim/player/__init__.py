@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any, Literal
 from ..api.ble_remote import (
     BleRemoteState,
     build_ble_remote_state,
-    extract_ble_remote_status_ex,
 )
 from ..api.constants import DISPLAY_DEFAULT_BRIGHTNESS
 from ..api.misc import select_digital_filter
@@ -820,7 +819,7 @@ class Player(PlayerBase):
         """Turn 12V trigger output off."""
         await self.set_trigger_out(False)
 
-    # === WiiM Voice Remote (ADR 023) ===
+    # === WiiM Voice Remote (ADR 025) ===
 
     def _ble_remote_possible(self) -> bool:
         """False only when the speaker is known not to support a remote (True or None otherwise)."""
@@ -832,58 +831,28 @@ class Player(PlayerBase):
         if self.ble_remote != before and self._on_state_changed:
             self._on_state_changed()
 
-    async def _refresh_ble_remote_status(self, *, from_device_info: bool = False) -> bool:
-        """Update battery, connected, RSSI and version from getStatusEx.
-
-        Args:
-            from_device_info: Reuse the cached ``DeviceInfo`` (just read by a full refresh)
-                instead of requesting getStatusEx again.
-
-        Returns:
-            True when the connected flag changed (or was seen for the first time), so the caller
-            can read ``getblehidstatus`` right away. An unreadable payload keeps the previous
-            state and returns False.
-
-        Raises:
-            WiiMError: If the request fails.
-        """
-        if from_device_info:
-            source: Any = self._device_info.model_extra if self._device_info else None
-        else:
-            source = await self.client.get_device_info()
-        fields = extract_ble_remote_status_ex(source)
-        if "BleRemoteConnected" not in fields:
-            _LOGGER.debug("getStatusEx for %s has no BleRemote keys; keeping previous remote state", self.host)
-            return False
-        before = self.ble_remote
-        self._ble_remote_status_ex = fields
-        after = self.ble_remote
-        self._notify_ble_remote_change(before)
-        return before is None or after is None or before.connected != after.connected
-
     async def _refresh_ble_remote_identity(self) -> None:
-        """Update name, MAC and paired state from getblehidstatus (kept when the read fails)."""
+        """Update remote state from getblehidstatus (kept when the read fails)."""
         identity = await self.client.get_ble_remote_identity()
         if identity is None:
             return
         before = self.ble_remote
         self._ble_remote_identity = identity
+        if not identity.paired:
+            self._remote_volume_step = None
         if self.client.capabilities.get("supports_ble_remote", False) is None:
             self.client._capabilities["supports_ble_remote"] = True
         self._notify_ble_remote_change(before)
 
     async def get_ble_remote_state(self) -> BleRemoteState | None:
-        """Read both sources now and return the remote state (None if unsupported).
+        """Read getblehidstatus now and return the remote state (None if unsupported).
 
         Normally ``refresh()`` keeps ``ble_remote`` current; this forces a read.
         """
         if not self._ble_remote_possible():
             return None
-        now = time.time()
-        await self._refresh_ble_remote_status()
-        self._last_ble_remote_status_check = now
         await self._refresh_ble_remote_identity()
-        self._last_ble_remote_identity_check = now
+        self._last_ble_remote_identity_check = time.time()
         return self.ble_remote
 
     async def get_remote_volume_step(self) -> int | None:
@@ -1613,7 +1582,7 @@ class Player(PlayerBase):
 
     @property
     def supports_ble_remote(self) -> bool:
-        """Whether the speaker supports a WiiM Voice Remote (read-only probe; ADR 023).
+        """Whether the speaker supports a WiiM Voice Remote (read-only probe; ADR 025).
 
         True means "supports a remote", not "a remote is paired" - see ``ble_remote.paired``.
         """
@@ -1625,15 +1594,14 @@ class Player(PlayerBase):
     def ble_remote(self) -> BleRemoteState | None:
         """Cached WiiM Voice Remote state, or None when unsupported or not read yet.
 
-        Battery, connected and RSSI refresh every ~60s, name/MAC/paired every ~5 minutes (or at once
-        when the connected flag changes). ``battery``/``rssi`` are None while the remote is not
-        connected. The BLE MAC is hidden from ``repr`` and masked in diagnostics.
+        Refreshed from ``getblehidstatus`` about every 60 seconds while a remote is paired, and
+        about every 5 minutes when none is paired. ``battery`` and ``rssi`` are None while the
+        remote is not connected. Battery can lag after a battery change. The BLE MAC is hidden
+        from ``repr`` and masked in diagnostics.
         """
         if not self._ble_remote_possible():
             return None
-        if self._ble_remote_status_ex is None and self._ble_remote_identity is None:
-            return None
-        return build_ble_remote_state(self._ble_remote_status_ex or {}, self._ble_remote_identity)
+        return build_ble_remote_state(self._ble_remote_identity)
 
     @property
     def remote_volume_step(self) -> int | None:
