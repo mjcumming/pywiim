@@ -69,6 +69,16 @@ class DiagnosticsCollector:
         except Exception as err:
             diagnostics["device"] = {"error": str(err)}
 
+        # WiiM Voice Remote (BLE MAC is masked)
+        try:
+            remote = self.player.ble_remote
+            if remote is not None:
+                remote_diag = remote.diagnostics_dict()
+                remote_diag["volume_step"] = self.player.remote_volume_step
+                diagnostics["ble_remote"] = remote_diag
+        except Exception as err:
+            diagnostics["ble_remote"] = {"error": str(err)}
+
         # Current status
         try:
             if self.player._status_model:

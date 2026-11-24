@@ -16,6 +16,7 @@ from aiohttp import ClientSession
 
 from .api.audio_settings import AudioSettingsAPI
 from .api.base import BaseWiiMClient
+from .api.ble_remote import BleRemoteAPI
 from .api.bluetooth import BluetoothAPI
 from .api.device import DeviceAPI
 from .api.diagnostics import DiagnosticsAPI
@@ -47,6 +48,7 @@ class WiiMClient(
     BluetoothAPI,
     AudioSettingsAPI,
     SubwooferAPI,
+    BleRemoteAPI,
     LMSAPI,
     MiscAPI,
     DeviceAPI,
@@ -248,6 +250,7 @@ class WiiMClient(
                 if upnp_caps:
                     capabilities.update(upnp_caps)
                 capabilities.setdefault("supports_subwoofer", False)
+                capabilities.setdefault("supports_ble_remote", False)
                 self._capabilities.update(capabilities)
                 self._capabilities_detected = True
                 await self._apply_protocol_preference()

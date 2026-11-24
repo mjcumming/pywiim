@@ -466,6 +466,14 @@ API_ENDPOINT_SUBWOOFER_SET = "/httpapi.asp?command=setSubLPF:"
 API_ENDPOINT_TRIGGER_OUT_STATUS = "/httpapi.asp?command=getTriggeroutStatus"
 API_ENDPOINT_TRIGGER_OUT_SET = "/httpapi.asp?command=setTriggeroutStatus:"
 
+# WiiM Voice Remote (Bluetooth LE). Read endpoints plus the volume step setting only.
+# getblehidstatus → {"status":"connected|notconnect|scanning","name":..,"mac":..,..}
+# get_remote_volume_step → {"status":"OK","remote_volume_step":1-5}; set_remote_volume_step:N → {"status":"OK"}
+# Pairing, removal and firmware-update commands are deliberately not modelled (ADR 025).
+API_ENDPOINT_BLE_REMOTE_STATUS = "/httpapi.asp?command=getblehidstatus"
+API_ENDPOINT_REMOTE_VOLUME_STEP_GET = "/httpapi.asp?command=get_remote_volume_step"
+API_ENDPOINT_REMOTE_VOLUME_STEP_SET = "/httpapi.asp?command=set_remote_volume_step:"
+
 # PEQ / GEQ endpoints - official WiiM LV2 EQ API
 # pluginURI (implemented in pywiim): http://moddevices.com/plugins/caps/EqNp
 # graphic 10-band pluginURI: http://moddevices.com/plugins/caps/Eq10HP
@@ -740,6 +748,9 @@ __all__ = [
     # Subwoofer endpoints and constants
     "API_ENDPOINT_SUBWOOFER_STATUS",
     "API_ENDPOINT_SUBWOOFER_SET",
+    "API_ENDPOINT_BLE_REMOTE_STATUS",
+    "API_ENDPOINT_REMOTE_VOLUME_STEP_GET",
+    "API_ENDPOINT_REMOTE_VOLUME_STEP_SET",
     "SUBWOOFER_CROSSOVER_MIN",
     "SUBWOOFER_CROSSOVER_MAX",
     "SUBWOOFER_LEVEL_MIN",

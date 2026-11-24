@@ -184,8 +184,8 @@ If data exceeds its freshness window, it's considered stale and the other source
 
 ### 3. `Player._device_info` (Device Info Cache)
 **What:** Parsed **getStatusEx** / device info (model, firmware, UUID, name, etc.). This is **not** the same structure as runtime **`supports_*`** flags for optional HTTP endpoints.
-**Why:** Rarely changes, expensive to query
-**Updated:** Every HTTP poll (refresh)
+**Why:** Rarely changes, and it is a large document. See [ADR 024](adr/024-getstatusex-off-regular-poll.md).
+**Updated:** First refresh and an explicit full refresh. Not on the regular playback poll.
 
 **Where optional HTTP features are decided:** **`player.client.capabilities`** (merged after `_detect_capabilities()` / `refresh_capabilities()`). Integrations gate entities on that dict, not on `_device_info.model` alone — see **[ADR 018: Client `capabilities` Dict — Single Source of Truth](adr/018-capabilities-dict-source-of-truth.md)**.
 

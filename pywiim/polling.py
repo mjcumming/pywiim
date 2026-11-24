@@ -66,6 +66,8 @@ class PollingStrategy:
     CONFIGURATION_INTERVAL = 60.0  # Bluetooth, active EQ state, device info
     # Faster tier for user-toggled hardware (12V trigger, subwoofer) — light GETs, visible in HA/monitor
     HARDWARE_STATUS_INTERVAL = 15.0
+    # WiiM Voice Remote name/MAC/paired state change only when the user re-pairs it
+    BLE_REMOTE_IDENTITY_INTERVAL = 300.0
     METADATA_CHECK_INTERVAL = 1.0  # Check for track changes
 
     # Legacy device intervals (longer for older devices)
@@ -367,6 +369,28 @@ class PollingStrategy:
             return True
 
         return (now - last_fetch_time) >= self.CONFIGURATION_INTERVAL
+
+    def should_fetch_ble_remote(
+        self,
+        last_fetch_time: float,
+        ble_remote_supported: bool,
+        *,
+        paired: bool,
+        now: float | None = None,
+    ) -> bool:
+        """Check if ``getblehidstatus`` should be read.
+
+        Fetch on startup. Then every ``CONFIGURATION_INTERVAL`` (60s) while a remote is paired,
+        and every ``BLE_REMOTE_IDENTITY_INTERVAL`` (5 minutes) when none is paired.
+        """
+        if not ble_remote_supported:
+            return False
+        if now is None:
+            now = time.time()
+        if last_fetch_time is None or last_fetch_time == 0:
+            return True
+        interval = self.CONFIGURATION_INTERVAL if paired else self.BLE_REMOTE_IDENTITY_INTERVAL
+        return (now - last_fetch_time) >= interval
 
     def should_fetch_led_indicator(
         self,

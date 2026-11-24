@@ -8,6 +8,7 @@ import weakref
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from ..api.ble_remote import BleRemoteIdentity
 from ..api.misc import DigitalFilter
 from ..client import WiiMClient
 from ..model_names import to_friendly_model_name
@@ -134,6 +135,12 @@ class PlayerBase:
         self._subwoofer_status: dict[str, Any] | None = None
         self._trigger_out_on: bool | None = None  # 12V trigger state (None = unknown)
         self._last_trigger_out_check: float = 0
+
+        # WiiM Voice Remote (ADR 025). State comes from getblehidstatus. The BLE MAC lives only
+        # in _ble_remote_identity (never logged).
+        self._ble_remote_identity: BleRemoteIdentity | None = None
+        self._remote_volume_step: int | None = None
+        self._last_ble_remote_identity_check: float = 0
         self._led_indicator_on: bool | None = None  # Status LED (None = unknown)
         self._last_led_indicator_check: float = 0
         self._display_on: bool | None = None  # LCD power (None = unknown)

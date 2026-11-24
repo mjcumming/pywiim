@@ -11,6 +11,10 @@ import time
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
+from ..api.ble_remote import (
+    BleRemoteState,
+    build_ble_remote_state,
+)
 from ..api.constants import DISPLAY_DEFAULT_BRIGHTNESS
 from ..api.misc import select_digital_filter
 from ..api.subwoofer import SubwooferStatus
@@ -815,6 +819,68 @@ class Player(PlayerBase):
         """Turn 12V trigger output off."""
         await self.set_trigger_out(False)
 
+    # === WiiM Voice Remote (ADR 025) ===
+
+    def _ble_remote_possible(self) -> bool:
+        """False only when the speaker is known not to support a remote (True or None otherwise)."""
+        if not self.client:
+            return False
+        return self.client.capabilities.get("supports_ble_remote", False) is not False
+
+    def _notify_ble_remote_change(self, before: BleRemoteState | None) -> None:
+        if self.ble_remote != before and self._on_state_changed:
+            self._on_state_changed()
+
+    async def _refresh_ble_remote_identity(self) -> None:
+        """Update remote state from getblehidstatus (kept when the read fails)."""
+        identity = await self.client.get_ble_remote_identity()
+        if identity is None:
+            return
+        before = self.ble_remote
+        self._ble_remote_identity = identity
+        if not identity.paired:
+            self._remote_volume_step = None
+        if self.client.capabilities.get("supports_ble_remote", False) is None:
+            self.client._capabilities["supports_ble_remote"] = True
+        self._notify_ble_remote_change(before)
+
+    async def get_ble_remote_state(self) -> BleRemoteState | None:
+        """Read getblehidstatus now and return the remote state (None if unsupported).
+
+        Normally ``refresh()`` keeps ``ble_remote`` current; this forces a read.
+        """
+        if not self._ble_remote_possible():
+            return None
+        await self._refresh_ble_remote_identity()
+        self._last_ble_remote_identity_check = time.time()
+        return self.ble_remote
+
+    async def get_remote_volume_step(self) -> int | None:
+        """Read the remote's volume step (1-5) and cache it; None if unsupported or unreadable."""
+        if not self._ble_remote_possible():
+            return None
+        step = await self.client.get_remote_volume_step()
+        if step is not None and step != self._remote_volume_step:
+            self._remote_volume_step = step
+            if self._on_state_changed:
+                self._on_state_changed()
+        return step
+
+    async def set_remote_volume_step(self, step: int) -> None:
+        """Set the remote's volume step (1-5, see ``REMOTE_VOLUME_STEPS``) and verify by reading back.
+
+        Raises:
+            ValueError: If ``step`` is not an int from 1 to 5.
+            WiiMError: If the speaker does not support a remote, or the device does not confirm
+                the new value on read-back. The cached value is only updated after confirmation.
+        """
+        if not self._ble_remote_possible():
+            raise WiiMError("WiiM Voice Remote is not supported on this device")
+        confirmed = await self.client.set_remote_volume_step(step)
+        self._remote_volume_step = confirmed
+        if self._on_state_changed:
+            self._on_state_changed()
+
     async def reboot(self) -> None:
         """Reboot the device."""
         await self._diagnostics.reboot()
@@ -1513,6 +1579,34 @@ class Player(PlayerBase):
         configuration-tier refresh during player.refresh() (ADR 019).
         """
         return self._trigger_out_on
+
+    @property
+    def supports_ble_remote(self) -> bool:
+        """Whether the speaker supports a WiiM Voice Remote (read-only probe; ADR 025).
+
+        True means "supports a remote", not "a remote is paired" - see ``ble_remote.paired``.
+        """
+        if not self.client:
+            return False
+        return self.client.capabilities.get("supports_ble_remote", False) is True
+
+    @property
+    def ble_remote(self) -> BleRemoteState | None:
+        """Cached WiiM Voice Remote state, or None when unsupported or not read yet.
+
+        Refreshed from ``getblehidstatus`` about every 60 seconds while a remote is paired, and
+        about every 5 minutes when none is paired. ``battery`` and ``rssi`` are None while the
+        remote is not connected. Battery can lag after a battery change. The BLE MAC is hidden
+        from ``repr`` and masked in diagnostics.
+        """
+        if not self._ble_remote_possible():
+            return None
+        return build_ble_remote_state(self._ble_remote_identity)
+
+    @property
+    def remote_volume_step(self) -> int | None:
+        """Cached remote volume step (1-5, see ``REMOTE_VOLUME_STEPS``), None if unknown."""
+        return self._remote_volume_step
 
     @property
     def led_indicator_on(self) -> bool | None:

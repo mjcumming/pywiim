@@ -24,6 +24,8 @@ Unsupported endpoints, plain `Failed`, `unknown command`, non-JSON bodies, and
 transport errors should not make discovery fail. Helpers return `None` or an
 empty list, depending on the natural shape of the API.
 
+The WiiM Voice Remote endpoints are listed in [their own section](#wiim-voice-remote).
+
 ## `getAudioInputEnable`
 
 Example shape:
@@ -205,13 +207,67 @@ Write commands for graphic EQ are intentionally not exposed yet. Use the WiiM
 app for graphic EQ setup until write behavior is validated across more models
 and firmware versions. RoomFit profile create and edit stay in the WiiM app.
 
+## WiiM Voice Remote
+
+Verified on a WiiM Pro Plus (firmware `Linkplay.4.8.833841`, pywiim 3.0.3 had none of
+this). Other models and firmware are not tested. Design: [ADR 025](adr/025-wiim-voice-remote-state-and-volume-step.md).
+
+| Command | pywiim helper | Model | Current use |
+| --- | --- | --- | --- |
+| `getStatusEx` `BleRemoteControl` | capability probe | bool | Already read at connect. `"1"` means the speaker can have a remote. Not polled again |
+| `getblehidstatus` | `client.get_ble_remote_identity()` | `BleRemoteState` | Connected, battery, RSSI, name, MAC, firmware; also the capability probe |
+| `get_remote_volume_step` | `client.get_remote_volume_step()` | `int` (1-5) | Read the remote's volume step |
+| `set_remote_volume_step:N` | `client.set_remote_volume_step(N)` | none | Write the volume step (N = 1-5), verified by read-back |
+
+`getStatusEx` while the remote is connected:
+
+```text
+"BleRemoteControl":"1","BleRemoteConnected":"1","BleRemoteException":"0","BleRemoteVersion":"0054",
+"BleRemoteBatterylevel":"100","BleRemoteRSSI":"-61","BleRemote_dev_state":"normal",
+"BleRemote_power_status":"0","BleRemote_has_new":"0","BleRemoteNewVersion":"",
+"BleRemote_update_checked_counter":"11"
+```
+
+While not connected only `BleRemoteControl` `"1"` and `BleRemoteConnected` `"0"` are present; the
+other keys are missing. `BleRemoteControl` is `"1"` in every state, so it means "the speaker
+supports a remote", not "a remote is paired".
+
+`getblehidstatus` (note the space before `doubleclickdisable` in the real response):
+
+```text
+connected:   {"status":"connected","error":0,"name":"WiiM Voice Remote","mac":"<BLE MAC>","battery":100,"ver":"0054","rssi":-61,"powerstatus":0, "doubleclickdisable":0}
+notconnect:  same keys; name, mac and ver kept, rssi = last value (batteries out)
+scanning:    not paired: name "", mac "00:00:00:00:00:00", ver "", rssi 0
+```
+
+| State | `getblehidstatus` `status` | `getStatusEx` |
+| --- | --- | --- |
+| Paired and connected | `connected` | `BleRemoteConnected` `1` plus the `BleRemote*` keys |
+| Paired, not connected (batteries out) | `notconnect`, identity kept | `BleRemoteConnected` `0`, other keys missing |
+| Not paired | `scanning`, empty name, zero MAC | `BleRemoteConnected` `0`, other keys missing |
+
+`getblehidstatus` `battery` lags after a battery change (0 right after, 100 on a later read; the
+delay is unknown). pywiim uses that value anyway. `getStatusEx` is not polled to freshen it.
+
+Volume step: `get_remote_volume_step` → `{"status":"OK","remote_volume_step":1}`;
+`set_remote_volume_step:N` → `{"status":"OK"}` for N = 1-5 (app labels: 1 Fine Adjustment
+(default), 2 Small Step, 3 Medium Step, 4 Large Step, 5 Quick Adjustment). Values outside 1-5
+are not tested; pywiim rejects them before sending.
+
+Never sent by pywiim (they pair, remove or update the remote): `blehidremoveall`,
+`startblescan`, `blehidpair`, `getMvRemoteUpdateStart`, `getMvRemoteUpdateStartCheck`.
+Device test scripts must block them in code. The BLE MAC is private: it is hidden from
+`repr()`, never logged, and masked in diagnostics.
+
 ## Intentionally Not Exposed
 
 One-off setup, account, network, update-server, token, static-IP, Wi-Fi, Alexa,
 and factory-reset style commands from the app bundle are not good Home
 Assistant surfaces. pywiim may keep selected read-only diagnostics over time,
 but user-facing HA entities/services should focus on daily listening and
-automation workflows.
+automation workflows. [ADR 023](adr/023-daily-use-surface.md) records that as
+guidance for new features: daily use is the focus, and set-and-forget settings
+are not.
 
 ## Real-Device Testing
 
