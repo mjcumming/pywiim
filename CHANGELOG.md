@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.4] - 2026-11-24
+
 ### Added
 
 - WiiM Voice Remote support (read-only state plus the remote's volume step), verified on a WiiM Pro Plus (firmware `Linkplay.4.8.833841`); other models are not tested ([ADR 025](docs/design/adr/025-wiim-voice-remote-state-and-volume-step.md)).
