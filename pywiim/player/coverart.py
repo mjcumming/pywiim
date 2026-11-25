@@ -40,8 +40,20 @@ class CoverArtManager:
         self.player = player
         # Track last track signature to detect track changes for immediate artwork fetching
         self._last_track_signature: str | None = None
-        # Track if we're already fetching artwork to avoid duplicate requests
+        # The fetch running for a UPnP event, so the next event can replace it
         self._artwork_fetch_task: asyncio.Task | None = None
+        # Tasks started for UPnP events. Only these may become _artwork_fetch_task.
+        self._event_enrichment_tasks: set[asyncio.Task] = set()
+
+    def track_event_enrichment(self, task: asyncio.Task) -> None:
+        """Remember a task that runs enrichment for a UPnP event.
+
+        refresh() awaits enrichment inline, so there the running task belongs to
+        the caller: a poll, or a group join that refreshes midway. Such a task is
+        never recorded and never cancelled. A task registered here may be.
+        """
+        self._event_enrichment_tasks.add(task)
+        task.add_done_callback(self._event_enrichment_tasks.discard)
 
     def _get_url_hash(self, url: str) -> str:
         """Generate a hash for a URL to use as cache key."""
@@ -295,7 +307,7 @@ class CoverArtManager:
         should_fetch_metadata = track_changed or needs_metadata_enrichment or needs_artwork_enrichment
 
         if should_fetch_metadata:
-            # Cancel any existing fetch task
+            # A newer fetch replaces one still running for an earlier UPnP event
             current_task = asyncio.current_task()
             if (
                 self._artwork_fetch_task
@@ -304,7 +316,10 @@ class CoverArtManager:
             ):
                 self._artwork_fetch_task.cancel()
 
-            if current_task:
+            # Record only a task started for a UPnP event. Inline in refresh() the
+            # current task is the caller's, and recording it let the next event or
+            # the next refresh cancel a poll or a group join.
+            if current_task in self._event_enrichment_tasks:
                 self._artwork_fetch_task = current_task
 
             if needs_metadata_enrichment:

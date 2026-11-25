@@ -299,8 +299,10 @@ class StateManager:
         try:
             loop = asyncio.get_event_loop()
             upnp_track_changed = self.player._coverart_mgr.check_track_changed(merged)
-            loop.create_task(
-                self.player._coverart_mgr.enrich_metadata_on_track_change(merged, track_changed=upnp_track_changed)
+            self.player._coverart_mgr.track_event_enrichment(
+                loop.create_task(
+                    self.player._coverart_mgr.enrich_metadata_on_track_change(merged, track_changed=upnp_track_changed)
+                )
             )
         except RuntimeError:
             # No event loop (sync context) - will fetch on next poll

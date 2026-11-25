@@ -28,7 +28,7 @@ from async_upnp_client.client import UpnpService, UpnpStateVariable
 from async_upnp_client.exceptions import UpnpResponseError
 
 from .client import UpnpClient
-from .metadata import extract_input_codec
+from .metadata import _BARE_AMPERSAND_RE, extract_input_codec
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +44,19 @@ _PLAYBACK_STORAGE_MEDIUM_MAP: dict[str, str] = {
     "COAXIAL": "coaxial",
     "HDMI": "hdmi",
 }
+
+
+def _source_from_track_source(track_source: Any) -> Any:
+    """Return the source a TrackSource value names, or None when it names content.
+
+    Most sources report a name. Spotify Connect reports what is playing
+    ("spotify:playlist:<id>"), which is still the Spotify source. Any other URI
+    identifies content and says nothing about the input.
+    """
+    text = str(track_source or "").strip()
+    if ":" not in text:
+        return track_source
+    return "spotify" if text.lower().startswith("spotify:") else None
 
 
 def _is_valid_url(url: str | None) -> bool:
@@ -409,7 +422,9 @@ class UpnpEventer:
 
             # Handle TrackSource to update source field
             if "TrackSource" in variables_dict:
-                changes["source"] = variables_dict["TrackSource"]
+                track_source = _source_from_track_source(variables_dict["TrackSource"])
+                if track_source is not None:
+                    changes["source"] = track_source
 
             # Fallback: use PlaybackStorageMedium when TrackSource is absent or empty.
             # Physical inputs (RCA, BLUETOOTH, etc.) set PlaybackStorageMedium but leave
@@ -528,7 +543,9 @@ class UpnpEventer:
                             )
                             changes.update(metadata_changes)
                         elif var_name == "TrackSource":
-                            changes["source"] = var_value
+                            track_source = _source_from_track_source(var_value)
+                            if track_source is not None:
+                                changes["source"] = track_source
                         elif var_name == "PlaybackStorageMedium":
                             playback_storage_medium = var_value
                         elif var_name in ("AVTransportURI", "CurrentURI"):
@@ -635,8 +652,10 @@ class UpnpEventer:
             from html import unescape
             from xml.etree import ElementTree as ET
 
-            # Unescape HTML entities (e.g., &lt; becomes <)
-            didl_xml = unescape(didl_xml)
+            # Unescape HTML entities (e.g., &lt; becomes <), then restore any '&' that
+            # this leaves bare. The document normally arrives as valid XML, so
+            # unescaping alone turned "Angus &amp; Julia Stone" into invalid XML.
+            didl_xml = _BARE_AMPERSAND_RE.sub("&amp;", unescape(didl_xml))
 
             # Parse XML
             root = ET.fromstring(didl_xml)
