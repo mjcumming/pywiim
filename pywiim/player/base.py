@@ -160,6 +160,10 @@ class PlayerBase:
         self._digital_filter_index: int | None = None
         self._last_digital_filter_check: float = 0
 
+        # Idle seconds before standby (-1 = Never). Refreshed on the 60s tier.
+        self._standby_timeout: int | None = None
+        self._last_standby_timeout_check: float = 0
+
         # RoomFit profiles and switch. Both refresh on the 60s configuration tier
         # because profiles are created in the WiiM app.
         self._room_correction_profiles: list[str] = []

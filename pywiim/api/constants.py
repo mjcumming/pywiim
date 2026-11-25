@@ -389,6 +389,21 @@ API_ENDPOINT_GET_SOUND_CARD_MODE_SUPPORT_LIST = "/httpapi.asp?command=getSoundCa
 API_ENDPOINT_GET_DIGITAL_FILTER_TYPES = "/httpapi.asp?command=getDigitalFilterTypeSupportList"
 API_ENDPOINT_GET_DIGITAL_FILTER_TYPE = "/httpapi.asp?command=getDigitalFilterType"
 API_ENDPOINT_SET_DIGITAL_FILTER_TYPE = "/httpapi.asp?command=setDigitalFilterType:"
+# Idle time before standby ("Enter standby mode in"). -1 is Never.
+# The write sends only idleInterval; the other getPowerModeTime fields stay untouched.
+API_ENDPOINT_GET_POWER_MODE_TIME = "/httpapi.asp?command=getPowerModeTime"
+API_ENDPOINT_SET_POWER_MODE_TIME = "/httpapi.asp?command=setPowerModeTime:"
+STANDBY_TIMEOUTS: dict[int, str] = {
+    30: "30 seconds",
+    120: "2 mins",
+    300: "5 mins",
+    900: "15 mins",
+    1800: "30 mins",
+    3600: "1 hour",
+    7200: "2 hours",
+    14400: "4 hours",
+    -1: "Never",
+}
 # Group channel (stereo / left / right) is the "ch" field of player status.
 API_ENDPOINT_SET_OUTPUT_CHANNEL = "/httpapi.asp?command=setPlayerCmd:slave_channel:"
 # Some devices have a separate output mode for standalone playback.

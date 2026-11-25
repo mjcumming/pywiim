@@ -39,11 +39,12 @@ from .api.constants import (
     API_ENDPOINT_EQ_STATUS,
     API_ENDPOINT_GET_CHANNEL_BALANCE,
     API_ENDPOINT_GET_DIGITAL_FILTER_TYPES,
+    API_ENDPOINT_GET_POWER_MODE_TIME,
     API_ENDPOINT_PEQ_GET_LIST,
     API_ENDPOINT_SUBWOOFER_STATUS,
     PEQ_PLUGIN_URI,
 )
-from .api.misc import parse_digital_filter_types
+from .api.misc import parse_digital_filter_types, parse_standby_timeout
 from .api.subwoofer import is_valid_subwoofer_lpf_dict
 from .exceptions import WiiMError
 from .model_names import is_known_wiim_model, is_wiim_12v_trigger_model, is_wiim_display_model
@@ -371,6 +372,7 @@ class WiiMCapabilities:
         capabilities.setdefault("supports_led_switch", False)
         capabilities.setdefault("supports_display_config", False)
         capabilities.setdefault("supports_digital_filter", False)
+        capabilities.setdefault("supports_standby_timeout", False)
         capabilities.setdefault("supports_output_channel", False)
         capabilities.setdefault("supports_output_channel_mode", None)
 
@@ -612,6 +614,17 @@ class WiiMCapabilities:
                 _LOGGER.debug("Device %s does not support DAC digital filter", client.host)
         except WiiMError:
             _LOGGER.debug("Device %s does not support DAC digital filter (request failed)", client.host)
+
+        # Idle time before standby. A readable idleInterval is the gate.
+        try:
+            standby_result = await client._request(API_ENDPOINT_GET_POWER_MODE_TIME)
+            if parse_standby_timeout(standby_result.parsed) is not None:
+                capabilities["supports_standby_timeout"] = True
+                _LOGGER.debug("Device %s supports standby timeout", client.host)
+            else:
+                _LOGGER.debug("Device %s does not support standby timeout", client.host)
+        except WiiMError:
+            _LOGGER.debug("Device %s does not support standby timeout (request failed)", client.host)
 
         # Probe for WiiM LV2 PEQ support (read-only probe)
         # PEQ is a WiiM-specific feature not available on Audio Pro, Arylic, or generic

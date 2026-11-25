@@ -35,14 +35,17 @@ from .constants import (
     API_ENDPOINT_GET_LED_MCU,
     API_ENDPOINT_GET_LED_SWITCH,
     API_ENDPOINT_GET_MODE_RENAME,
+    API_ENDPOINT_GET_POWER_MODE_TIME,
     API_ENDPOINT_SET_BUTTONS,
     API_ENDPOINT_SET_DIGITAL_FILTER_TYPE,
     API_ENDPOINT_SET_LED,
+    API_ENDPOINT_SET_POWER_MODE_TIME,
     API_ENDPOINT_TRIGGER_OUT_SET,
     API_ENDPOINT_TRIGGER_OUT_STATUS,
     DISPLAY_BRIGHTNESS_MAX,
     DISPLAY_BRIGHTNESS_MIN,
     DISPLAY_DEFAULT_BRIGHTNESS,
+    STANDBY_TIMEOUTS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -117,6 +120,19 @@ def parse_digital_filter_types(parsed: Any, raw: str | None = None) -> list[Digi
             continue
         filters.append(DigitalFilter(index=index, name=name.strip()))
     return filters
+
+
+def parse_standby_timeout(parsed: Any) -> int | None:
+    """Return ``idleInterval`` seconds from ``getPowerModeTime``, or None if absent."""
+    if not isinstance(parsed, dict):
+        return None
+    raw = parsed.get("idleInterval")
+    if isinstance(raw, bool) or raw is None:
+        return None
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
 
 
 def parse_digital_filter_index(parsed: Any, raw: str | None = None) -> int | None:
@@ -592,6 +608,41 @@ class MiscAPI:
         if isinstance(index, bool) or not isinstance(index, int) or index < 1:
             raise WiiMError(f"Digital filter index must be a positive integer, got {index!r}")
         await self._request(f"{API_ENDPOINT_SET_DIGITAL_FILTER_TYPE}{index}")  # type: ignore[attr-defined]
+
+    # ------------------------------------------------------------------
+    # Standby timeout (idle time before the speaker sleeps)
+    # ------------------------------------------------------------------
+
+    async def get_standby_timeout(self) -> int | None:
+        """Return idle seconds before standby, or None if ``idleInterval`` is absent.
+
+        ``-1`` means Never. Transport failures raise ``WiiMError``.
+        """
+        result = await self._request(API_ENDPOINT_GET_POWER_MODE_TIME)  # type: ignore[attr-defined]
+        return parse_standby_timeout(result.parsed)
+
+    async def set_standby_timeout(self, seconds: int) -> int:
+        """Set ``idleInterval`` to one app option and return the value read back.
+
+        Raises:
+            ValueError: ``seconds`` is not one of ``STANDBY_TIMEOUTS``. Nothing is sent.
+            WiiMError: The device rejects the write, or the read-back differs.
+        """
+        if isinstance(seconds, bool) or not isinstance(seconds, int) or seconds not in STANDBY_TIMEOUTS:
+            raise ValueError(f"Standby timeout must be one of {tuple(STANDBY_TIMEOUTS)}, got {seconds!r}")
+        payload = quote(json.dumps({"idleInterval": str(seconds)}, separators=(",", ":")), safe="")
+        response = await self._request(f"{API_ENDPOINT_SET_POWER_MODE_TIME}{payload}")  # type: ignore[attr-defined]
+        body = response.parsed if response.parsed is not None else response.raw
+        if isinstance(body, dict):
+            status = str(body.get("status", "OK")).strip().upper()
+        else:
+            status = str(body or "OK").strip().upper()
+        if status != "OK":
+            raise WiiMError(f"Device rejected standby timeout {seconds}: {body!r}")
+        actual = await self.get_standby_timeout()
+        if actual != seconds:
+            raise WiiMError(f"Standby timeout set to {seconds} but the device reports {actual}")
+        return actual
 
     # ------------------------------------------------------------------
     # Helper methods

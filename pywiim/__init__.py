@@ -56,6 +56,7 @@ from .api.constants import (
     PEQ_PLUGIN_URI,
     PEQ_Q_MAX,
     PEQ_Q_MIN,
+    STANDBY_TIMEOUTS,
     SUBWOOFER_CROSSOVER_MAX,
     SUBWOOFER_CROSSOVER_MIN,
     SUBWOOFER_DELAY_MAX,
@@ -113,7 +114,7 @@ from .profiles import (
 from .role import RoleDetectionResult, detect_role
 from .state import GroupStateSynchronizer, StateSynchronizer
 
-__version__ = "3.0.4"
+__version__ = "3.0.5"
 __all__ = [
     # Main client
     "WiiMClient",
@@ -196,6 +197,7 @@ __all__ = [
     "SUBWOOFER_DELAY_MAX",
     "SUBWOOFER_PHASE_0",
     "SUBWOOFER_PHASE_180",
+    "STANDBY_TIMEOUTS",
     # Output channel names (Player.output_channel / set_output_channel)
     "OUTPUT_CHANNEL_STEREO",
     "OUTPUT_CHANNEL_LEFT",

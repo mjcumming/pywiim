@@ -874,6 +874,9 @@ player.supports_digital_filter    # bool - True if getDigitalFilterTypeSupportLi
 player.digital_filter_types       # list[str] - cached DAC filter names
 player.digital_filter             # str | None - cached current DAC filter name
 # await player.set_digital_filter(name)  # name from digital_filter_types; analog line out only
+player.supports_standby_timeout   # bool - True if getPowerModeTime returned idleInterval
+player.standby_timeout            # int | None - cached idle seconds before standby; -1 is Never
+# await player.set_standby_timeout(seconds)  # one of STANDBY_TIMEOUTS; writes idleInterval only
 player.supports_output_channel    # bool - valid status "ch" or supported standalone channel-mode API
 player.output_channel             # str | None - current mode for the player's role; may report "mono"
 # await player.set_output_channel(name)  # "stereo" / "left" / "right"; command depends on role

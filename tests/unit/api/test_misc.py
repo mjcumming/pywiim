@@ -795,3 +795,76 @@ class TestDigitalFilter:
             API_ENDPOINT_GET_DIGITAL_FILTER_TYPE,
             f"{API_ENDPOINT_SET_DIGITAL_FILTER_TYPE}2",
         ]
+
+    def test_parse_standby_timeout(self):
+        """idleInterval is the only field that counts, including Never (-1)."""
+        from pywiim.api.misc import parse_standby_timeout
+
+        body = {
+            "idleInterval": "30",
+            "standbyInterval": "-1",
+            "sleepInterval": "0",
+            "poweroffInterval": "0",
+            "semiactiveInterval": "15",
+        }
+        assert parse_standby_timeout(body) == 30
+        assert parse_standby_timeout({"idleInterval": "-1"}) == -1
+        assert parse_standby_timeout({"idleInterval": "nope"}) is None
+        assert parse_standby_timeout({"idleInterval": True}) is None
+        assert parse_standby_timeout("OK") is None
+        assert parse_standby_timeout({}) is None
+
+    @pytest.mark.asyncio
+    async def test_standby_timeout_get_and_set(self):
+        """The write sends only idleInterval, then the read-back must match."""
+        from pywiim.api.constants import API_ENDPOINT_GET_POWER_MODE_TIME, API_ENDPOINT_SET_POWER_MODE_TIME
+        from pywiim.api.misc import MiscAPI
+
+        seen = {"idle": "30"}
+        requests = []
+
+        class TestClient(MiscAPI):
+            async def _request(self, endpoint):
+                requests.append(endpoint)
+                if endpoint == API_ENDPOINT_GET_POWER_MODE_TIME:
+                    return ApiResponse(
+                        parsed={"idleInterval": seen["idle"], "standbyInterval": "-1"},
+                        raw=None,
+                    )
+                command = unquote(endpoint.removeprefix(API_ENDPOINT_SET_POWER_MODE_TIME))
+                seen["idle"] = json.loads(command)["idleInterval"]
+                return ApiResponse(parsed=None, raw="OK")
+
+        client = TestClient()
+        assert await client.get_standby_timeout() == 30
+        assert await client.set_standby_timeout(120) == 120
+        assert json.loads(unquote(requests[1].removeprefix(API_ENDPOINT_SET_POWER_MODE_TIME))) == {
+            "idleInterval": "120"
+        }
+        with pytest.raises(ValueError):
+            await client.set_standby_timeout(45)
+        with pytest.raises(ValueError):
+            await client.set_standby_timeout(True)  # type: ignore[arg-type]
+        assert len(requests) == 3
+
+    @pytest.mark.asyncio
+    async def test_standby_timeout_set_requires_confirmation(self):
+        """A rejected write or a different read-back raises and does not count as success."""
+        from pywiim.api.constants import API_ENDPOINT_GET_POWER_MODE_TIME
+        from pywiim.api.misc import MiscAPI
+
+        class RejectClient(MiscAPI):
+            async def _request(self, endpoint):
+                return ApiResponse(parsed={"status": "FAIL"}, raw=None)
+
+        with pytest.raises(WiiMError, match="rejected"):
+            await RejectClient().set_standby_timeout(120)
+
+        class StaleClient(MiscAPI):
+            async def _request(self, endpoint):
+                if endpoint == API_ENDPOINT_GET_POWER_MODE_TIME:
+                    return ApiResponse(parsed={"idleInterval": "30"}, raw=None)
+                return ApiResponse(parsed=None, raw="OK")
+
+        with pytest.raises(WiiMError, match="reports 30"):
+            await StaleClient().set_standby_timeout(120)
