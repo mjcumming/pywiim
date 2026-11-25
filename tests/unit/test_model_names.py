@@ -114,6 +114,10 @@ class TestFriendlyModelName:
         """Known Audio Pro model should map to friendly branding name."""
         assert to_friendly_model_name("A10") == "Audio Pro A10"
 
+    def test_edifier_model_maps_to_branding_name(self):
+        """The Edifier MS50A reports its model in capitals (wiim#275)."""
+        assert to_friendly_model_name("EDIFIER MS50A") == "Edifier MS50A"
+
     def test_unmapped_value_returns_original(self):
         """Unknown model should be returned unchanged."""
         assert to_friendly_model_name("Unknown_Device_ABC") == "Unknown_Device_ABC"

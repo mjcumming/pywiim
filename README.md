@@ -407,6 +407,7 @@ Prompt behavior (duck, play, resume) is **firmware- and source-dependent**. Some
 ### User Guides
 - [Discovery Guide](docs/user/DISCOVERY.md) - Device discovery via SSDP/UPnP
 - [Diagnostics Guide](docs/user/DIAGNOSTICS.md) - Using the diagnostic tool
+- [Tested Devices](docs/user/TESTED_DEVICES.md) - Hardware pywiim and the Home Assistant integration have been run against
 - [Real-time Monitor Guide](docs/user/MONITOR.md) - Real-time device monitoring
 
 ### Integration Guides
