@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **ArtSound Smart Stream 2 HDMI input** — project `Huan_HI8` now lists HDMI with Bluetooth, Line In, Optical, and RCA. `set_source` sends `switchmode:HDMI`; `switchmode:hdmi` on this firmware returns OK and leaves the player idle ([#48](https://github.com/mjcumming/pywiim/issues/48)).
+
 ### Added
 
 - **Edifier MS50A model name** — the model string `EDIFIER MS50A` now maps to the friendly name "Edifier MS50A". The speaker already works on the generic LinkPlay profile ([wiim#275](https://github.com/mjcumming/wiim/issues/275)).

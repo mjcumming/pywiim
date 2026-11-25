@@ -79,6 +79,17 @@ class TestAudioConfiguration:
         mock_player._on_state_changed.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_set_source_hdmi_uses_device_command_case(self, audio_config, mock_player):
+        """ArtSound Smart Stream 2 idles on switchmode:hdmi and selects HDMI on switchmode:HDMI."""
+        mock_player.client.set_source = AsyncMock()
+        mock_player.client.capabilities["source_command_overrides"] = {"hdmi": "HDMI"}
+        mock_player._status_model = PlayerStatus()
+
+        await audio_config.set_source("HDMI")
+
+        mock_player.client.set_source.assert_called_once_with("HDMI")
+
+    @pytest.mark.asyncio
     async def test_set_source_updates_status_model(self, audio_config, mock_player):
         """Test that set_source() updates _status_model.source immediately."""
         mock_player.client.set_source = AsyncMock()

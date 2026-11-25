@@ -773,6 +773,11 @@ def detect_device_capabilities(device_info: DeviceInfo) -> dict[str, Any]:
         "supports_channel_balance": False,
     }
 
+    # ArtSound Smart Stream 2 accepts switchmode:HDMI and treats switchmode:hdmi
+    # as a successful no-op that returns the player to idle. pywiim#48.
+    if (device_info.model or "").lower().replace(" ", "_").replace("-", "_") == "huan_hi8":
+        capabilities["source_command_overrides"] = {"hdmi": "HDMI"}
+
     if capabilities["is_wiim_device"]:
         capabilities["supports_audio_output"] = True  # All WiiM devices support audio output control
         capabilities["response_timeout"] = 2.0
