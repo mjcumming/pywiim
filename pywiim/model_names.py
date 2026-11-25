@@ -46,6 +46,7 @@ _FRIENDLY_MODEL_MAP: dict[str, str] = {
     "a15": "Audio Pro A15",
     "a28": "Audio Pro A28",
     "c10": "Audio Pro C10",
+    "edifier_ms50a": "Edifier MS50A",
 }
 
 

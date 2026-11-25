@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Edifier MS50A model name** — the model string `EDIFIER MS50A` now maps to the friendly name "Edifier MS50A". The speaker already works on the generic LinkPlay profile ([wiim#275](https://github.com/mjcumming/wiim/issues/275)).
+- **Tested devices list** — [docs/user/TESTED_DEVICES.md](docs/user/TESTED_DEVICES.md) records the hardware pywiim and the Home Assistant integration have been run against, with the model string, the firmware and where each record comes from. Both projects use the one list.
+
 ## [3.0.6] - 2026-11-25
 
 ### Fixed

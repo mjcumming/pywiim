@@ -10,6 +10,7 @@ Documentation for end users of the library:
 - **EXAMPLES.md** - Code examples
 - **DISCOVERY.md** - Device discovery guide
 - **DIAGNOSTICS.md** - Diagnostic tool guide
+- **TESTED_DEVICES.md** - Hardware pywiim and the Home Assistant integration have been run against
 - **REQUIREMENTS.md** - Requirements specification
 
 ### 🏗️ [Design & Architecture](design/)
