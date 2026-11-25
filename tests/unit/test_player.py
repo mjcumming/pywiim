@@ -5595,6 +5595,35 @@ class TestPlayerLEDIndicatorAndDisplay:
             await player.set_digital_filter("Nope")
         mock_client.set_digital_filter_index.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_set_standby_timeout_updates_cache(self, mock_client):
+        """A confirmed write replaces the cached idle seconds and notifies listeners."""
+        from pywiim.player import Player
+
+        type(mock_client).capabilities = PropertyMock(return_value={"supports_standby_timeout": True})
+        mock_client.set_standby_timeout = AsyncMock(return_value=120)
+        player = Player(mock_client)
+        callback = MagicMock()
+        player._on_state_changed = callback
+
+        await player.set_standby_timeout(120)
+
+        mock_client.set_standby_timeout.assert_awaited_once_with(120)
+        assert player.standby_timeout == 120
+        callback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_set_standby_timeout_rejects_unsupported(self, mock_client):
+        """An unsupported speaker does not send the write."""
+        from pywiim.player import Player
+
+        type(mock_client).capabilities = PropertyMock(return_value={"supports_standby_timeout": False})
+        mock_client.set_standby_timeout = AsyncMock()
+        player = Player(mock_client)
+        with pytest.raises(WiiMError):
+            await player.set_standby_timeout(30)
+        mock_client.set_standby_timeout.assert_not_called()
+
     def test_output_channel_reads_cached_status(self, mock_client):
         """output_channel comes from ch in the cached status; supports_* from capabilities."""
         from pywiim.player import Player

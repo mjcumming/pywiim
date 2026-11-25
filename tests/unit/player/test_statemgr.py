@@ -863,6 +863,40 @@ class TestStateManager:
         mock_player.client.get_digital_filter_index.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_refresh_fetches_standby_timeout_on_full(self, state_manager, mock_player):
+        """Full refresh caches idleInterval when the speaker supports it."""
+        mock_status = PlayerStatus(play_state="pause")
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_standby_timeout": True})
+        mock_player.client.get_standby_timeout = AsyncMock(return_value=1800)
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+
+            await state_manager.refresh(full=True)
+
+        mock_player.client.get_standby_timeout.assert_awaited_once()
+        assert mock_player.standby_timeout == 1800
+        assert mock_player._last_standby_timeout_check != 0
+
+    @pytest.mark.asyncio
+    async def test_refresh_skips_standby_timeout_when_unsupported(self, state_manager, mock_player):
+        """Refresh does not call getPowerModeTime when the probe found no idleInterval."""
+        mock_status = PlayerStatus(play_state="pause")
+        mock_player.client.get_player_status_model = AsyncMock(return_value=mock_status)
+        TestStateManager._setup_refresh_mocks(mock_player, state_manager)
+        type(mock_player.client).capabilities = PropertyMock(return_value={"supports_standby_timeout": False})
+        mock_player.client.get_standby_timeout = AsyncMock()
+
+        with patch("pywiim.player.groupops.GroupOperations") as mock_groupops:
+            mock_groupops.return_value._synchronize_group_state = AsyncMock()
+
+            await state_manager.refresh(full=True)
+
+        mock_player.client.get_standby_timeout.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_refresh_fetches_room_correction_on_full(self, state_manager, mock_player):
         """Full refresh caches RoomFit profiles, the switch, and the selected name."""
         from pywiim.api.peq import RoomCorrectionSettings

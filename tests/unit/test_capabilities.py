@@ -567,6 +567,32 @@ class TestWiiMCapabilitiesClass:
         assert capabilities["supports_digital_filter"] is False
 
     @pytest.mark.asyncio
+    async def test_detect_capabilities_standby_timeout_from_idle_interval(self, mock_client):
+        """A readable idleInterval sets supports_standby_timeout; a failure leaves it false."""
+        device_info = DeviceInfo(uuid="test-uuid", model="WiiM Pro Plus", firmware="4.8.833841")
+        mock_client.get_status = AsyncMock(return_value={"status": "ok"})
+
+        async def _request(endpoint, *args, **kwargs):
+            if "getPowerModeTime" in str(endpoint):
+                return ApiResponse(parsed={"idleInterval": "1800", "standbyInterval": "-1"}, raw=None)
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=_request)
+        detector = WiiMCapabilities()
+        capabilities = await detector.detect_capabilities(mock_client, device_info)
+        assert capabilities["supports_standby_timeout"] is True
+
+        async def _missing(endpoint, *args, **kwargs):
+            if "getPowerModeTime" in str(endpoint):
+                raise WiiMError("unknown command")
+            return ApiResponse(parsed={"status": "ok"}, raw=None)
+
+        mock_client._request = AsyncMock(side_effect=_missing)
+        detector.clear_cache()
+        capabilities = await detector.detect_capabilities(mock_client, device_info, force=True)
+        assert capabilities["supports_standby_timeout"] is False
+
+    @pytest.mark.asyncio
     async def test_detect_capabilities_output_channel_from_status_ch(self, mock_client):
         """A valid ch in the player status sets supports_output_channel without extra requests."""
         device_info = DeviceInfo(uuid="test-uuid", model="AudioCast AMP", firmware="4.6.629929")

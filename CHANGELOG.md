@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.5] - 2026-11-25
+
+### Added
+
+- Standby timeout (`getPowerModeTime` / `setPowerModeTime`), the app's "Enter standby mode in" setting. `Player.standby_timeout` is the cached idle seconds (`-1` is Never), refreshed about every 60 seconds when `supports_standby_timeout` is true. `set_standby_timeout` accepts only the nine app values in `STANDBY_TIMEOUTS` and writes `idleInterval` alone. Read on three WiiM Pro speakers (`WiiM_Pro_with_gc4a`); one was set from 2 minutes to 30 seconds and restored.
+
 ## [3.0.4] - 2026-11-24
 
 ### Added

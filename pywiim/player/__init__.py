@@ -414,6 +414,24 @@ class Player(PlayerBase):
         if self._on_state_changed:
             self._on_state_changed()
 
+    async def set_standby_timeout(self, seconds: int) -> None:
+        """Set how long the speaker stays idle before standby.
+
+        ``seconds`` is one of ``STANDBY_TIMEOUTS`` (``-1`` is Never). The cached
+        value updates only after the device reads the same value back.
+
+        Raises:
+            WiiMError: The device does not support the setting, or rejects the write.
+            ValueError: ``seconds`` is not one of the nine app options.
+        """
+        if not self.supports_standby_timeout:
+            raise WiiMError("Standby timeout is not supported on this device")
+        confirmed = await self.client.set_standby_timeout(seconds)
+        self._standby_timeout = confirmed
+        self._last_standby_timeout_check = time.time()
+        if self._on_state_changed:
+            self._on_state_changed()
+
     async def initialize_peq_presets(self) -> None:
         """Read saved PEQ names if the player's cache is not initialized."""
         if self._peq_presets is not None:
@@ -1809,6 +1827,18 @@ class Player(PlayerBase):
         if not self.client:
             return False
         return bool(self.client.capabilities.get("supports_digital_filter", False))
+
+    @property
+    def supports_standby_timeout(self) -> bool:
+        """Whether ``getPowerModeTime`` returned an ``idleInterval`` at connect."""
+        if not self.client:
+            return False
+        return bool(self.client.capabilities.get("supports_standby_timeout", False))
+
+    @property
+    def standby_timeout(self) -> int | None:
+        """Cached idle seconds before standby. ``-1`` is Never. None until the first read."""
+        return self._standby_timeout
 
     # === UPnP Capabilities ===
 

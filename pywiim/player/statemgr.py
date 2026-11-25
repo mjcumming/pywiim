@@ -1318,6 +1318,23 @@ class StateManager:
             except Exception as err:
                 _LOGGER.debug("Failed to fetch DAC digital filter for %s: %s", self.player.host, err)
 
+        # Idle time before standby. Same 60s tier as other configuration reads.
+        standby_supported = bool(self.player.client.capabilities.get("supports_standby_timeout", False))
+        should_fetch_standby = full or (
+            self._polling_strategy
+            and self._polling_strategy.should_fetch_led_indicator(
+                self.player._last_standby_timeout_check, standby_supported, now=now
+            )
+        )
+        if should_fetch_standby and standby_supported:
+            try:
+                seconds = await self.player.client.get_standby_timeout()
+                if seconds is not None:
+                    self.player._standby_timeout = seconds
+                self.player._last_standby_timeout_check = now
+            except Exception as err:
+                _LOGGER.debug("Failed to fetch standby timeout for %s: %s", self.player.host, err)
+
         # PEQ names are cached independently of the current input's active state.
         peq_supported = bool(self.player.client.capabilities.get("supports_peq", False))
         last_peq_list_check = self.player._last_peq_presets_check or 0
