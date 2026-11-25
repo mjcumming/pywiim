@@ -5,6 +5,7 @@ Tests cover art fetching, caching, and URL hashing.
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -546,3 +547,67 @@ class TestCoverArtManager:
         await cover_art_manager.enrich_metadata_on_track_change(merged)
 
         cover_art_manager._fetch_artwork_from_metainfo.assert_awaited_once_with(merged, force_getinfoex=False)
+
+    # Enrichment tasks. refresh() awaits enrichment inline, so the running task
+    # belongs to whoever called refresh(): a poll, or a group join that refreshes
+    # midway. Only tasks started for a UPnP event may be cancelled by a newer one.
+
+    @staticmethod
+    async def _refresh_then_keep_working(manager) -> str:
+        """Stand-in for a caller: the inline enrichment refresh() runs, then more work."""
+        await manager.enrich_metadata_on_track_change({"title": None, "artist": None}, track_changed=False)
+        await asyncio.sleep(0.05)
+        return "finished"
+
+    @pytest.mark.asyncio
+    async def test_upnp_event_does_not_cancel_the_task_that_refreshed(self, mock_player):
+        """A UPnP event after refresh() must not cancel the caller of refresh()."""
+        manager = mock_player._coverart_mgr
+        manager._fetch_artwork_from_metainfo = AsyncMock()
+        caller = asyncio.create_task(self._refresh_then_keep_working(manager))
+        await asyncio.sleep(0)
+
+        mock_player.apply_diff({"volume": 30})
+        await asyncio.sleep(0)
+
+        assert await caller == "finished"
+
+    @pytest.mark.asyncio
+    async def test_second_refresh_does_not_cancel_the_first_caller(self, mock_player):
+        """Two callers that refresh the same player must not cancel each other."""
+        manager = mock_player._coverart_mgr
+        manager._fetch_artwork_from_metainfo = AsyncMock()
+        caller = asyncio.create_task(self._refresh_then_keep_working(manager))
+        await asyncio.sleep(0)
+
+        await manager.enrich_metadata_on_track_change({"title": None, "artist": None}, track_changed=False)
+
+        assert await caller == "finished"
+
+    @pytest.mark.asyncio
+    async def test_newer_upnp_event_replaces_a_running_event_fetch(self, mock_player):
+        """A fetch started for one event is still superseded by the next event."""
+        manager = mock_player._coverart_mgr
+        fetches_started = 0
+        never = asyncio.Event()
+
+        async def slow_fetch(*_args, **_kwargs) -> None:
+            nonlocal fetches_started
+            fetches_started += 1
+            await never.wait()
+
+        manager._fetch_artwork_from_metainfo = slow_fetch
+
+        mock_player.apply_diff({"volume": 30})
+        await asyncio.sleep(0)
+        first = manager._artwork_fetch_task
+        assert first is not None and not first.done()
+
+        mock_player.apply_diff({"volume": 31})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        second = manager._artwork_fetch_task
+
+        assert first.cancelled()
+        assert second is not first and fetches_started == 2
+        second.cancel()
