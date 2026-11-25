@@ -7,6 +7,7 @@ Framework-agnostic implementation for use in any Python application.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import ssl
 from collections.abc import Callable
@@ -37,6 +38,25 @@ _SERVICE_ATTR_MAP: dict[str, str] = {
 def _normalize_service_key(service_name: str) -> str:
     """Normalize a UPnP service name for attribute lookup."""
     return service_name.lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
+# Docker's default bridge networks come from this block. So do ordinary LANs.
+_BRIDGE_NETWORK_BLOCK = ipaddress.ip_network("172.16.0.0/12")
+
+
+def _is_container_address(callback_host: str, device_host: str) -> bool:
+    """Return True when the callback address is probably a container bridge address.
+
+    A speaker on the LAN cannot reach a bridge address. An address in
+    172.16.0.0/12 is only suspect when the speaker is known to be outside that
+    block: a LAN can use the block too, and then both are on the same network.
+    """
+    try:
+        if ipaddress.ip_address(callback_host) not in _BRIDGE_NETWORK_BLOCK:
+            return False
+        return ipaddress.ip_address(device_host) not in _BRIDGE_NETWORK_BLOCK
+    except ValueError:
+        return False
 
 
 class UpnpClient:
@@ -268,7 +288,7 @@ class UpnpClient:
                 _, event_ip = await async_get_local_ip(f"http://{self.host}:49152", asyncio.get_event_loop())
                 _LOGGER.info("Detected local IP for UPnP callback: %s", event_ip)
                 # Warn if we're in a container network that might not be reachable
-                if event_ip.startswith("172."):
+                if _is_container_address(event_ip, self.host):
                     _LOGGER.warning(
                         "⚠️  Detected container network IP %s - devices on your LAN may not be able to reach "
                         "this for UPnP events. Solutions: 1) Use 'network_mode: host' in Docker, "

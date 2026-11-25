@@ -3,6 +3,7 @@
 These are basic tests that mock the async_upnp_client dependencies.
 """
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -862,3 +863,58 @@ class TestGetControlDeviceInfo:
 
         with pytest.raises(UpnpError, match="RenderingControl service not available"):
             await client.get_control_device_info()
+
+
+class TestCallbackAddressCheck:
+    """172.16.0.0/12 holds Docker's bridge networks and is also an ordinary LAN range."""
+
+    @pytest.mark.parametrize(
+        ("callback_host", "device_host", "expected"),
+        [
+            ("172.20.16.1", "192.168.1.116", True),  # bridge address, speaker on another network
+            ("172.16.5.10", "172.16.5.20", False),  # a LAN that uses the range
+            ("192.168.1.48", "192.168.1.116", False),
+            ("172.217.0.1", "192.168.1.116", False),  # public address outside the private block
+            ("172.20.16.1", "speaker.local", False),  # the speaker's network is not known
+        ],
+    )
+    def test_is_container_address(self, callback_host, device_host, expected):
+        from pywiim.upnp.client import _is_container_address
+
+        assert _is_container_address(callback_host, device_host) is expected
+
+    @staticmethod
+    async def _start_with_detected_address(caplog, device_host, detected):
+        """Start the notify server with no callback host and return the warnings logged."""
+        from async_upnp_client.aiohttp import AiohttpNotifyServer
+
+        from pywiim.upnp.client import UpnpClient
+
+        client = UpnpClient(device_host, f"http://{device_host}:49152/description.xml", MagicMock(closed=False))
+        client._device = MagicMock()
+        server = MagicMock(spec=AiohttpNotifyServer)
+        server.async_start_server = AsyncMock()
+        server.callback_url = f"http://{detected}:5000/notify"
+        server.event_handler = MagicMock()
+        with (
+            patch("pywiim.upnp.client.AiohttpNotifyServer", return_value=server),
+            patch("pywiim.upnp.client.AiohttpSessionRequester"),
+            patch("pywiim.upnp.client.DmrDevice"),
+            patch("pywiim.upnp.client.async_get_local_ip", AsyncMock(return_value=(None, detected))),
+            caplog.at_level(logging.INFO, logger="pywiim.upnp.client"),
+        ):
+            await client.start_notify_server()
+        return [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+
+    @pytest.mark.asyncio
+    async def test_lan_address_in_the_172_range_is_not_reported(self, caplog):
+        """A speaker and a detected address on the same 172.16.x LAN can reach each other."""
+        assert await self._start_with_detected_address(caplog, "172.16.5.20", "172.16.5.10") == []
+
+    @pytest.mark.asyncio
+    async def test_bridge_address_is_still_reported(self, caplog):
+        """A detected 172.x address for a speaker on another network is still flagged."""
+        warnings = await self._start_with_detected_address(caplog, "192.168.1.116", "172.20.16.1")
+
+        assert len(warnings) == 1
+        assert "container network IP 172.20.16.1" in warnings[0]
