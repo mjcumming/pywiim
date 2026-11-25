@@ -3,10 +3,13 @@
 These are basic tests that mock the async_upnp_client dependencies.
 """
 
+from html import escape
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from pywiim.profiles import PROFILES
+from pywiim.state import StateSynchronizer
 from pywiim.upnp.eventer import UpnpEventer, _is_valid_url
 
 
@@ -675,3 +678,144 @@ class TestPlaybackStorageMedium:
         )
         call_args = state_manager.apply_diff.call_args[0][0]
         assert call_args["source"] == "optical"
+
+
+SPOTIFY_CONTEXT = "spotify:playlist:37i9dQZF1EVHGWrwldPRtj"
+
+
+def _didl(title: str, artist: str) -> str:
+    """DIDL-Lite as it arrives in CurrentTrackMetaData: valid XML, text escaped once."""
+    return (
+        '<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" '
+        'xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" '
+        'xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/"><item>'
+        f"<dc:title>{escape(title)}</dc:title><upnp:artist>{escape(artist)}</upnp:artist>"
+        "</item></DIDL-Lite>"
+    )
+
+
+def _var(name: str, value: str) -> MagicMock:
+    var = MagicMock()
+    var.name = name
+    var.value = value
+    return var
+
+
+def _avtransport() -> MagicMock:
+    service = MagicMock()
+    service.service_id = "urn:upnp-org:serviceId:AVTransport"
+    return service
+
+
+class _SynchronizerStateManager:
+    """What the eventer needs from a Player, backed by a real StateSynchronizer."""
+
+    def __init__(self) -> None:
+        self.sync = StateSynchronizer(profile=PROFILES["wiim"])
+
+    @property
+    def play_state(self) -> str | None:
+        return self.sync.get_merged_state().get("play_state")
+
+    def apply_diff(self, changes: dict) -> bool:
+        self.sync.update_from_upnp(changes)
+        return True
+
+
+class TestTrackSource:
+    """TrackSource names an input for some sources and the playing content for others."""
+
+    def _make_eventer(self):
+        client = MagicMock()
+        client.host = "192.168.1.200"
+        state_manager = MagicMock()
+        state_manager.play_state = None
+        return UpnpEventer(client, state_manager, "test-uuid"), state_manager
+
+    def test_spotify_context_uri_is_the_spotify_source(self):
+        """Spotify Connect reports the playlist URI, which is still the Spotify source."""
+        eventer, state_manager = self._make_eventer()
+        eventer._on_event(_avtransport(), [_var("TrackSource", SPOTIFY_CONTEXT)])
+        assert state_manager.apply_diff.call_args[0][0]["source"] == "spotify"
+
+    def test_spotify_context_uri_in_last_change(self):
+        """The same value inside LastChange is handled the same way."""
+        eventer, state_manager = self._make_eventer()
+        last_change = (
+            '<Event xmlns="urn:schemas-upnp-org:metadata-1-0/AVT/"><InstanceID val="0">'
+            f'<TrackSource val="{SPOTIFY_CONTEXT}"/></InstanceID></Event>'
+        )
+        eventer._on_event(_avtransport(), [_var("LastChange", last_change)])
+        assert state_manager.apply_diff.call_args[0][0]["source"] == "spotify"
+
+    def test_other_uri_is_not_a_source(self):
+        """A URI that names content, not an input, leaves the source alone."""
+        eventer, state_manager = self._make_eventer()
+        eventer._on_event(_avtransport(), [_var("TrackSource", "http://example.com/stream.mp3")])
+        state_manager.apply_diff.assert_not_called()
+
+    def test_spotify_track_change_keeps_the_new_title(self):
+        """The NOTIFY a WiiM Pro sends at a Spotify track change, as the eventer receives it.
+
+        async-upnp-client delivers it twice: expanded variables, then LastChange.
+        The title was shown for an instant, then hidden for the rest of the track.
+        """
+        state_manager = _SynchronizerStateManager()
+        state_manager.sync.update_from_http(
+            {"play_state": "play", "source": "spotify", "title": "Cowboy", "artist": "Lily Meola"}
+        )
+        client = MagicMock()
+        client.host = "192.168.1.68"
+        eventer = UpnpEventer(client, state_manager, "test-uuid")
+        didl = _didl("Come In Closer", "Rhye")
+        last_change = (
+            '<Event xmlns="urn:schemas-upnp-org:metadata-1-0/AVT/"><InstanceID val="0">'
+            f'<CurrentTrackMetaData val="{escape(didl)}"/>'
+            f'<TrackSource val="{SPOTIFY_CONTEXT}"/><TransportState val="PLAYING"/>'
+            "</InstanceID></Event>"
+        )
+
+        eventer._on_event(
+            _avtransport(),
+            [
+                _var("CurrentTrackMetaData", didl),
+                _var("TrackSource", SPOTIFY_CONTEXT),
+                _var("TransportState", "PLAYING"),
+            ],
+        )
+        eventer._on_event(_avtransport(), [_var("LastChange", last_change)])
+        assert state_manager.sync.get_merged_state()["title"] == "Come In Closer"
+
+        state_manager.sync.update_from_http(
+            {"play_state": "play", "source": "spotify", "title": "Come In Closer", "artist": "Rhye"}
+        )
+        merged = state_manager.sync.get_merged_state()
+        assert merged["title"] == "Come In Closer"
+        assert merged["artist"] == "Rhye"
+        assert merged["source"] == "spotify"
+
+
+class TestDidlMetadataWithAmpersand:
+    """Track metadata containing '&' (seen live: "Angus & Julia Stone")."""
+
+    def _make_eventer(self):
+        client = MagicMock()
+        client.host = "192.168.1.200"
+        return UpnpEventer(client, MagicMock(), "test-uuid")
+
+    def test_escaped_ampersand(self):
+        """Well-formed DIDL-Lite with '&amp;' must not be unescaped into invalid XML."""
+        changes = self._make_eventer()._parse_didl_metadata(_didl("Grizzly Bear", "Angus & Julia Stone"))
+        assert changes["title"] == "Grizzly Bear"
+        assert changes["artist"] == "Angus & Julia Stone"
+
+    def test_bare_ampersand(self):
+        """Some firmware sends the '&' unescaped."""
+        didl = _didl("Grizzly Bear", "Angus & Julia Stone").replace("&amp;", "&")
+        changes = self._make_eventer()._parse_didl_metadata(didl)
+        assert changes["artist"] == "Angus & Julia Stone"
+
+    def test_html_encoded_document_still_parses(self):
+        """A document that arrives fully HTML-encoded keeps working."""
+        changes = self._make_eventer()._parse_didl_metadata(escape(_didl("Grizzly Bear", "Angus & Julia Stone")))
+        assert changes["artist"] == "Angus & Julia Stone"

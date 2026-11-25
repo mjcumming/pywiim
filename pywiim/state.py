@@ -872,8 +872,17 @@ class StateSynchronizer:
         source_changed = False
         if "source" in data:
             new_source = data.get("source")
-            old_field = self._merged_state.source
+            # Compare with what this origin reported last. HTTP and UPnP can name the
+            # same source differently and the merged value follows only one of them,
+            # so comparing every update with the merged value reported a source
+            # change on each UPnP event. The second copy of an event then filed the
+            # track that had just started as leftover metadata. Only an origin's
+            # first report is compared with the merged value.
+            old_field = dest.get("source")
             old_source = old_field.value if old_field is not None else None
+            if old_source is None:
+                old_field = self._merged_state.source
+                old_source = old_field.value if old_field is not None else None
             source_changed = self._sources_differ(old_source, new_source)
             if source_changed:
                 self._remember_stale_metadata()

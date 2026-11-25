@@ -1025,3 +1025,54 @@ class TestStateSynchronizerWithProfile:
         assert merged.get("artist") == "Spotify Artist"
         assert merged.get("image_url") == "https://i.scdn.co/image/abc"
         assert merged.get("duration") == 212
+
+    def test_upnp_name_for_the_polled_source_is_not_a_source_change(self):
+        """A UPnP source that only differs in name from the polled one keeps the track.
+
+        Spotify Connect events carry TrackSource "spotify:playlist:<id>" while
+        polling reports "spotify". The eventer hands over each NOTIFY twice
+        (expanded variables, then LastChange). The second pass filed the track
+        that had just started as leftover from the previous source and hid its
+        title until the next track.
+        """
+        from pywiim.profiles import PROFILES
+
+        sync = StateSynchronizer(profile=PROFILES["wiim"])
+        now = time.time()
+        sync.update_from_http(
+            {"play_state": "play", "source": "spotify", "title": "Old Song", "artist": "Old Artist"},
+            timestamp=now,
+        )
+        event = {
+            "play_state": "playing",
+            "source": "spotify:playlist:37i9dQZF1EVHGWrwldPRtj",
+            "title": "New Song",
+            "artist": "New Artist",
+        }
+        sync.update_from_upnp(dict(event), timestamp=now + 1)
+        sync.update_from_upnp(dict(event), timestamp=now + 1)
+        assert sync.get_merged_state()["title"] == "New Song"
+
+        sync.update_from_http(
+            {"play_state": "play", "source": "spotify", "title": "New Song", "artist": "New Artist"},
+            timestamp=now + 2,
+        )
+        merged = sync.get_merged_state()
+        assert merged["title"] == "New Song"
+        assert merged["artist"] == "New Artist"
+        assert merged["source"] == "spotify"
+
+    def test_upnp_reported_input_switch_drops_the_old_track(self):
+        """An input switch seen in UPnP events still clears the previous track."""
+        from pywiim.profiles import PROFILES
+
+        sync = StateSynchronizer(profile=PROFILES["wiim"])
+        now = time.time()
+        sync.update_from_upnp(
+            {"play_state": "playing", "source": "spotify", "title": "Spotify Track"},
+            timestamp=now,
+        )
+        assert sync.get_merged_state()["title"] == "Spotify Track"
+
+        sync.update_from_upnp({"play_state": "playing", "source": "line_in"}, timestamp=now + 1)
+        assert sync.get_merged_state().get("title") in (None, "")
