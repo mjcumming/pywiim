@@ -331,7 +331,7 @@ class UpnpClient:
             is_unreachable = False
             unreachable_reason = None
 
-            if server_host.startswith("172."):
+            if _is_container_address(server_host, self.host):
                 is_unreachable = True
                 unreachable_reason = "container network IP (172.x.x.x)"
             elif server_host == "0.0.0.0":

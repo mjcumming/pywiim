@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Callback address warning on 172.16.x networks** — `UpnpClient.start_notify_server()` warned "Detected container network IP" whenever the callback address it detected began with `172.`. A LAN in 172.16.0.0/12 is an ordinary network, so the warning now appears only when the address is in that block and the speaker's address is outside it. Covered by unit tests; no network in that range was available to test on.
+- **Callback address warning on 172.16.x networks** — UPnP callback logging treated every address beginning with `172.` as a container bridge. A LAN in 172.16.0.0/12 is an ordinary network, so the warning and the two critical callback logs now appear only when that address is in the block and the speaker is outside it. Covered by unit tests; no network in that range was available to test on.
 
 ### Added
 

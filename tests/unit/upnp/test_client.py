@@ -895,6 +895,7 @@ class TestCallbackAddressCheck:
         server = MagicMock(spec=AiohttpNotifyServer)
         server.async_start_server = AsyncMock()
         server.callback_url = f"http://{detected}:5000/notify"
+        server.host = detected
         server.event_handler = MagicMock()
         with (
             patch("pywiim.upnp.client.AiohttpNotifyServer", return_value=server),
@@ -916,5 +917,5 @@ class TestCallbackAddressCheck:
         """A detected 172.x address for a speaker on another network is still flagged."""
         warnings = await self._start_with_detected_address(caplog, "192.168.1.116", "172.20.16.1")
 
-        assert len(warnings) == 1
-        assert "container network IP 172.20.16.1" in warnings[0]
+        assert any("container network IP 172.20.16.1" in message for message in warnings)
+        assert any("CRITICAL" in message for message in warnings)
