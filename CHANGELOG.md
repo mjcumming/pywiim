@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.6] - 2026-11-25
+
 ### Fixed
 
 - **Spotify title with UPnP events** — with an `UpnpEventer` attached, a Spotify track change showed the new title for an instant and then left title and artist empty until the next track. The event's `TrackSource` (`spotify:playlist:<id>`) was taken as a new source on every event, and because each NOTIFY is handled twice, the second pass filed the track that had just started as leftover metadata from the old source. A `TrackSource` that is a Spotify URI is now the `spotify` source, any other URI is ignored, and the state synchronizer compares a reported source with what the same origin (HTTP or UPnP) reported last. Seen and re-tested on a WiiM Pro (`WiiM_Pro_with_gc4a`, firmware `Linkplay.4.8.833748`) playing a Spotify playlist.
