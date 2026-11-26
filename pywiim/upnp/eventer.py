@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 from async_upnp_client.client import UpnpService, UpnpStateVariable
 from async_upnp_client.exceptions import UpnpResponseError
 
-from .client import UpnpClient
+from .client import UpnpClient, _is_container_address
 from .metadata import _BARE_AMPERSAND_RE, extract_input_codec
 
 _LOGGER = logging.getLogger(__name__)
@@ -157,7 +157,7 @@ class UpnpEventer:
                 )
                 # Validate callback URL reachability
                 server_host = getattr(self.upnp_client.notify_server, "host", "unknown")
-                if server_host.startswith("172.") or server_host == "0.0.0.0":
+                if _is_container_address(server_host, self.upnp_client.host) or server_host == "0.0.0.0":
                     _LOGGER.error(
                         "   ⚠️  CRITICAL: Callback URL uses unreachable IP %s - devices on your LAN cannot reach this!",
                         server_host,
