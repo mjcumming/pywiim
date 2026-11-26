@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
+from pywiim.capabilities import detect_device_capabilities
 from pywiim.device_capabilities import get_device_inputs, get_device_output_modes
+from pywiim.models import DeviceInfo
 
 
 class TestAudioProDeviceInputs:
@@ -33,6 +37,39 @@ class TestAudioProDeviceInputs:
         assert "rca" in result.inputs
         assert "bluetooth" in result.inputs
         assert "optical" not in result.inputs
+
+
+class TestArtSoundSmartStream:
+    """ArtSound Smart Stream 2, project Huan_HI8 (pywiim#48)."""
+
+    def test_catalog_includes_hdmi_and_omits_usb(self):
+        result = get_device_inputs("Huan_HI8")
+        assert result is not None
+        assert result.inputs == ["bluetooth", "line_in", "optical", "rca", "hdmi"]
+
+    def test_hdmi_command_keeps_device_case(self):
+        capabilities = detect_device_capabilities(DeviceInfo(uuid="smart-stream", model="Huan_HI8"))
+        assert capabilities["source_command_overrides"] == {"hdmi": "HDMI"}
+
+    def test_other_models_keep_the_default_command(self):
+        capabilities = detect_device_capabilities(DeviceInfo(uuid="pro", model="WiiM Pro"))
+        assert capabilities["source_command_overrides"] == {}
+
+    @pytest.mark.asyncio
+    async def test_available_sources_include_hdmi_from_incomplete_plm(self, mock_client):
+        """plm_support 0x416 is Bluetooth, USB, and two unknown bits. HDMI is still listed."""
+        from pywiim.player import Player
+
+        player = Player(mock_client)
+        player._device_info = DeviceInfo(uuid="smart-stream", model="Huan_HI8", plm_support="0x416")
+
+        result = player.available_sources
+        assert "HDMI" in result
+        assert "Optical In" in result
+        assert "RCA" in result
+        assert "Line In" in result
+        assert "Bluetooth" in result
+        assert "USB" not in result
 
 
 class TestWiiMSoundOutputs:

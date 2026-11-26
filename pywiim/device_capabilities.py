@@ -116,6 +116,13 @@ DEVICE_CAPABILITIES: dict[str, DeviceInputs] = {
         inputs=["bluetooth", "rca"],
         notes="Audio Pro ADDON C5 MkII: WiFi, Bluetooth, RCA/Line In",
     ),
+    # ArtSound Smart Stream 2 (project Huan_HI8). plm_support 0x416 only
+    # reports Bluetooth and USB; the vendor inputs are HDMI ARC, optical, RCA,
+    # line in, and Bluetooth. USB is not a listed input. pywiim#48.
+    "huan_hi8": DeviceInputs(
+        inputs=["bluetooth", "line_in", "optical", "rca", "hdmi"],
+        notes="ArtSound Smart Stream 2. switchmode:HDMI selects HDMI; switchmode:hdmi idles the player.",
+    ),
     # Generic LinkPlay device (augment with common inputs)
     "linkplay_generic": DeviceInputs(
         inputs=["bluetooth", "line_in", "optical", "rca"],
