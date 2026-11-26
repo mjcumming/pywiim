@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Callback address warning on 172.16.x networks** — UPnP callback logging treated every address beginning with `172.` as a container bridge. A LAN in 172.16.0.0/12 is an ordinary network, so the warning and the two critical callback logs now appear only when that address is in the block and the speaker is outside it. Covered by unit tests; no network in that range was available to test on.
+
 ### Added
 
 - **Edifier MS50A model name** — the model string `EDIFIER MS50A` now maps to the friendly name "Edifier MS50A". The speaker already works on the generic LinkPlay profile ([wiim#275](https://github.com/mjcumming/wiim/issues/275)).
