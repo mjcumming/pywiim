@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Cover art** — album art served with a header such as `Content-Type: image/jpeg; charset=utf-8` now returns `image/jpeg` to callers so Home Assistant can serve the image.
+
 - **ArtSound Smart Stream 2 HDMI input** — project `Huan_HI8` now lists HDMI with Bluetooth, Line In, Optical, and RCA. `set_source` sends `switchmode:HDMI`; `switchmode:hdmi` on this firmware returns OK and leaves the player idle ([#48](https://github.com/mjcumming/pywiim/issues/48)).
 - **Callback address warning on 172.16.x networks** — UPnP callback logging treated every address beginning with `172.` as a container bridge. A LAN in 172.16.0.0/12 is an ordinary network, so the warning and the two critical callback logs now appear only when that address is in the block and the speaker is outside it. Covered by unit tests; no network in that range was available to test on.
 

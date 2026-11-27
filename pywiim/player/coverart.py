@@ -87,7 +87,7 @@ class CoverArtManager:
                 If no valid URL is found, returns the embedded PyWiim logo (no HTTP call).
 
         Returns:
-            Tuple of (image_bytes, content_type) if successful, None otherwise.
+            Tuple of (image_bytes, media type without parameters) if successful, None otherwise.
         """
         import base64
 
@@ -140,8 +140,8 @@ class CoverArtManager:
                     async with session.get(url, timeout=timeout, ssl=ssl_ctx) as response:
                         if response.status == 200:
                             image_bytes = await response.read()
-                            content_type = response.headers.get("Content-Type", "image/jpeg")
-                            if "image" not in content_type.lower():
+                            content_type = response.headers.get("Content-Type", "").partition(";")[0].strip()
+                            if not content_type.lower().startswith("image/"):
                                 content_type = "image/jpeg"
 
                             # Cache the result
@@ -168,8 +168,8 @@ class CoverArtManager:
                     async with session.get(url, timeout=timeout) as response:
                         if response.status == 200:
                             image_bytes = await response.read()
-                            content_type = response.headers.get("Content-Type", "image/jpeg")
-                            if "image" not in content_type.lower():
+                            content_type = response.headers.get("Content-Type", "").partition(";")[0].strip()
+                            if not content_type.lower().startswith("image/"):
                                 content_type = "image/jpeg"
 
                             # Cache the result
