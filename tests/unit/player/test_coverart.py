@@ -133,12 +133,13 @@ class TestCoverArtManager:
         assert result == (b"cached_image", "image/jpeg")
 
     @pytest.mark.asyncio
-    async def test_fetch_cover_art_https_success(self, cover_art_manager, mock_player):
+    @pytest.mark.parametrize("header", ["image/jpeg", "image/jpeg; charset=utf-8"])
+    async def test_fetch_cover_art_https_success(self, cover_art_manager, mock_player, header):
         """Test fetch_cover_art fetches HTTPS URL successfully."""
         url = "https://example.com/image.jpg"
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.headers = {"Content-Type": "image/jpeg"}
+        mock_response.headers = {"Content-Type": header}
         mock_response.read = AsyncMock(return_value=b"image_data")
 
         mock_session = MagicMock()
@@ -155,14 +156,17 @@ class TestCoverArtManager:
         image_bytes, content_type = result
         assert image_bytes == b"image_data"
         assert content_type == "image/jpeg"
+        assert await cover_art_manager.fetch_cover_art(url) == (image_bytes, "image/jpeg")
+        mock_player.client._session.get.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_fetch_cover_art_http_success(self, cover_art_manager, mock_player):
+    @pytest.mark.parametrize("header", ["image/png", "image/png; charset=utf-8"])
+    async def test_fetch_cover_art_http_success(self, cover_art_manager, mock_player, header):
         """Test fetch_cover_art fetches HTTP URL successfully."""
         url = "http://example.com/image.jpg"
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_response.headers = {"Content-Type": "image/png"}
+        mock_response.headers = {"Content-Type": header}
         mock_response.read = AsyncMock(return_value=b"image_data")
 
         mock_session = MagicMock()
@@ -178,6 +182,8 @@ class TestCoverArtManager:
         image_bytes, content_type = result
         assert image_bytes == b"image_data"
         assert content_type == "image/png"
+        assert await cover_art_manager.fetch_cover_art(url) == (image_bytes, "image/png")
+        mock_player.client._session.get.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_fetch_cover_art_http_error(self, cover_art_manager, mock_player):
